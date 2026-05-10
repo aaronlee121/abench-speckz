@@ -1,0 +1,32 @@
+static:
+  IMAGE: myapp:latest
+  REGION: us-east-1
+
+variables:
+  workload:    [read, write, mixed]
+  concurrency: [1, 8, 64]
+  backend:     [postgres, mysql]
+
+tags: [bench]
+
+when:
+  - if: { workload: write, backend: mysql }
+    set: { LOCK_TIMEOUT: "30s" }
+    tag: [slow, write-heavy]
+  - if: { concurrency: 64 }
+    set: { THREAD_POOL: "${concurrency}" }
+    tag: [stress]
+  - if: { workload: mixed }
+    set: { workload: read-write }
+
+exclude:
+  - { backend: mysql, concurrency: 1 }
+
+profiles:
+  smoke:
+    variables:
+      concurrency: [1]
+      workload: [read]
+  full: {}
+
+default_profile: smoke

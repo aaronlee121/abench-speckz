@@ -1,0 +1,6 @@
+static:
+  IMAGE: minimal:1.0
+
+variables:
+  A: [1, 2]
+  B: [x, y]

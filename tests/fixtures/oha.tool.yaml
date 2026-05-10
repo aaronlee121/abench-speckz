@@ -1,0 +1,17 @@
+name: faketool
+version_command: "python tests/fixtures/fake_tool.py --version"
+command: "python tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  p50_latency_ms: $.summary.latencies.p50
+  p95_latency_ms: $.summary.latencies.p95
+  rps:           $.summary.requestsPerSec
+pretty_names:
+  rps: "Requests/sec"
+  p50_latency_ms: "P50 Latency (ms)"
+units:
+  rps: req/s
+  p50_latency_ms: ms
+higher_is_better:
+  rps: true
+  p50_latency_ms: false

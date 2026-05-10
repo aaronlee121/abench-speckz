@@ -1,0 +1,42 @@
+import pytest
+
+from benchspec import tools
+from benchspec.model import RunError
+
+
+def test_load_minimal(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: 'echo hi'\n")
+    spec = tools.load_tool(p)
+    assert spec.name == "t"
+    assert spec.command == "echo hi"
+    assert spec.timeout_seconds == 600
+
+
+def test_required_fields(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\n")
+    with pytest.raises(RunError, match="command"):
+        tools.load_tool(p)
+
+
+def test_unknown_field(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nbogus: 1\n")
+    with pytest.raises(RunError, match="unknown tool fields"):
+        tools.load_tool(p)
+
+
+def test_full_round_trip(fixtures_dir):
+    spec = tools.load_tool(fixtures_dir / "oha.tool.yaml")
+    assert spec.name == "faketool"
+    assert spec.timeout_seconds == 10
+    assert "p95_latency_ms" in spec.capture
+    assert spec.pretty_names["rps"] == "Requests/sec"
+    assert spec.higher_is_better["rps"] is True
+
+
+def test_resolve_tool_version(fixtures_dir):
+    spec = tools.load_tool(fixtures_dir / "oha.tool.yaml")
+    v = tools.resolve_tool_version(spec)
+    assert v == "fake-tool 1.2.3"
