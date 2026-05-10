@@ -29,3 +29,32 @@ higher_is_better:
   p50_ms:  false
   p95_ms:  false
   p99_ms:  false
+
+# Declarative plot definitions used by `benchspec stats --report`.
+# When any plots are defined, they replace the default per-metric charts.
+plots:
+  - id: rps_by_workload
+    type: bar
+    title: "Throughput by workload"
+    x: workload
+    y: rps
+
+  - id: latency_breakdown
+    type: stacked-bar
+    title: "Latency percentile breakdown"
+    x: workload
+    y: [p50_ms, p95_ms, p99_ms]
+
+  - id: rps_vs_concurrency
+    type: line
+    title: "Throughput scaling"
+    x: concurrency
+    y: rps
+    group_by: workload
+
+  - id: throughput_vs_latency
+    type: scatter
+    title: "Throughput / latency tradeoff"
+    x: rps
+    y: p95_ms
+    group_by: workload

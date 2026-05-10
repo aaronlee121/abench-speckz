@@ -11,6 +11,7 @@ from benchspec.runspec import ToolSpec
 _FIELDS = {
     "name", "command", "timeout_seconds", "version_command",
     "capture", "parser", "output_file", "output_format", "pretty_names", "units", "higher_is_better",
+    "plots",
 }
 
 
@@ -43,6 +44,10 @@ def load_tool(path: str | Path) -> ToolSpec:
     if output_format not in ("json", "jsonl"):
         raise RunError(f"{path}: tool.output_format must be 'json' or 'jsonl', got {output_format!r}")
 
+    plots = raw.get("plots")
+    if plots is not None and not isinstance(plots, list):
+        raise RunError(f"{path}: tool.plots must be a list")
+
     return ToolSpec(
         name=raw["name"],
         command=raw["command"],
@@ -55,6 +60,7 @@ def load_tool(path: str | Path) -> ToolSpec:
         pretty_names=dict(raw.get("pretty_names") or {}),
         units=dict(raw.get("units") or {}),
         higher_is_better=dict(raw.get("higher_is_better") or {}),
+        plots=list(plots or []),
     )
 
 

@@ -75,3 +75,28 @@ def test_resolve_tool_version(fixtures_dir):
     spec = tools.load_tool(fixtures_dir / "oha.tool.yaml")
     v = tools.resolve_tool_version(spec)
     assert v == "fake-tool 1.2.3"
+
+
+def test_plots_field_accepted(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text(
+        "name: t\ncommand: x\n"
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+    )
+    spec = tools.load_tool(p)
+    assert len(spec.plots) == 1
+    assert spec.plots[0]["id"] == "p1"
+
+
+def test_plots_field_must_be_list(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nplots: not_a_list\n")
+    with pytest.raises(RunError, match="plots must be a list"):
+        tools.load_tool(p)
+
+
+def test_plots_field_default_empty(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\n")
+    spec = tools.load_tool(p)
+    assert spec.plots == []

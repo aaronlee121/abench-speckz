@@ -13,6 +13,30 @@ from benchspec.model import RunError
 _AGGREGATE_COLUMNS = ("n", "n_failed", "mean", "stddev", "p50", "p95", "p99", "ci95_low", "ci95_high")
 
 
+def compute_rows(
+    results_dir: Path,
+    *,
+    group_by: list[str] | None = None,
+    where: list[str] | None = None,
+    require_tags: list[str] | None = None,
+    exclude_tags: list[str] | None = None,
+    metrics: list[str] | None = None,
+    from_raw: bool = False,
+) -> list[dict[str, Any]]:
+    group_by = group_by or []
+    where = where or []
+    require_tags = require_tags or []
+    exclude_tags = exclude_tags or []
+    metrics = metrics or []
+
+    # Cross-hash grouping requires recomputation: stddev / percentiles aren't
+    # additive across pre-aggregated rows. Route grouped queries through from_raw.
+    must_recompute = bool(group_by)
+    if from_raw or must_recompute:
+        return _from_raw(results_dir, group_by, where, require_tags, exclude_tags, metrics)
+    return _from_aggregates(results_dir, group_by, where, require_tags, exclude_tags, metrics)
+
+
 def stats(
     results_dir: Path,
     *,
@@ -24,21 +48,20 @@ def stats(
     from_raw: bool = False,
     fmt: str = "table",
     pretty: bool = False,
+    report: Path | None = None,
+    plots: Path | None = None,
     out=sys.stdout,
 ) -> None:
     group_by = group_by or []
-    where = where or []
-    require_tags = require_tags or []
-    exclude_tags = exclude_tags or []
-    metrics = metrics or []
-
-    # Cross-hash grouping requires recomputation: stddev / percentiles aren't
-    # additive across pre-aggregated rows. Route grouped queries through from_raw.
-    must_recompute = bool(group_by)
-    if from_raw or must_recompute:
-        rows = _from_raw(results_dir, group_by, where, require_tags, exclude_tags, metrics)
-    else:
-        rows = _from_aggregates(results_dir, group_by, where, require_tags, exclude_tags, metrics)
+    rows = compute_rows(
+        results_dir,
+        group_by=group_by,
+        where=where,
+        require_tags=require_tags,
+        exclude_tags=exclude_tags,
+        metrics=metrics,
+        from_raw=from_raw,
+    )
 
     if not rows:
         print("# 0 rows", file=out)
@@ -46,6 +69,20 @@ def stats(
 
     pretty_map = prettynames.load(results_dir / "pretty_names.json") if pretty else {}
     _render(rows, fmt, out, pretty_map=pretty_map)
+
+    if report is not None:
+        from benchspec import plots as _plots
+        from benchspec import report as _report
+        pm = prettynames.load(results_dir / "pretty_names.json")
+        if plots is not None:
+            specs = _plots.load_plots_file(plots)
+        else:
+            specs = _plots.discover_from_tool_snapshots(results_dir)
+        if specs:
+            _report.generate_plots_html(results_dir, specs, report, pm)
+        else:
+            _report.generate_html(rows, report, group_by, pm)
+        print(f"report written to {report}", file=out)
 
 
 def _from_aggregates(

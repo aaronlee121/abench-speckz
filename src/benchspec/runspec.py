@@ -15,6 +15,7 @@ class ToolSpec:
     pretty_names: dict[str, str] = field(default_factory=dict)
     units: dict[str, str] = field(default_factory=dict)
     higher_is_better: dict[str, bool] = field(default_factory=dict)
+    plots: list[dict] = field(default_factory=list)
 
 
 @dataclass

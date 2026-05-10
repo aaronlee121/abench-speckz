@@ -43,6 +43,10 @@ def main(argv: list[str] | None = None) -> int:
     stats.add_argument("--format", choices=["table", "json", "tsv"], default="table")
     stats.add_argument("--from-raw", action="store_true")
     stats.add_argument("--pretty", action="store_true")
+    stats.add_argument("--report", type=Path, default=None, metavar="PATH",
+                       help="write an HTML report with charts to PATH")
+    stats.add_argument("--plots", type=Path, default=None, metavar="PATH",
+                       help="YAML file with plot definitions (overrides tool YAML plots)")
 
     rebuild = sub.add_parser("rebuild-aggregates",
                              help="regenerate aggregates.jsonl from runs.jsonl")
@@ -129,6 +133,8 @@ def _stats(args: argparse.Namespace) -> int:
         from_raw=args.from_raw,
         fmt=args.format,
         pretty=args.pretty,
+        report=args.report,
+        plots=args.plots,
     )
     return 0
 
