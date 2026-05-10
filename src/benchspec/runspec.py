@@ -10,6 +10,7 @@ class ToolSpec:
     version_command: str | None = None
     capture: dict[str, str] = field(default_factory=dict)
     parser: str | None = None
+    output_file: str | None = None
     pretty_names: dict[str, str] = field(default_factory=dict)
     units: dict[str, str] = field(default_factory=dict)
     higher_is_better: dict[str, bool] = field(default_factory=dict)

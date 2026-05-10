@@ -188,8 +188,20 @@ def execute_sweep(
 
             parsed: dict[str, Any] = {}
             extract_failure: str | None = None
+            raw_output = result.stdout
             if result.exit_code == 0:
-                parsed, extract_failure = extract.apply(tool, result.stdout)
+                output_for_extraction = result.stdout
+                if tool.output_file:
+                    try:
+                        out_path = interpolate.resolve_string(tool.output_file, entry["vars"], env=os.environ)
+                        output_for_extraction = Path(out_path).read_text()
+                        raw_output = output_for_extraction
+                    except FileNotFoundError:
+                        extract_failure = f"output_file: not found: {out_path}"
+                    except Exception as e:
+                        extract_failure = f"output_file: {type(e).__name__}: {e}"
+                if extract_failure is None:
+                    parsed, extract_failure = extract.apply(tool, output_for_extraction)
 
             failure_reason = result.failure_reason or extract_failure
             row = _make_row(
@@ -198,7 +210,7 @@ def execute_sweep(
             )
 
             if keep_raw or extract_failure or result.exit_code != 0:
-                raw_path = store.write_raw_stdout(results_dir, row["run_id"], result.stdout)
+                raw_path = store.write_raw_stdout(results_dir, row["run_id"], raw_output)
                 row["raw_output_path"] = str(raw_path.relative_to(results_dir))
 
             store.append_run(results_dir, row)

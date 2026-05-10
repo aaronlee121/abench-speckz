@@ -17,6 +17,8 @@ def main() -> int:
     p.add_argument("--mode", default=os.environ.get("MODE", "succeed"))
     p.add_argument("--multi", action="store_true",
                    help="emit a list of latencies under $.results[*].latency")
+    p.add_argument("--output-file", default=None,
+                   help="write JSON output to this file instead of stdout")
     a = p.parse_args()
 
     if a.version:
@@ -48,7 +50,12 @@ def main() -> int:
         payload["results"] = [
             {"latency": base_p50 + i} for i in range(3)
         ]
-    print(json.dumps(payload))
+    output = json.dumps(payload)
+    if a.output_file:
+        with open(a.output_file, "w") as f:
+            f.write(output)
+    else:
+        print(output)
     return 0
 
 

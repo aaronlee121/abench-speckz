@@ -10,7 +10,7 @@ from benchspec.runspec import ToolSpec
 
 _FIELDS = {
     "name", "command", "timeout_seconds", "version_command",
-    "capture", "parser", "pretty_names", "units", "higher_is_better",
+    "capture", "parser", "output_file", "pretty_names", "units", "higher_is_better",
 }
 
 
@@ -35,6 +35,10 @@ def load_tool(path: str | Path) -> ToolSpec:
     if not isinstance(capture, dict):
         raise RunError(f"{path}: tool.capture must be a mapping")
 
+    output_file = raw.get("output_file")
+    if output_file is not None and not isinstance(output_file, str):
+        raise RunError(f"{path}: tool.output_file must be a string path")
+
     return ToolSpec(
         name=raw["name"],
         command=raw["command"],
@@ -42,6 +46,7 @@ def load_tool(path: str | Path) -> ToolSpec:
         version_command=raw.get("version_command"),
         capture=dict(capture),
         parser=parser,
+        output_file=output_file,
         pretty_names=dict(raw.get("pretty_names") or {}),
         units=dict(raw.get("units") or {}),
         higher_is_better=dict(raw.get("higher_is_better") or {}),

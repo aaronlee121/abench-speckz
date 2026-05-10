@@ -36,6 +36,20 @@ def test_full_round_trip(fixtures_dir):
     assert spec.higher_is_better["rps"] is True
 
 
+def test_output_file_field(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: 'run'\noutput_file: '/tmp/out.json'\n")
+    spec = tools.load_tool(p)
+    assert spec.output_file == "/tmp/out.json"
+
+
+def test_output_file_not_string(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: 'run'\noutput_file: 123\n")
+    with pytest.raises(RunError, match="output_file"):
+        tools.load_tool(p)
+
+
 def test_resolve_tool_version(fixtures_dir):
     spec = tools.load_tool(fixtures_dir / "oha.tool.yaml")
     v = tools.resolve_tool_version(spec)

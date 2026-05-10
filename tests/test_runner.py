@@ -164,3 +164,89 @@ def test_dry_run_writes_nothing(tmp_path):
         repeat=2, dry_run=True,
     )
     assert not (results / "runs.jsonl").exists()
+
+
+def test_output_file_extraction(tmp_path):
+    out_file = tmp_path / "result.json"
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py --output-file {out_file}"
+timeout_seconds: 10
+output_file: "{out_file}"
+capture:
+  p50_latency_ms: $.summary.latencies.p50
+  rps:           $.summary.requestsPerSec
+"""
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=2,
+    )
+    assert summary["succeeded"] == 2
+    assert summary["failed"] == 0
+
+    runs = store.read_runs(results)
+    for r in runs:
+        assert r["results"]["p50_latency_ms"] == 10.1
+        assert r["results"]["rps"] == 1000.0
+
+
+def test_output_file_missing_is_failure(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+output_file: "{tmp_path}/nonexistent.json"
+capture:
+  rps: $.summary.requestsPerSec
+"""
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+    )
+    assert summary["failed"] == 1
+
+    runs = store.read_runs(results)
+    assert runs[0]["failure_reason"].startswith("output_file: not found")
+
+
+def test_output_file_with_var_interpolation(tmp_path):
+    out_file = tmp_path / "result_read.json"
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py --output-file {tmp_path}/result_${{workload}}.json"
+timeout_seconds: 10
+output_file: "{tmp_path}/result_${{workload}}.json"
+capture:
+  rps: $.summary.requestsPerSec
+"""
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+    )
+    assert summary["succeeded"] == 1
+    runs = store.read_runs(results)
+    assert runs[0]["results"]["rps"] == 1000.0
