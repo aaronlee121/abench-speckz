@@ -15,6 +15,8 @@ _FLOAT_RE = re.compile(r"^-?\d+\.\d+([eE][+-]?\d+)?$|^-?\d+[eE][+-]?\d+$")
 def apply(tool: ToolSpec, stdout: str) -> tuple[dict[str, Any], str | None]:
     if tool.parser:
         return _apply_plugin(tool.parser, stdout)
+    if tool.output_format == "jsonl":
+        return _apply_capture_jsonl(tool.capture, stdout)
     return _apply_capture(tool.capture, stdout)
 
 
@@ -25,7 +27,25 @@ def _apply_capture(capture: dict[str, str], stdout: str) -> tuple[dict[str, Any]
         data = json.loads(stdout)
     except json.JSONDecodeError as e:
         return {}, f"parse_error: not JSON: {e.msg}"
+    return _extract_from_data(capture, data)
 
+
+def _apply_capture_jsonl(capture: dict[str, str], stdout: str) -> tuple[dict[str, Any], str | None]:
+    if not capture:
+        return {}, None
+    lines = [line for line in stdout.splitlines() if line.strip()]
+    if not lines:
+        return {}, "parse_error: empty JSONL output"
+    data = []
+    for i, line in enumerate(lines, start=1):
+        try:
+            data.append(json.loads(line))
+        except json.JSONDecodeError as e:
+            return {}, f"parse_error: line {i} not JSON: {e.msg}"
+    return _extract_from_data(capture, data)
+
+
+def _extract_from_data(capture: dict[str, str], data: Any) -> tuple[dict[str, Any], str | None]:
     results: dict[str, Any] = {}
     for raw_key, expr in capture.items():
         is_list, key = (True, raw_key[:-2]) if raw_key.endswith("[]") else (False, raw_key)

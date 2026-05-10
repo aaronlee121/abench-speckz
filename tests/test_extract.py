@@ -4,8 +4,8 @@ from benchspec import extract
 from benchspec.runspec import ToolSpec
 
 
-def _tool(capture=None, parser=None):
-    return ToolSpec(name="t", command="x", capture=capture or {}, parser=parser)
+def _tool(capture=None, parser=None, output_format="json"):
+    return ToolSpec(name="t", command="x", capture=capture or {}, parser=parser, output_format=output_format)
 
 
 def test_single_match():
@@ -81,3 +81,71 @@ def test_plugin_raises(tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(str(tmp_path))
     out, fail = extract.apply(_tool(parser="raiser:parse"), "anything")
     assert fail and "ValueError" in fail
+
+
+# JSONL tests
+
+def _jsonl(*rows):
+    return "\n".join(json.dumps(r) for r in rows)
+
+
+def test_jsonl_collect_all_values():
+    tool = _tool({"v[]": "$[*].value"}, output_format="jsonl")
+    out, fail = extract.apply(tool, _jsonl({"value": 1}, {"value": 2}, {"value": 3}))
+    assert fail is None
+    assert out == {"v": [1, 2, 3]}
+
+
+def test_jsonl_last_line():
+    tool = _tool({"rps": "$[-1].rps"}, output_format="jsonl")
+    out, fail = extract.apply(tool, _jsonl({"rps": 100}, {"rps": 200}, {"rps": 300}))
+    assert fail is None
+    assert out == {"rps": 300}
+
+
+def test_jsonl_first_line():
+    tool = _tool({"rps": "$[0].rps"}, output_format="jsonl")
+    out, fail = extract.apply(tool, _jsonl({"rps": 100}, {"rps": 200}))
+    assert fail is None
+    assert out == {"rps": 100}
+
+
+def test_jsonl_single_line():
+    tool = _tool({"v[]": "$[*].value"}, output_format="jsonl")
+    out, fail = extract.apply(tool, json.dumps({"value": 42}))
+    assert fail is None
+    assert out == {"v": [42]}
+
+
+def test_jsonl_empty_output():
+    tool = _tool({"v": "$[0].value"}, output_format="jsonl")
+    out, fail = extract.apply(tool, "")
+    assert fail == "parse_error: empty JSONL output"
+    assert out == {}
+
+
+def test_jsonl_blank_lines_ignored():
+    tool = _tool({"v[]": "$[*].value"}, output_format="jsonl")
+    out, fail = extract.apply(tool, "\n" + _jsonl({"value": 1}, {"value": 2}) + "\n")
+    assert fail is None
+    assert out == {"v": [1, 2]}
+
+
+def test_jsonl_bad_line_reports_line_number():
+    tool = _tool({"v": "$[0].value"}, output_format="jsonl")
+    out, fail = extract.apply(tool, _jsonl({"value": 1}) + "\nnot json\n" + _jsonl({"value": 3}))
+    assert fail and "line 2" in fail
+    assert out == {}
+
+
+def test_jsonl_missing_field_is_null():
+    tool = _tool({"v": "$[0].missing"}, output_format="jsonl")
+    out, fail = extract.apply(tool, _jsonl({"value": 1}))
+    assert fail is None
+    assert out == {"v": None}
+
+
+def test_json_format_rejects_jsonl_input():
+    tool = _tool({"v": "$.value"}, output_format="json")
+    out, fail = extract.apply(tool, _jsonl({"value": 1}, {"value": 2}))
+    assert fail and "not JSON" in fail

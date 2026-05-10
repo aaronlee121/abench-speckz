@@ -11,6 +11,7 @@ class ToolSpec:
     capture: dict[str, str] = field(default_factory=dict)
     parser: str | None = None
     output_file: str | None = None
+    output_format: str = "json"
     pretty_names: dict[str, str] = field(default_factory=dict)
     units: dict[str, str] = field(default_factory=dict)
     higher_is_better: dict[str, bool] = field(default_factory=dict)

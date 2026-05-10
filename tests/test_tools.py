@@ -50,6 +50,27 @@ def test_output_file_not_string(tmp_path):
         tools.load_tool(p)
 
 
+def test_output_format_jsonl(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: 'run'\noutput_format: jsonl\n")
+    spec = tools.load_tool(p)
+    assert spec.output_format == "jsonl"
+
+
+def test_output_format_default_is_json(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: 'run'\n")
+    spec = tools.load_tool(p)
+    assert spec.output_format == "json"
+
+
+def test_output_format_invalid(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: 'run'\noutput_format: csv\n")
+    with pytest.raises(RunError, match="output_format"):
+        tools.load_tool(p)
+
+
 def test_resolve_tool_version(fixtures_dir):
     spec = tools.load_tool(fixtures_dir / "oha.tool.yaml")
     v = tools.resolve_tool_version(spec)
