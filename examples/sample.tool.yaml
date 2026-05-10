@@ -1,0 +1,31 @@
+name: sample-bench
+command: "python examples/sample_bench.py"
+version_command: "python examples/sample_bench.py --version"
+timeout_seconds: 60
+
+capture:
+  rps:     "$.summary.requestsPerSec"
+  mean_ms: "$.summary.latencies.mean"
+  p50_ms:  "$.summary.latencies.p50"
+  p95_ms:  "$.summary.latencies.p95"
+  p99_ms:  "$.summary.latencies.p99"
+
+pretty_names:
+  rps:     "Requests/s"
+  mean_ms: "Mean latency"
+  p50_ms:  "P50 latency"
+  p95_ms:  "P95 latency"
+  p99_ms:  "P99 latency"
+
+units:
+  mean_ms: ms
+  p50_ms:  ms
+  p95_ms:  ms
+  p99_ms:  ms
+
+higher_is_better:
+  rps:     true
+  mean_ms: false
+  p50_ms:  false
+  p95_ms:  false
+  p99_ms:  false

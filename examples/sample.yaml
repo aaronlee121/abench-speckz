@@ -1,0 +1,35 @@
+# Sample benchmark spec — pairs with examples/sample.tool.yaml
+#
+# Quick start (run from the repo root):
+#
+#   benchspec gen examples/sample.yaml --dry-run
+#   benchspec gen examples/sample.yaml --out out/
+#   benchspec run out/ --tool examples/sample.tool.yaml --repeat 3
+#   benchspec stats results/ --pretty
+#
+# Smoke profile (default) runs 1 combo; switch to full for the whole matrix:
+#   benchspec gen examples/sample.yaml --profile full --out out/
+
+variables:
+  workload:    [read, write, mixed]
+  concurrency: [1, 4, 16]
+
+tags: [bench]
+
+when:
+  - if:  { concurrency: 16 }
+    tag: [stress]
+  - if:  { workload: write }
+    tag: [write-heavy]
+
+exclude:
+  - { workload: mixed, concurrency: 16 }
+
+profiles:
+  smoke:
+    variables:
+      concurrency: [1]
+      workload:    [read]
+  full: {}
+
+default_profile: smoke
