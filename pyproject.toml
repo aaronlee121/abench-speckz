@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "benchspec"
+version = "0.1.0"
+description = "Generate Docker env-file combinations from a YAML benchmark spec."
+requires-python = ">=3.10"
+dependencies = [
+    "PyYAML>=6.0",
+    "jsonpath-ng>=1.6",
+    "duckdb>=0.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "pytest-timeout>=2",
+]
+
+[project.scripts]
+benchspec = "benchspec.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
