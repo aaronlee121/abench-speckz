@@ -134,7 +134,20 @@ units:
 higher_is_better:
   requests_per_sec: true
   p50_ms: false
+
+# optional: shell steps run around every rep (warmup and measured)
+setup:
+  - "docker compose up -d redis"
+  - "sleep 1"
+teardown:
+  - "docker compose down -v"
+setup_timeout_seconds: 120   # per-step timeout for setup/teardown (default 120)
 ```
+
+**Setup / teardown.** Each rep is wrapped `setup → command → teardown`. Teardown runs in a `finally` block, so it also fires on benchmark failure or `Ctrl-C`. Combo vars (`${var}`) and `${env:VAR}` interpolate in setup/teardown commands. Steps are split with `shlex.split` and executed without a shell, so chain via multiple list entries rather than `&&`.
+
+- Setup failure → the command is skipped, teardown still runs best-effort, and `failure_reason` is recorded as `setup[i]: …`.
+- Teardown failure → the benchmark's `exit_code` and metrics are preserved, but `teardown[i]: …` is appended to `failure_reason` (so the run is counted as failed).
 
 ## Results directory layout
 
