@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import platform
+import shlex
 import subprocess
 import sys
 import time
@@ -180,11 +181,38 @@ def execute_sweep(
                 command=cmd, env=env, timeout_seconds=tool.timeout_seconds,
             )
 
+            setup_failure: str | None = None
+            if tool.setup:
+                setup_failure = run_phase(
+                    "setup", tool.setup, entry["vars"], env, tool.setup_timeout_seconds,
+                )
+
+            if setup_failure:
+                if tool.teardown:
+                    run_phase("teardown", tool.teardown, entry["vars"], env, tool.setup_timeout_seconds)
+                row = _make_row(
+                    entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
+                    command=cmd, result=None, parsed={}, failure_reason=setup_failure,
+                )
+                store.append_run(results_dir, row)
+                store.update_aggregates_for_hash(results_dir, ch)
+                failed += 1
+                _progress(progress_stream, i, total, t_sweep, "FAIL", ch)
+                continue
+
+            result = None
+            teardown_failure: str | None = None
             try:
-                result = executor.execute(request)
-            except KeyboardInterrupt:
-                _progress(progress_stream, i, total, t_sweep, "INT", ch)
-                raise
+                try:
+                    result = executor.execute(request)
+                except KeyboardInterrupt:
+                    _progress(progress_stream, i, total, t_sweep, "INT", ch)
+                    raise
+            finally:
+                if tool.teardown:
+                    teardown_failure = run_phase(
+                        "teardown", tool.teardown, entry["vars"], env, tool.setup_timeout_seconds,
+                    )
 
             parsed: dict[str, Any] = {}
             extract_failure: str | None = None
@@ -204,6 +232,9 @@ def execute_sweep(
                     parsed, extract_failure = extract.apply(tool, output_for_extraction)
 
             failure_reason = result.failure_reason or extract_failure
+            if teardown_failure:
+                failure_reason = f"{failure_reason}; {teardown_failure}" if failure_reason else teardown_failure
+
             row = _make_row(
                 entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
                 command=cmd, result=result, parsed=parsed, failure_reason=failure_reason,
@@ -224,6 +255,39 @@ def execute_sweep(
                 _progress(progress_stream, i, total, t_sweep, "ok", ch)
 
         return {"runs": total - skipped, "failed": failed, "skipped": skipped, "succeeded": succeeded}
+
+
+def run_phase(
+    phase: str,
+    steps: list[str],
+    vars_: dict[str, Any],
+    env: dict[str, str],
+    timeout_seconds: int,
+) -> str | None:
+    """Run a list of shell-command steps. Returns None on success, else 'phase[i]: <reason>'."""
+    for i, template in enumerate(steps):
+        try:
+            cmd = interpolate.resolve_string(template, vars_, env=env)
+        except Exception as e:
+            return f"{phase}[{i}]: interpolation: {e}"
+        try:
+            result = subprocess.run(
+                shlex.split(cmd),
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return f"{phase}[{i}]: timeout after {timeout_seconds}s: {cmd}"
+        except FileNotFoundError as e:
+            return f"{phase}[{i}]: command_not_found: {e}"
+        if result.returncode != 0:
+            tail = (result.stderr or result.stdout or "").strip().splitlines()
+            hint = tail[-1] if tail else ""
+            return f"{phase}[{i}]: exit_code={result.returncode}: {cmd}" + (f" ({hint})" if hint else "")
+    return None
 
 
 def _make_row(*, entry, ch, tags, tool: ToolSpec, tool_version, command, result, parsed, failure_reason):

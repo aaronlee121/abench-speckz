@@ -225,6 +225,126 @@ capture:
     assert runs[0]["failure_reason"].startswith("output_file: not found")
 
 
+def _phase_script(tmp_path: Path) -> Path:
+    """A tiny helper script: `python phase.py <label> <marker_path>` appends a line to the marker."""
+    p = tmp_path / "phase.py"
+    p.write_text("import sys; open(sys.argv[2], 'a').write(sys.argv[1] + '\\n')\n")
+    return p
+
+
+def test_setup_and_teardown_run_around_each_rep(tmp_path):
+    marker = tmp_path / "marker.txt"
+    phase = _phase_script(tmp_path)
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+setup:
+  - "python {phase} setup {marker}"
+teardown:
+  - "python {phase} teardown {marker}"
+capture:
+  rps: $.summary.requestsPerSec
+"""
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+    )
+    assert summary["succeeded"] == 2
+    lines = marker.read_text().splitlines()
+    assert lines == ["setup", "teardown", "setup", "teardown"]
+
+
+def test_setup_failure_aborts_rep_and_runs_teardown(tmp_path):
+    marker = tmp_path / "marker.txt"
+    phase = _phase_script(tmp_path)
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+setup:
+  - "python -c \\"import sys; sys.exit(7)\\""
+teardown:
+  - "python {phase} teardown {marker}"
+capture:
+  rps: $.summary.requestsPerSec
+"""
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    assert summary["failed"] == 1
+    assert summary["succeeded"] == 0
+    runs = store.read_runs(results)
+    assert runs[0]["failure_reason"].startswith("setup[0]")
+    assert runs[0]["exit_code"] == -1
+    # Teardown still ran best-effort
+    assert marker.read_text().splitlines() == ["teardown"]
+
+
+def test_teardown_failure_surfaces_but_keeps_exit_code(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+teardown:
+  - "python -c \\"import sys; sys.exit(9)\\""
+capture:
+  rps: $.summary.requestsPerSec
+"""
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    # Counted as failed because failure_reason is set, but the benchmark itself succeeded.
+    assert summary["failed"] == 1
+    runs = store.read_runs(results)
+    assert runs[0]["exit_code"] == 0
+    assert runs[0]["failure_reason"].startswith("teardown[0]")
+    # Measurement still captured
+    assert runs[0]["results"].get("rps") is not None
+
+
+def test_setup_interpolates_combo_vars(tmp_path):
+    marker = tmp_path / "marker.txt"
+    phase = _phase_script(tmp_path)
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+setup:
+  - "python {phase} ${{workload}} {marker}"
+capture:
+  rps: $.summary.requestsPerSec
+"""
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    assert summary["succeeded"] == 1
+    assert marker.read_text().splitlines() == ["read"]
+
+
 def test_output_file_with_var_interpolation(tmp_path):
     out_file = tmp_path / "result_read.json"
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])

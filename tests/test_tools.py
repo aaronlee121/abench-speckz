@@ -100,3 +100,45 @@ def test_plots_field_default_empty(tmp_path):
     p.write_text("name: t\ncommand: x\n")
     spec = tools.load_tool(p)
     assert spec.plots == []
+
+
+def test_setup_and_teardown_loaded(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text(
+        "name: t\ncommand: x\n"
+        "setup:\n  - 'docker compose up -d redis'\n  - 'sleep 1'\n"
+        "teardown:\n  - 'docker compose down -v'\n"
+    )
+    spec = tools.load_tool(p)
+    assert spec.setup == ["docker compose up -d redis", "sleep 1"]
+    assert spec.teardown == ["docker compose down -v"]
+
+
+def test_setup_default_empty(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\n")
+    spec = tools.load_tool(p)
+    assert spec.setup == []
+    assert spec.teardown == []
+    assert spec.setup_timeout_seconds == 120
+
+
+def test_setup_must_be_list(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nsetup: 'docker compose up'\n")
+    with pytest.raises(RunError, match="tool.setup must be a list"):
+        tools.load_tool(p)
+
+
+def test_setup_steps_must_be_strings(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nsetup:\n  - 42\n")
+    with pytest.raises(RunError, match=r"tool.setup\[0\] must be a string"):
+        tools.load_tool(p)
+
+
+def test_setup_timeout_must_be_positive_int(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nsetup_timeout_seconds: 0\n")
+    with pytest.raises(RunError, match="setup_timeout_seconds"):
+        tools.load_tool(p)

@@ -12,7 +12,22 @@ _FIELDS = {
     "name", "command", "timeout_seconds", "version_command",
     "capture", "parser", "output_file", "output_format", "pretty_names", "units", "higher_is_better",
     "plots",
+    "setup", "teardown", "setup_timeout_seconds",
 }
+
+
+def _load_phase(raw: dict, path, key: str) -> list[str]:
+    value = raw.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise RunError(f"{path}: tool.{key} must be a list of shell-command strings")
+    steps: list[str] = []
+    for i, step in enumerate(value):
+        if not isinstance(step, str):
+            raise RunError(f"{path}: tool.{key}[{i}] must be a string, got {type(step).__name__}")
+        steps.append(step)
+    return steps
 
 
 def load_tool(path: str | Path) -> ToolSpec:
@@ -48,6 +63,13 @@ def load_tool(path: str | Path) -> ToolSpec:
     if plots is not None and not isinstance(plots, list):
         raise RunError(f"{path}: tool.plots must be a list")
 
+    setup = _load_phase(raw, path, "setup")
+    teardown = _load_phase(raw, path, "teardown")
+
+    setup_timeout = raw.get("setup_timeout_seconds", 120)
+    if not isinstance(setup_timeout, int) or isinstance(setup_timeout, bool) or setup_timeout <= 0:
+        raise RunError(f"{path}: tool.setup_timeout_seconds must be a positive integer")
+
     return ToolSpec(
         name=raw["name"],
         command=raw["command"],
@@ -61,6 +83,9 @@ def load_tool(path: str | Path) -> ToolSpec:
         units=dict(raw.get("units") or {}),
         higher_is_better=dict(raw.get("higher_is_better") or {}),
         plots=list(plots or []),
+        setup=setup,
+        teardown=teardown,
+        setup_timeout_seconds=setup_timeout,
     )
 
 
