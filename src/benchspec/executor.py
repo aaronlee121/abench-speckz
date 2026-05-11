@@ -7,6 +7,18 @@ from datetime import datetime, timezone
 from benchspec.runspec import RunRequest, RunResult
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _to_str(buf) -> str:
+    if buf is None:
+        return ""
+    if isinstance(buf, bytes):
+        return buf.decode(errors="replace")
+    return buf
+
+
 class Executor(ABC):
     @abstractmethod
     def execute(self, request: RunRequest) -> RunResult: ...
@@ -14,7 +26,7 @@ class Executor(ABC):
 
 class LocalSubprocessExecutor(Executor):
     def execute(self, request: RunRequest) -> RunResult:
-        started = datetime.now(timezone.utc)
+        started_at = _now_iso()
         t0 = time.monotonic()
         try:
             result = subprocess.run(
@@ -25,38 +37,31 @@ class LocalSubprocessExecutor(Executor):
                 timeout=request.timeout_seconds,
                 check=False,
             )
-            duration_ms = int((time.monotonic() - t0) * 1000)
-            finished = datetime.now(timezone.utc)
-            failure_reason = f"exit_code={result.returncode}" if result.returncode != 0 else None
             return RunResult(
                 exit_code=result.returncode,
-                duration_ms=duration_ms,
-                started_at=started.isoformat().replace("+00:00", "Z"),
-                finished_at=finished.isoformat().replace("+00:00", "Z"),
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                started_at=started_at,
+                finished_at=_now_iso(),
                 stdout=result.stdout,
                 stderr=result.stderr,
-                failure_reason=failure_reason,
+                failure_reason=f"exit_code={result.returncode}" if result.returncode != 0 else None,
             )
         except subprocess.TimeoutExpired as e:
-            duration_ms = int((time.monotonic() - t0) * 1000)
-            finished = datetime.now(timezone.utc)
             return RunResult(
                 exit_code=-1,
-                duration_ms=duration_ms,
-                started_at=started.isoformat().replace("+00:00", "Z"),
-                finished_at=finished.isoformat().replace("+00:00", "Z"),
-                stdout=e.stdout or "" if isinstance(e.stdout, str) else (e.stdout.decode() if e.stdout else ""),
-                stderr=e.stderr or "" if isinstance(e.stderr, str) else (e.stderr.decode() if e.stderr else ""),
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                started_at=started_at,
+                finished_at=_now_iso(),
+                stdout=_to_str(e.stdout),
+                stderr=_to_str(e.stderr),
                 failure_reason="timeout",
             )
         except FileNotFoundError as e:
-            duration_ms = int((time.monotonic() - t0) * 1000)
-            finished = datetime.now(timezone.utc)
             return RunResult(
                 exit_code=-1,
-                duration_ms=duration_ms,
-                started_at=started.isoformat().replace("+00:00", "Z"),
-                finished_at=finished.isoformat().replace("+00:00", "Z"),
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                started_at=started_at,
+                finished_at=_now_iso(),
                 stdout="",
                 stderr=str(e),
                 failure_reason=f"command_not_found: {e}",
