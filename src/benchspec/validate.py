@@ -1,3 +1,4 @@
+"""Post-load spec checks: empty axes, mixed-type axes (warn), env-var key shape."""
 import re
 import warnings
 

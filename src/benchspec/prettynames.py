@@ -1,3 +1,4 @@
+"""Persist + merge tool-scoped display names for metrics and variable axes."""
 import json
 from pathlib import Path
 

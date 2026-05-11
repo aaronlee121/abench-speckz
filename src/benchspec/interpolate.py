@@ -1,3 +1,4 @@
+"""Resolve ``${var}`` and ``${env:VAR}`` templates with chained-reference support."""
 import re
 from typing import Any
 
@@ -10,6 +11,9 @@ _MAX_DEPTH = 16
 
 
 def resolve(values: dict[str, Any], *, env: dict[str, str] | None = None) -> dict[str, str]:
+    """Iteratively substitute ``${var}`` (in-mapping) and ``${env:VAR}``
+    references until fixpoint or _MAX_DEPTH. ``$$`` escapes a literal ``$``;
+    cycles or depth-exceeded raise SpecError."""
     out: dict[str, str] = {k: _stringify(v).replace("$$", _DOLLAR_SENTINEL) for k, v in values.items()}
 
     for _ in range(_MAX_DEPTH):

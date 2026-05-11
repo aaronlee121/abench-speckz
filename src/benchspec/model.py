@@ -1,13 +1,14 @@
+"""Shared dataclasses and exceptions used by spec parsing and combo generation."""
 from dataclasses import dataclass, field
 from typing import Any
 
 
 class SpecError(Exception):
-    pass
+    """Raised for invalid spec YAML or pipeline-time configuration errors."""
 
 
 class RunError(Exception):
-    pass
+    """Raised for invalid tool YAML, missing manifests, or runtime failures."""
 
 
 @dataclass(frozen=True)

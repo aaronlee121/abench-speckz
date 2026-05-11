@@ -1,3 +1,4 @@
+"""Parse a tool YAML into a ToolSpec and resolve the tool's reported version."""
 import shlex
 import subprocess
 from pathlib import Path

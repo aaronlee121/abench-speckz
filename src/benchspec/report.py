@@ -1,3 +1,4 @@
+"""Render aggregate rows as a self-contained Chart.js-powered HTML report."""
 import json
 import re
 from datetime import datetime, timezone

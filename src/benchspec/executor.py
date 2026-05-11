@@ -1,3 +1,4 @@
+"""Executor abstraction for running a single benchmark command as a subprocess."""
 import shlex
 import subprocess
 import time

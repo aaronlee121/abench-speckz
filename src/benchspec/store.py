@@ -1,3 +1,4 @@
+"""Read/write the ``results/`` directory: runs.jsonl, aggregates.jsonl, snapshots, raw stdout."""
 import dataclasses
 import fcntl
 import json
@@ -81,6 +82,10 @@ def load_aggregates(results_dir: Path) -> dict[str, list[AggregateRow]]:
 
 
 def update_aggregates_for_hash(results_dir: Path, config_hash: str) -> None:
+    """Recompute aggregates for one config_hash and rewrite the whole
+    aggregates.jsonl atomically. The full rewrite keeps the file consistent
+    if the sweep is interrupted mid-update; cost scales with total combos,
+    not total reps, so it stays cheap in practice."""
     table = load_aggregates(results_dir)
     runs = read_runs_for_hash(results_dir, config_hash)
     rows = aggregate.compute_aggregate_rows(runs)

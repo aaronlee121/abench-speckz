@@ -1,3 +1,4 @@
+"""Pull metric values out of a tool's stdout via JSONPath capture or a parser plugin."""
 import importlib
 import json
 import re
@@ -13,6 +14,8 @@ _FLOAT_RE = re.compile(r"^-?\d+\.\d+([eE][+-]?\d+)?$|^-?\d+[eE][+-]?\d+$")
 
 
 def apply(tool: ToolSpec, stdout: str) -> tuple[dict[str, Any], str | None]:
+    """Return (metrics, error). Dispatches in priority order: ``parser`` plugin,
+    JSONL capture, then single-document JSON capture."""
     if tool.parser:
         return _apply_plugin(tool.parser, stdout)
     if tool.output_format == "jsonl":

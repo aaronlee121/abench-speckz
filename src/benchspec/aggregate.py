@@ -1,3 +1,4 @@
+"""Statistical summaries (mean, stddev, p50/95/99, 95% CI) over per-run records."""
 import math
 import statistics
 from collections import defaultdict

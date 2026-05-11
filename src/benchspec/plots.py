@@ -1,3 +1,4 @@
+"""PlotSpec dataclass and validators for declarative chart definitions."""
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any

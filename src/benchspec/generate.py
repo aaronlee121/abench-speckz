@@ -1,3 +1,4 @@
+"""Combo pipeline: expand variables, apply when/exclude rules, dedupe, interpolate, tag-filter."""
 from itertools import product
 from typing import Any, Iterable
 
@@ -104,6 +105,9 @@ def run_pipeline(
     require_tags: Iterable[str] = (),
     exclude_tags: Iterable[str] = (),
 ) -> list[Combo]:
+    """Run the full combo pipeline. Stage order is load-bearing: when/exclude
+    operate on raw values, dedupe merges tag sets, and interpolation comes
+    last so ``${var}`` templates see the post-when assignments."""
     combos = expand(spec)
     combos = apply_excludes(combos, spec.exclude)
     combos = apply_when(combos, spec.when)

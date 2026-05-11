@@ -1,3 +1,4 @@
+"""Argparse entry point for ``benchspec gen | run | stats | rebuild-aggregates``."""
 import argparse
 import sys
 from pathlib import Path

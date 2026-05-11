@@ -1,3 +1,4 @@
+"""Dataclasses for tool YAML, per-run I/O, and per-combo aggregate rows."""
 from dataclasses import dataclass, field
 from typing import Any
 

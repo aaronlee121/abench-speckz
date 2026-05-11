@@ -1,3 +1,4 @@
+"""Build filesystem-safe env-file names from a combo's varying keys."""
 import hashlib
 import json
 import re
@@ -34,6 +35,8 @@ def _naive_filename(combo: Combo) -> str:
 
 
 def assign_filenames(combos: list[Combo]) -> list[str]:
+    """Return one ``*.env`` filename per combo. Filenames that collide after
+    slugification get an 8-char SHA-256 suffix derived from the combo vars."""
     naive = [_naive_filename(c) for c in combos]
 
     groups: dict[str, list[int]] = defaultdict(list)

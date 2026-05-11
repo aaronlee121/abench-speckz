@@ -1,3 +1,4 @@
+"""Load a spec YAML and overlay an optional profile onto the base spec."""
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,8 @@ _SECTIONS = {"static", "variables", "when", "exclude", "tags", "profiles", "defa
 
 
 def load(path: str | Path, profile: str | None = None) -> Spec:
+    """Parse ``path`` and return a Spec. If ``profile`` (or default_profile) is
+    set, the named profile's partial spec is merged on top of the base."""
     raw = yaml.safe_load(Path(path).read_text())
     if raw is None:
         raw = {}

@@ -1,3 +1,4 @@
+"""Orchestrate a benchmark sweep: plan reps, wrap each rep in setup/teardown, persist results."""
 import hashlib
 import json
 import os
@@ -112,6 +113,13 @@ def execute_sweep(
     executor: Executor | None = None,
     progress_stream=sys.stderr,
 ) -> dict[str, int]:
+    """Run the benchmark tool across every combo in the manifest.
+
+    For each rep (warmup + measured) the flow is: optional setup steps →
+    interpolated tool command → optional teardown steps. Teardown always runs
+    (even on benchmark failure or KeyboardInterrupt). Results are appended to
+    ``runs.jsonl`` and aggregates are rewritten after every run.
+    """
     where = where or []
     require_tags = require_tags or []
     exclude_tags = exclude_tags or []

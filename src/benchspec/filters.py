@@ -1,3 +1,4 @@
+"""Parse ``K=V`` filter expressions and combine them with tag include/exclude sets."""
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable

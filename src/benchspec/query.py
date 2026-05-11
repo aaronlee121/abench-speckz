@@ -1,3 +1,4 @@
+"""DuckDB-backed queries over aggregates.jsonl (fast path) or runs.jsonl (when grouping)."""
 import json
 import sys
 from pathlib import Path
@@ -23,14 +24,19 @@ def compute_rows(
     metrics: list[str] | None = None,
     from_raw: bool = False,
 ) -> list[dict[str, Any]]:
+    """Return aggregate rows for the results dir.
+
+    Reads pre-aggregated stats from ``aggregates.jsonl`` by default, but
+    routes through ``runs.jsonl`` whenever the caller groups across
+    config_hashes — stddev and percentiles aren't additive across
+    pre-aggregated rows, so they have to be recomputed from raw values.
+    """
     group_by = group_by or []
     where = where or []
     require_tags = require_tags or []
     exclude_tags = exclude_tags or []
     metrics = metrics or []
 
-    # Cross-hash grouping requires recomputation: stddev / percentiles aren't
-    # additive across pre-aggregated rows. Route grouped queries through from_raw.
     must_recompute = bool(group_by)
     if from_raw or must_recompute:
         return _from_raw(results_dir, group_by, where, require_tags, exclude_tags, metrics)
