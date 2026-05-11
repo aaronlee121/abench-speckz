@@ -157,7 +157,7 @@ def execute_sweep(
         total = len(work)
         t_sweep = time.monotonic()
 
-        for i, (entry, rep, is_warmup) in enumerate(work, start=1):
+        for i, (entry, _rep, is_warmup) in enumerate(work, start=1):
             ch = config_hash(entry["vars"])
             if skip_existing and not is_warmup and skip_counts[ch] >= repeat:
                 skipped += 1

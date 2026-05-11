@@ -21,7 +21,6 @@ import random
 import sys
 import time
 
-
 _REQUESTS = 200
 _SEED = 42
 

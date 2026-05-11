@@ -1,4 +1,3 @@
-import json
 
 from benchspec import store
 from benchspec.runspec import AggregateRow

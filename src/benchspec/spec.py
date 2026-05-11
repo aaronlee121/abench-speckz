@@ -6,7 +6,6 @@ import yaml
 
 from benchspec.model import ExcludeRule, Spec, SpecError, WhenRule
 
-
 _SECTIONS = {"static", "variables", "when", "exclude", "tags", "profiles", "default_profile"}
 
 

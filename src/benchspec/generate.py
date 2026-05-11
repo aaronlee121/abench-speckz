@@ -1,6 +1,7 @@
 """Combo pipeline: expand variables, apply when/exclude rules, dedupe, interpolate, tag-filter."""
+from collections.abc import Iterable
 from itertools import product
-from typing import Any, Iterable
+from typing import Any
 
 from benchspec import interpolate
 from benchspec.model import Combo, ExcludeRule, Spec, SpecError, WhenRule
@@ -16,7 +17,7 @@ def expand(spec: Spec) -> list[Combo]:
     combos: list[Combo] = []
     for assignment in product(*value_lists):
         vars_ = dict(spec.static)
-        for k, v in zip(axes, assignment):
+        for k, v in zip(axes, assignment, strict=True):
             vars_[k] = v
         combos.append(Combo(vars=vars_, varying_keys=tuple(axes)))
     return combos

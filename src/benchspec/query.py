@@ -8,8 +8,6 @@ import duckdb
 
 from benchspec import aggregate, prettynames
 from benchspec.filters import check_ident, parse_kv
-from benchspec.model import RunError
-
 
 _AGGREGATE_COLUMNS = ("n", "n_failed", "mean", "stddev", "p50", "p95", "p99", "ci95_low", "ci95_high")
 
@@ -112,7 +110,7 @@ def _from_aggregates(
     group_cols = [f"(vars->>'{g}')" for g in group_by]
 
     if group_by:
-        select_keys = ", ".join(f"{c} AS {g}" for c, g in zip(group_cols, group_by))
+        select_keys = ", ".join(f"{c} AS {g}" for c, g in zip(group_cols, group_by, strict=True))
         agg_picks = ", ".join(f"any_value({c}) AS {c}" for c in _AGGREGATE_COLUMNS)
         sql = (
             f"SELECT {select_keys}, metric, {agg_picks} "
@@ -129,7 +127,7 @@ def _from_aggregates(
 
     res = con.execute(sql, params).fetchall()
     headers = [d[0] for d in con.description]
-    return [dict(zip(headers, r)) for r in res]
+    return [dict(zip(headers, r, strict=True)) for r in res]
 
 
 def _from_raw(
@@ -166,7 +164,7 @@ def _from_raw(
     rows_sql = f"SELECT * FROM {src} WHERE {where_clause}"
     raw_rows = con.execute(rows_sql, params).fetchall()
     headers = [d[0] for d in con.description]
-    runs = [dict(zip(headers, r)) for r in raw_rows]
+    runs = [dict(zip(headers, r, strict=True)) for r in raw_rows]
 
     n_failed_by_key: dict[tuple, int] = defaultdict(int)
     failed_sql = (
@@ -174,7 +172,7 @@ def _from_raw(
         f"AND NOT list_contains(tags, 'warmup')"
     )
     for r in con.execute(failed_sql).fetchall():
-        d = dict(zip([h[0] for h in con.description], r))
+        d = dict(zip([h[0] for h in con.description], r, strict=True))
         key = tuple((d.get("vars") or {}).get(g, "") for g in group_by)
         n_failed_by_key[key] += 1
 

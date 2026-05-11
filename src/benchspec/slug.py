@@ -6,7 +6,6 @@ from collections import defaultdict
 
 from benchspec.model import Combo
 
-
 _BAD_CHAR = re.compile(r"[^a-z0-9._-]")
 _DASH_RUN = re.compile(r"-+")
 _MAX_FILENAME_LEN = 200

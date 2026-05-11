@@ -5,7 +5,6 @@ import pytest
 
 from benchspec import query, store
 from benchspec.model import RunError
-from benchspec.runspec import AggregateRow
 
 
 def _seed(results_dir):

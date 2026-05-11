@@ -2,10 +2,10 @@
 import math
 import statistics
 from collections import defaultdict
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from benchspec.runspec import AggregateRow
-
 
 _T_CRIT_95: dict[int, float] = {
     1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
@@ -38,6 +38,8 @@ def stats_for(values: list[float]) -> dict[str, Any]:
     mean = statistics.fmean(values)
     stddev = statistics.stdev(values) if n >= 2 else 0.0
     p50, p95, p99 = _percentiles(values, [50, 95, 99])
+    ci_low: float | None
+    ci_high: float | None
     if n >= 2:
         t = _t_critical_95(n - 1)
         half = t * stddev / math.sqrt(n)

@@ -8,7 +8,6 @@ import yaml
 from benchspec.model import RunError
 from benchspec.runspec import ToolSpec
 
-
 _FIELDS = {
     "name", "command", "timeout_seconds", "version_command",
     "capture", "parser", "output_file", "output_format", "pretty_names", "units", "higher_is_better",

@@ -1,16 +1,16 @@
 """Resolve ``${var}`` and ``${env:VAR}`` templates with chained-reference support."""
 import re
+from collections.abc import Mapping
 from typing import Any
 
 from benchspec.model import SpecError
-
 
 _PATTERN = re.compile(r"\$\{(env:)?([A-Za-z_][A-Za-z0-9_]*)\}")
 _DOLLAR_SENTINEL = "\x00BENCHSPEC_DOLLAR\x00"
 _MAX_DEPTH = 16
 
 
-def resolve(values: dict[str, Any], *, env: dict[str, str] | None = None) -> dict[str, str]:
+def resolve(values: dict[str, Any], *, env: Mapping[str, str] | None = None) -> dict[str, str]:
     """Iteratively substitute ``${var}`` (in-mapping) and ``${env:VAR}``
     references until fixpoint or _MAX_DEPTH. ``$$`` escapes a literal ``$``;
     cycles or depth-exceeded raise SpecError."""
@@ -32,7 +32,7 @@ def resolve(values: dict[str, Any], *, env: dict[str, str] | None = None) -> dic
     return {k: v.replace(_DOLLAR_SENTINEL, "$") for k, v in out.items()}
 
 
-def resolve_string(template: str, values: dict[str, Any], *, env: dict[str, str] | None = None) -> str:
+def resolve_string(template: str, values: dict[str, Any], *, env: Mapping[str, str] | None = None) -> str:
     s = _stringify(template).replace("$$", _DOLLAR_SENTINEL)
     s = _PATTERN.sub(lambda m: _lookup(values, env, m.group(1), m.group(2)), s)
     return s.replace(_DOLLAR_SENTINEL, "$")
@@ -44,7 +44,7 @@ def _stringify(v: Any) -> str:
     return str(v)
 
 
-def _lookup(values: dict[str, Any], env: dict[str, str] | None, prefix: str | None, name: str) -> str:
+def _lookup(values: dict[str, Any], env: Mapping[str, str] | None, prefix: str | None, name: str) -> str:
     if prefix == "env:":
         if env is None or name not in env:
             raise SpecError(f"interpolation references unknown env var: ${{env:{name}}}")

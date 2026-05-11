@@ -4,7 +4,6 @@ import warnings
 
 from benchspec.model import Combo, Spec, SpecError
 
-
 _ENV_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
@@ -32,10 +31,10 @@ def validate(spec: Spec) -> None:
                     f"{rule.source}.set: key {k!r} also appears in `static` — choose one"
                 )
 
-    for rule in spec.exclude:
-        unknown = set(rule.match) - known_keys
+    for exc in spec.exclude:
+        unknown = set(exc.match) - known_keys
         if unknown:
-            raise SpecError(f"{rule.source}: unknown keys {sorted(unknown)}")
+            raise SpecError(f"{exc.source}: unknown keys {sorted(unknown)}")
 
 
 def validate_env_keys(combos: list[Combo]) -> None:

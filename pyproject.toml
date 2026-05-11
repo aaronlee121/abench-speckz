@@ -37,6 +37,9 @@ dependencies = [
 dev = [
     "pytest>=7",
     "pytest-timeout>=2",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "types-PyYAML",
 ]
 
 [project.urls]
@@ -52,3 +55,32 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "W",   # pycodestyle warnings
+]
+ignore = [
+    "E501",  # line length (handled by formatter; long lines in tests are fine)
+    "B008",  # function-call-in-default-argument (Path() defaults are clear)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B"]   # tests use looser conventions
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src/benchspec"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true

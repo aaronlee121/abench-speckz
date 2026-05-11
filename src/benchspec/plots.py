@@ -7,7 +7,6 @@ import yaml
 
 from benchspec.model import RunError
 
-
 ALLOWED_TYPES = {"bar", "stacked-bar", "line", "scatter"}
 
 

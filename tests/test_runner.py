@@ -3,7 +3,6 @@ from pathlib import Path
 
 from benchspec import runner, store
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -346,7 +345,6 @@ capture:
 
 
 def test_output_file_with_var_interpolation(tmp_path):
-    out_file = tmp_path / "result_read.json"
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
     tool_path = tmp_path / "tool.yaml"
     tool_path.write_text(

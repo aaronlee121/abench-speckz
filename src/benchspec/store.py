@@ -4,13 +4,13 @@ import fcntl
 import json
 import os
 import shutil
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from benchspec import aggregate
 from benchspec.runspec import AggregateRow
-
 
 SCHEMA_VERSION = 1
 

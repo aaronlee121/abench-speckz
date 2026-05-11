@@ -119,7 +119,7 @@ def generate_html(
                 "borderColor": color,
                 "borderWidth": 1,
             }
-            for stat_key, color in zip(["mean", "p50", "p95", "p99"], _COLORS)
+            for stat_key, color in zip(["mean", "p50", "p95", "p99"], _COLORS, strict=False)
         ]
 
         all_headers = list(group_by) + list(_STAT_COLS)
@@ -213,7 +213,7 @@ def _build_bar_or_line_config(
     else:
         x_values = x_values_raw
 
-    indexed: dict[tuple, float] = {}
+    indexed: dict[tuple, float | None] = {}
     series_keys: list[tuple] = []
     seen: set[tuple] = set()
     for r in rows:
@@ -265,10 +265,10 @@ def _build_bar_or_line_config(
 
 
 def _build_scatter_config(plot, rows: list[dict], pretty_map: dict) -> dict:
-    groups: dict[str, dict[str, float]] = {}
+    groups: dict[str, dict[str, float | None]] = {}
     for r in rows:
         gb = str(r.get(plot.group_by, "")) if plot.group_by else "all"
-        groups.setdefault(gb, {})[r.get("metric")] = r.get("mean")
+        groups.setdefault(gb, {})[str(r.get("metric"))] = r.get("mean")
 
     datasets = []
     y_metric = plot.y[0]
