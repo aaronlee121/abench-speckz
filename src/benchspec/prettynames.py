@@ -31,9 +31,20 @@ def write(path: Path, data: dict) -> None:
 
 
 def resolve(mapping: dict, key: str, *, tool: str | None = None) -> str:
-    """Fall through current-tool → vars → raw key."""
+    """Fall through current-tool → any tool → vars → raw key.
+
+    When the caller doesn't know which tool produced ``key`` (e.g. the stats
+    renderer just has a column name), we still want metric pretty-names to
+    work; in that case we search every tool-scoped mapping in turn.
+    """
     if tool and tool in mapping and key in mapping[tool]:
         return mapping[tool][key]
+    if tool is None:
+        for k, v in mapping.items():
+            if k == "vars" or not isinstance(v, dict):
+                continue
+            if key in v:
+                return v[key]
     if "vars" in mapping and key in mapping["vars"]:
         return mapping["vars"][key]
     return key

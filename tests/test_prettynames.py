@@ -29,3 +29,15 @@ def test_resolve_fallthrough():
     assert prettynames.resolve(m, "rps", tool="oha") == "Requests/sec"
     assert prettynames.resolve(m, "workload") == "Workload"
     assert prettynames.resolve(m, "unknown") == "unknown"
+
+
+def test_resolve_finds_metric_in_any_tool_when_tool_unspecified():
+    m = {
+        "oha": {"rps": "Requests/sec"},
+        "vegeta": {"p95": "P95 (ms)"},
+        "vars": {"workload": "Workload"},
+    }
+    assert prettynames.resolve(m, "rps") == "Requests/sec"
+    assert prettynames.resolve(m, "p95") == "P95 (ms)"
+    assert prettynames.resolve(m, "workload") == "Workload"
+    assert prettynames.resolve(m, "unknown") == "unknown"

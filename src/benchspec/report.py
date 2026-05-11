@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from benchspec import prettynames
+
 _CHART_JS_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4"
 _COLORS = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7"]
 _STAT_COLS = ("n", "n_failed", "mean", "stddev", "p50", "p95", "p99", "ci95_low", "ci95_high")
@@ -22,10 +24,7 @@ def _fmt(v: Any) -> str:
 
 
 def _resolve_metric(pretty_map: dict, metric: str) -> str:
-    for val in pretty_map.values():
-        if isinstance(val, dict) and metric in val:
-            return val[metric]
-    return metric
+    return prettynames.resolve(pretty_map, metric)
 
 
 def _color(i: int) -> str:
