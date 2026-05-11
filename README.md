@@ -9,6 +9,8 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
 ```
 
+> **Note on examples:** files under [`examples/`](examples/) reference paths like `python examples/sample_bench.py`. Those paths are relative to the repo root, so the examples run only from a checkout — not from an arbitrary working directory after `pip install`. Clone the repo and `cd` into it to follow the examples verbatim.
+
 ## Workflow
 
 ```
