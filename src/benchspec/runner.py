@@ -9,7 +9,7 @@ import time
 import uuid
 from collections import Counter
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from benchspec import extract, interpolate, prettynames, store, tools
 from benchspec.executor import Executor, LocalSubprocessExecutor
