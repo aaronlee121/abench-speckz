@@ -53,9 +53,13 @@ Profiles overlay the base spec (variables, static, when, exclude are merged); `d
 - Writes to `runs.jsonl` (one JSON line per run) and updates `aggregates.jsonl` after each run
 - Results directory is protected by a `flock` during the sweep
 
-**Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `pretty_names`, `units`, `higher_is_better`.
+**Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `output_file` (read extraction input from a file the tool writes instead of stdout), `output_format` (`json` default, or `jsonl` for one object per line), `pretty_names`, `units`, `higher_is_better`, `plots` (declarative Chart.js plot definitions consumed by `stats --report`), `setup` / `teardown` (per-rep shell steps), `setup_timeout_seconds` (per-step timeout, default 120).
 
-Metric extraction (`extract.py`): parses stdout as JSON, then applies JSONPath expressions from `capture`. A key ending in `[]` collects all matches as a list. Alternatively, `parser: "module:func"` calls an arbitrary Python function.
+Metric extraction (`extract.py`): reads stdout (or `output_file`) as JSON or JSONL, then applies JSONPath expressions from `capture`. A key ending in `[]` collects all matches as a list. Alternatively, `parser: "module:func"` calls an arbitrary Python function.
+
+### 4. `rebuild-aggregates` — recompute aggregates
+
+`store.rebuild_aggregates()` regenerates `aggregates.jsonl` from `runs.jsonl` (useful after editing/inspecting raw runs).
 
 ### 3. `stats` — Aggregate queries
 

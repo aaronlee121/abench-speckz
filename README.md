@@ -4,6 +4,8 @@ Generate Docker env-file combinations from a YAML benchmark spec, execute a benc
 
 ## Install
 
+Requires Python 3.10+.
+
 ```sh
 python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
@@ -43,6 +45,7 @@ abench-speckz run out/ --tool oha.tool.yaml
 abench-speckz run out/ --tool oha.tool.yaml --repeat 5 --warmup 1
 abench-speckz run out/ --tool oha.tool.yaml --filter workload=read
 abench-speckz run out/ --tool oha.tool.yaml --filter-tag stress
+abench-speckz run out/ --tool oha.tool.yaml --filter-exclude-tag slow
 abench-speckz run out/ --tool oha.tool.yaml --skip-existing --keep-raw
 abench-speckz run out/ --tool oha.tool.yaml --dry-run   # print planned commands
 ```
@@ -57,11 +60,16 @@ abench-speckz stats results/ --group-by workload --group-by concurrency
 abench-speckz stats results/ --metric requests_per_sec --metric p50_ms
 abench-speckz stats results/ --where workload=read
 abench-speckz stats results/ --filter-tag stress
+abench-speckz stats results/ --filter-exclude-tag slow
 abench-speckz stats results/ --format json
 abench-speckz stats results/ --format tsv
 abench-speckz stats results/ --pretty            # use display names from tool YAML
 abench-speckz stats results/ --from-raw          # recompute from runs.jsonl
+abench-speckz stats results/ --report report.html              # self-contained Chart.js HTML
+abench-speckz stats results/ --report report.html --plots plots.yaml  # override tool YAML plots
 ```
+
+`--report` writes a self-contained HTML file with Chart.js plots. Plot definitions come from the tool YAML's `plots:` list (see below), or from a separate YAML file via `--plots`. When no plots are defined, a default per-metric bar chart is rendered.
 
 ### `rebuild-aggregates` — regenerate aggregates from raw runs
 
@@ -128,6 +136,10 @@ capture:
 # alternative: a custom Python parser function
 # parser: "mymodule:parse_fn"       # fn(stdout: str) -> dict
 
+# read extraction input from a file the tool writes, instead of stdout
+# output_file: "results.json"       # interpolates ${var} / ${env:VAR}
+# output_format: jsonl              # "json" (default) or "jsonl" for one JSON object per line
+
 pretty_names:
   requests_per_sec: "Requests/s"
   p50_ms: "p50 latency"
@@ -144,6 +156,25 @@ setup:
 teardown:
   - "docker compose down -v"
 setup_timeout_seconds: 120   # per-step timeout for setup/teardown (default 120)
+
+# optional: declarative plots used by `stats --report`
+plots:
+  - id: rps_by_workload
+    type: bar                        # bar | stacked-bar | line | scatter
+    title: "Throughput by workload"
+    x: workload
+    y: requests_per_sec
+  - id: latency_breakdown
+    type: stacked-bar
+    title: "Latency percentiles"
+    x: workload
+    y: [p50_ms, p95_ms, p99_ms]
+  - id: rps_vs_concurrency
+    type: line
+    title: "Throughput scaling"
+    x: concurrency
+    y: requests_per_sec
+    group_by: workload
 ```
 
 **Setup / teardown.** Each rep is wrapped `setup → command → teardown`. Teardown runs in a `finally` block, so it also fires on benchmark failure or `Ctrl-C`. Combo vars (`${var}`) and `${env:VAR}` interpolate in setup/teardown commands. Steps are split with `shlex.split` and executed without a shell, so chain via multiple list entries rather than `&&`.

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "abench-speckz"
 version = "0.1.0"
-description = "Generate Docker env-file combinations from a YAML benchmark spec, run a tool across every combination, and query the results."
+description = "YAML-driven benchmark sweeps: generate env-file combinations, execute a tool across each, and query DuckDB-backed aggregate stats."
 readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.10"
