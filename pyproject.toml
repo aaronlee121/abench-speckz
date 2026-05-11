@@ -5,8 +5,28 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "benchspec"
 version = "0.1.0"
-description = "Generate Docker env-file combinations from a YAML benchmark spec."
+description = "Generate Docker env-file combinations from a YAML benchmark spec, run a tool across every combination, and query the results."
+readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.10"
+authors = [
+    {name = "Benixon Arul Dhas", email = "its.me@benixon.dev"},
+]
+keywords = ["benchmark", "sweep", "yaml", "performance", "stats"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+    "Topic :: System :: Benchmark",
+]
 dependencies = [
     "PyYAML>=6.0",
     "jsonpath-ng>=1.6",
@@ -18,6 +38,11 @@ dev = [
     "pytest>=7",
     "pytest-timeout>=2",
 ]
+
+[project.urls]
+Homepage = "https://github.com/benixon/benchspec"
+Issues = "https://github.com/benixon/benchspec/issues"
+Changelog = "https://github.com/benixon/benchspec/blob/main/CHANGELOG.md"
 
 [project.scripts]
 benchspec = "benchspec.cli:main"

@@ -2,6 +2,8 @@
 from benchspec.model import Combo, ExcludeRule, RunError, Spec, SpecError, WhenRule
 from benchspec.runspec import AggregateRow, RunRequest, RunResult, ToolSpec
 
+__version__ = "0.1.0"
+
 __all__ = [
     "AggregateRow",
     "Combo",
@@ -13,4 +15,5 @@ __all__ = [
     "SpecError",
     "ToolSpec",
     "WhenRule",
+    "__version__",
 ]
