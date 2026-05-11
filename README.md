@@ -182,6 +182,21 @@ plots:
 - Setup failure → the command is skipped, teardown still runs best-effort, and `failure_reason` is recorded as `setup[i]: …`.
 - Teardown failure → the benchmark's `exit_code` and metrics are preserved, but `teardown[i]: …` is appended to `failure_reason` (so the run is counted as failed).
 
+**Sweep-scoped setup / teardown.** `setup_per_sweep` and `teardown_per_sweep` run *outside* the per-rep loop, useful for expensive prep like seeding a database. By default each fires exactly once for the whole sweep. Set `per_sweep_var: <name>` to scope each fire to a single variable: combos are stably grouped by that variable's value, and the phases fire once per distinct value (around the reps for that group).
+
+```yaml
+setup_per_sweep:    ["seed-db.sh"]              # fires once before any rep
+teardown_per_sweep: ["drop-db.sh"]
+per_sweep_var:      workload                    # optional; one var only
+```
+
+- Without `per_sweep_var`: only `${env:VAR}` can be referenced; any `${combo_var}` rejected at sweep start.
+- With `per_sweep_var: X`: only `${X}` and `${env:VAR}` can be referenced; the current group's value of `X` is substituted.
+- `--skip-existing`: if every rep in a group is already recorded, both phases are skipped for that group.
+- Setup failure: all planned reps in that group get a failure row with `failure_reason="per_sweep_setup[i]: …"`; teardown still runs best-effort. Next group proceeds.
+- Teardown failure: appended to the *last* rep row in the group's `failure_reason`.
+- Raw record: `raw/sweep.json` (Mode A) or `raw/sweep-{slug(value)}.json` (Mode B) — same shape as per-rep raw files.
+
 **Raw output records.** When a raw record is written, `raw/{run_id}.json` is a JSON object with:
 
 - `stdout`, `stderr` — the tool's own streams (always present).
@@ -201,4 +216,6 @@ results/
   raw/{run_id}.json       # structured raw record (see below); written with
                           # --keep-raw, on extract failure, on tool failure,
                           # or when setup/teardown failed
+  raw/sweep[-{slug}].json # per_sweep setup/teardown records; written on
+                          # --keep-raw or any per_sweep phase failure
 ```

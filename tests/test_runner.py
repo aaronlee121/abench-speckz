@@ -1,7 +1,11 @@
+import io
 import json
 from pathlib import Path
 
+import pytest
+
 from abench_speckz import runner, store
+from abench_speckz.model import RunError
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -473,3 +477,251 @@ capture:
     assert summary["succeeded"] == 1
     runs = store.read_runs(results)
     assert runs[0]["results"]["rps"] == 1000.0
+
+
+# ---------- per_sweep phase ----------
+
+def _per_sweep_tool_yaml(tmp_path: Path, *, per_sweep_var=None,
+                         setup_per_sweep=None, teardown_per_sweep=None) -> Path:
+    p = tmp_path / "tool.yaml"
+    lines = [
+        "name: faketool",
+        f'command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"',
+        "timeout_seconds: 10",
+        "capture:",
+        "  rps: $.summary.requestsPerSec",
+    ]
+    if per_sweep_var:
+        lines.append(f"per_sweep_var: {per_sweep_var}")
+    if setup_per_sweep:
+        lines.append("setup_per_sweep:")
+        for step in setup_per_sweep:
+            lines.append(f"  - {json.dumps(step)}")
+    if teardown_per_sweep:
+        lines.append("teardown_per_sweep:")
+        for step in teardown_per_sweep:
+            lines.append(f"  - {json.dumps(step)}")
+    p.write_text("\n".join(lines) + "\n")
+    return p
+
+
+def test_per_sweep_mode_a_runs_once(tmp_path):
+    phase = _phase_script(tmp_path)
+    marker = tmp_path / "marker.txt"
+    manifest_dir = _make_manifest(tmp_path, [
+        {"workload": "read", "concurrency": "1"},
+        {"workload": "write", "concurrency": "8"},
+    ])
+    tool_path = _per_sweep_tool_yaml(
+        tmp_path,
+        setup_per_sweep=[f"python {phase} sweep-setup {marker}"],
+        teardown_per_sweep=[f"python {phase} sweep-teardown {marker}"],
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=3,
+    )
+    assert summary["succeeded"] == 6
+    # Setup fires once at start, teardown once at end, regardless of 6 reps.
+    assert marker.read_text().splitlines() == ["sweep-setup", "sweep-teardown"]
+
+
+def test_per_sweep_mode_b_runs_once_per_var_value(tmp_path):
+    phase = _phase_script(tmp_path)
+    marker = tmp_path / "marker.txt"
+    manifest_dir = _make_manifest(tmp_path, [
+        {"workload": "write", "concurrency": "8"},
+        {"workload": "read", "concurrency": "1"},
+        {"workload": "read", "concurrency": "8"},
+        {"workload": "write", "concurrency": "1"},
+    ])
+    tool_path = _per_sweep_tool_yaml(
+        tmp_path, per_sweep_var="workload",
+        setup_per_sweep=[f"python {phase} setup-${{workload}} {marker}"],
+        teardown_per_sweep=[f"python {phase} teardown-${{workload}} {marker}"],
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+    )
+    assert summary["succeeded"] == 8
+
+    lines = marker.read_text().splitlines()
+    # Two groups: read (sorted first), then write. Each gets one setup/teardown.
+    assert lines == [
+        "setup-read",
+        "teardown-read",
+        "setup-write",
+        "teardown-write",
+    ]
+
+
+def test_per_sweep_mode_a_rejects_combo_var_refs(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = _per_sweep_tool_yaml(
+        tmp_path,
+        setup_per_sweep=["echo ${workload}"],  # combo var not allowed in Mode A
+    )
+    results = tmp_path / "results"
+    with pytest.raises(RunError) as ei:
+        runner.execute_sweep(
+            manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        )
+    assert "setup_per_sweep[0]" in str(ei.value)
+    assert "${workload}" in str(ei.value)
+    assert not (results / "runs.jsonl").exists()
+
+
+def test_per_sweep_mode_b_rejects_other_combo_var_refs(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = _per_sweep_tool_yaml(
+        tmp_path, per_sweep_var="workload",
+        setup_per_sweep=["echo ${concurrency}"],  # only ${workload} allowed in Mode B
+    )
+    results = tmp_path / "results"
+    with pytest.raises(RunError) as ei:
+        runner.execute_sweep(
+            manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        )
+    assert "${concurrency}" in str(ei.value)
+    assert "${workload}" in str(ei.value)  # the error names the allowed var
+
+
+def test_per_sweep_var_missing_in_combos_errors(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = _per_sweep_tool_yaml(
+        tmp_path, per_sweep_var="missing_var",
+        setup_per_sweep=["echo ${missing_var}"],
+    )
+    results = tmp_path / "results"
+    with pytest.raises(RunError) as ei:
+        runner.execute_sweep(
+            manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        )
+    assert "per_sweep_var" in str(ei.value)
+    assert "missing_var" in str(ei.value)
+
+
+def test_per_sweep_setup_failure_records_failure_rows(tmp_path):
+    phase = _phase_script(tmp_path)
+    marker = tmp_path / "marker.txt"
+    manifest_dir = _make_manifest(tmp_path, [
+        {"workload": "read", "concurrency": "1"},
+        {"workload": "read", "concurrency": "8"},
+    ])
+    tool_path = _per_sweep_tool_yaml(
+        tmp_path,
+        setup_per_sweep=['python -c "import sys; sys.exit(5)"'],
+        teardown_per_sweep=[f"python {phase} td {marker}"],
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+    )
+    # 2 combos × 2 reps = 4 failure rows
+    assert summary["failed"] == 4
+    assert summary["succeeded"] == 0
+    runs = store.read_runs(results)
+    assert all(r["failure_reason"].startswith("per_sweep_setup[0]") for r in runs)
+    # Teardown still ran best-effort
+    assert marker.read_text().splitlines() == ["td"]
+    # Raw sweep record written
+    assert (results / "raw" / "sweep.json").exists()
+
+
+def test_per_sweep_teardown_failure_folds_into_last_rep(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = _per_sweep_tool_yaml(
+        tmp_path,
+        teardown_per_sweep=['python -c "import sys; sys.exit(9)"'],
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=3,
+    )
+    runs = store.read_runs(results)
+    # All 3 reps executed, but the last one inherits the teardown failure.
+    assert len(runs) == 3
+    assert runs[0]["failure_reason"] is None
+    assert runs[1]["failure_reason"] is None
+    assert runs[2]["failure_reason"].startswith("per_sweep_teardown[0]")
+    assert summary["succeeded"] == 2
+    assert summary["failed"] == 1
+
+
+def test_per_sweep_skip_existing_skips_phases(tmp_path):
+    phase = _phase_script(tmp_path)
+    marker = tmp_path / "marker.txt"
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = _per_sweep_tool_yaml(
+        tmp_path,
+        setup_per_sweep=[f"python {phase} sweep-setup {marker}"],
+        teardown_per_sweep=[f"python {phase} sweep-teardown {marker}"],
+    )
+    results = tmp_path / "results"
+
+    # First run: phases fire normally.
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+    )
+    assert marker.read_text().splitlines() == ["sweep-setup", "sweep-teardown"]
+
+    # Second run with skip-existing: all reps skipped → phases must NOT fire again.
+    marker.write_text("")
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+        skip_existing=True,
+    )
+    assert summary["skipped"] == 2
+    assert marker.read_text() == ""
+
+
+def test_per_sweep_keep_raw_writes_per_group_files(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [
+        {"workload": "read", "concurrency": "1"},
+        {"workload": "write", "concurrency": "1"},
+    ])
+    tool_path = _per_sweep_tool_yaml(
+        tmp_path, per_sweep_var="workload",
+        setup_per_sweep=["echo hello-${workload}"],
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results,
+        repeat=1, keep_raw=True,
+    )
+    assert summary["succeeded"] == 2
+
+    raw_read = json.loads((results / "raw" / "sweep-read.json").read_text())
+    raw_write = json.loads((results / "raw" / "sweep-write.json").read_text())
+    assert "hello-read" in raw_read["setup"][0]["stdout"]
+    assert "hello-write" in raw_write["setup"][0]["stdout"]
+
+
+def test_per_sweep_dry_run_prints_preview(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [
+        {"workload": "read", "concurrency": "1"},
+        {"workload": "write", "concurrency": "1"},
+    ])
+    tool_path = _per_sweep_tool_yaml(
+        tmp_path, per_sweep_var="workload",
+        setup_per_sweep=["echo setup-${workload}"],
+        teardown_per_sweep=["echo teardown-${workload}"],
+    )
+    results = tmp_path / "results"
+    buf = io.StringIO()
+
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results,
+        repeat=1, dry_run=True, progress_stream=buf,
+    )
+    out = buf.getvalue()
+    assert "[per_sweep setup 0, workload=read]: echo setup-read" in out
+    assert "[per_sweep teardown 0, workload=read]: echo teardown-read" in out
+    assert "[per_sweep setup 0, workload=write]: echo setup-write" in out
+    assert not (results / "runs.jsonl").exists()

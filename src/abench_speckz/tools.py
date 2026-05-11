@@ -13,6 +13,7 @@ _FIELDS = {
     "capture", "parser", "output_file", "output_format", "pretty_names", "units", "higher_is_better",
     "plots",
     "setup", "teardown", "setup_timeout_seconds",
+    "setup_per_sweep", "teardown_per_sweep", "per_sweep_var",
 }
 
 
@@ -65,6 +66,12 @@ def load_tool(path: str | Path) -> ToolSpec:
 
     setup = _load_phase(raw, path, "setup")
     teardown = _load_phase(raw, path, "teardown")
+    setup_per_sweep = _load_phase(raw, path, "setup_per_sweep")
+    teardown_per_sweep = _load_phase(raw, path, "teardown_per_sweep")
+
+    per_sweep_var = raw.get("per_sweep_var")
+    if per_sweep_var is not None and (not isinstance(per_sweep_var, str) or not per_sweep_var):
+        raise RunError(f"{path}: tool.per_sweep_var must be a non-empty string")
 
     setup_timeout = raw.get("setup_timeout_seconds", 120)
     if not isinstance(setup_timeout, int) or isinstance(setup_timeout, bool) or setup_timeout <= 0:
@@ -86,6 +93,9 @@ def load_tool(path: str | Path) -> ToolSpec:
         setup=setup,
         teardown=teardown,
         setup_timeout_seconds=setup_timeout,
+        setup_per_sweep=setup_per_sweep,
+        teardown_per_sweep=teardown_per_sweep,
+        per_sweep_var=per_sweep_var,
     )
 
 

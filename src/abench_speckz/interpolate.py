@@ -38,6 +38,14 @@ def resolve_string(template: str, values: dict[str, Any], *, env: Mapping[str, s
     return s.replace(_DOLLAR_SENTINEL, "$")
 
 
+def find_combo_var_refs(template: str) -> list[str]:
+    """Return combo-var names referenced in ``${name}`` patterns (excluding
+    ``${env:VAR}``). Used by callers that need to gate which combo vars a
+    template is allowed to reference."""
+    s = _stringify(template).replace("$$", _DOLLAR_SENTINEL)
+    return [m.group(2) for m in _PATTERN.finditer(s) if m.group(1) != "env:"]
+
+
 def _stringify(v: Any) -> str:
     if isinstance(v, bool):
         return "true" if v else "false"

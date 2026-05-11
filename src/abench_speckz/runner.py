@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from abench_speckz import extract, interpolate, prettynames, store, tools
+from abench_speckz import slug as slug_mod
 from abench_speckz.executor import Executor, LocalSubprocessExecutor
 from abench_speckz.filters import make_filter
 from abench_speckz.model import RunError
@@ -78,15 +79,83 @@ def plan_sweep(
     where: list[str],
     require_tags: list[str],
     exclude_tags: list[str],
+    per_sweep_var: str | None = None,
 ) -> list[tuple[dict[str, Any], int, bool]]:
-    """Returns list of (entry, rep_idx, is_warmup)."""
+    """Returns list of (entry, rep_idx, is_warmup).
+
+    When ``per_sweep_var`` is set, selected entries are stably sorted by the
+    value of that variable so all reps for one value are contiguous — letting
+    the runner fire per_sweep setup/teardown once per group.
+    """
     fn = make_filter(where=where, require_tags=require_tags, exclude_tags=exclude_tags)
     selected = [e for e in manifest_entries if fn(e.get("vars", {}), e.get("tags", []))]
+    if per_sweep_var is not None:
+        selected = sorted(selected, key=lambda e: str((e.get("vars") or {}).get(per_sweep_var, "")))
     work: list[tuple[dict[str, Any], int, bool]] = []
     for entry in selected:
         for rep in range(warmup + repeat):
             work.append((entry, rep, rep < warmup))
     return work
+
+
+def _group_work(
+    work: list[tuple[dict[str, Any], int, bool]],
+    per_sweep_var: str | None,
+) -> list[tuple[str | None, list[tuple[dict[str, Any], int, bool]]]]:
+    """Partition the (already-sorted) work list into contiguous groups sharing
+    ``per_sweep_var``'s value. With no scoping var, returns a single group
+    keyed by ``None``."""
+    if per_sweep_var is None:
+        return [(None, list(work))]
+    groups: list[tuple[str | None, list[tuple[dict[str, Any], int, bool]]]] = []
+    current_key: str | None = None
+    current_items: list[tuple[dict[str, Any], int, bool]] = []
+    started = False
+    for entry, rep, is_warmup in work:
+        k = str(entry["vars"][per_sweep_var])
+        if not started or k != current_key:
+            if current_items:
+                groups.append((current_key, current_items))
+            current_key = k
+            current_items = []
+            started = True
+        current_items.append((entry, rep, is_warmup))
+    if current_items:
+        groups.append((current_key, current_items))
+    return groups
+
+
+def _validate_per_sweep(tool: ToolSpec, selected_entries: list[dict[str, Any]]) -> None:
+    """Reject configs that would error mid-sweep: per_sweep steps referencing
+    disallowed combo vars, or a ``per_sweep_var`` missing from some combos."""
+    if not (tool.setup_per_sweep or tool.teardown_per_sweep) and tool.per_sweep_var is None:
+        return
+    allowed = {tool.per_sweep_var} if tool.per_sweep_var else set()
+    for phase_name, steps in [
+        ("setup_per_sweep", tool.setup_per_sweep),
+        ("teardown_per_sweep", tool.teardown_per_sweep),
+    ]:
+        for i, step in enumerate(steps):
+            for ref in interpolate.find_combo_var_refs(step):
+                if ref in allowed:
+                    continue
+                if tool.per_sweep_var:
+                    suffix = f"only ${{{tool.per_sweep_var}}} is allowed (set via per_sweep_var)"
+                else:
+                    suffix = "per_sweep steps may only reference ${env:VAR}"
+                raise RunError(
+                    f"tool.{phase_name}[{i}] references combo var ${{{ref}}}; {suffix}"
+                )
+    if tool.per_sweep_var:
+        missing = [
+            e for e in selected_entries
+            if tool.per_sweep_var not in (e.get("vars") or {})
+        ]
+        if missing:
+            raise RunError(
+                f"tool.per_sweep_var={tool.per_sweep_var!r} not present in "
+                f"{len(missing)} selected combo(s)"
+            )
 
 
 def existing_counts(results_dir: Path) -> Counter:
@@ -129,17 +198,19 @@ def execute_sweep(
     manifest_dir = actual_manifest_path.parent
     tool = tools.load_tool(tool_path)
 
-    work = plan_sweep(manifest_entries, repeat, warmup, where, require_tags, exclude_tags)
+    work = plan_sweep(
+        manifest_entries, repeat, warmup, where, require_tags, exclude_tags,
+        per_sweep_var=tool.per_sweep_var,
+    )
     if not work:
         print("no combos selected after filters", file=progress_stream)
         return {"runs": 0, "failed": 0, "skipped": 0, "succeeded": 0}
 
+    _validate_per_sweep(tool, [e for (e, _, _) in work])
+    groups = _group_work(work, tool.per_sweep_var)
+
     if dry_run:
-        for entry, rep, is_warmup in work:
-            ch = config_hash(entry["vars"])
-            cmd = interpolate.resolve_string(tool.command, entry["vars"], env=os.environ)
-            tag = " [warmup]" if is_warmup else ""
-            print(f"{ch} rep={rep}{tag}: {cmd}", file=progress_stream)
+        _dry_run_preview(groups, tool, progress_stream)
         return {"runs": 0, "failed": 0, "skipped": 0, "succeeded": 0}
 
     with store.lock_results_dir(results_dir):
@@ -155,129 +226,109 @@ def execute_sweep(
 
         succeeded = failed = skipped = 0
         total = len(work)
+        sweep_idx = 0
         t_sweep = time.monotonic()
+        base_env = {**os.environ}
 
-        for i, (entry, _rep, is_warmup) in enumerate(work, start=1):
-            ch = config_hash(entry["vars"])
-            if skip_existing and not is_warmup and skip_counts[ch] >= repeat:
-                skipped += 1
-                _progress(progress_stream, i, total, t_sweep, "skip", ch)
+        for group_key, items in groups:
+            group_slug = slug_mod.slug(group_key) if (tool.per_sweep_var and group_key is not None) else None
+            phase_vars: dict[str, Any] = {tool.per_sweep_var: group_key} if tool.per_sweep_var else {}
+
+            runnable_idx = [
+                j for j, (entry, _r, is_warmup) in enumerate(items)
+                if not (skip_existing and not is_warmup and skip_counts[config_hash(entry["vars"])] >= repeat)
+            ]
+            if not runnable_idx:
+                for entry, _r, _is_warmup in items:
+                    sweep_idx += 1
+                    skipped += 1
+                    _progress(progress_stream, sweep_idx, total, t_sweep, "skip", config_hash(entry["vars"]))
                 continue
 
-            tags = list(entry.get("tags") or [])
-            if is_warmup:
-                tags.append("warmup")
+            sweep_setup_failure: str | None = None
+            sweep_setup_records: list[dict[str, Any]] = []
+            sweep_teardown_failure: str | None = None
+            sweep_teardown_records: list[dict[str, Any]] = []
 
-            try:
-                cmd = interpolate.resolve_string(tool.command, entry["vars"], env=os.environ)
-            except Exception as e:
-                row = _make_row(
-                    entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
-                    command="<unresolved>", result=None, parsed={}, failure_reason=f"interpolation: {e}",
-                )
-                store.append_run(results_dir, row)
-                failed += 1
-                _progress(progress_stream, i, total, t_sweep, "FAIL", ch)
-                continue
-
-            env_file = manifest_dir / entry["filename"]
-            env = {**os.environ, **load_envfile(env_file)} if env_file.exists() else {**os.environ, **{k: str(v) for k, v in entry["vars"].items()}}
-
-            request = RunRequest(
-                config_hash=ch, vars={k: str(v) for k, v in entry["vars"].items()},
-                tags=tags, tool=tool.name, tool_version=tool_version,
-                command=cmd, env=env, timeout_seconds=tool.timeout_seconds,
-            )
-
-            setup_failure: str | None = None
-            setup_steps: list[dict[str, Any]] = []
-            if tool.setup:
-                setup_failure, setup_steps = run_phase(
-                    "setup", tool.setup, entry["vars"], env, tool.setup_timeout_seconds,
+            if tool.setup_per_sweep:
+                sweep_setup_failure, sweep_setup_records = run_phase(
+                    "per_sweep_setup", tool.setup_per_sweep, phase_vars, base_env, tool.setup_timeout_seconds,
                 )
 
-            if setup_failure:
-                teardown_steps: list[dict[str, Any]] = []
-                if tool.teardown:
-                    _, teardown_steps = run_phase(
-                        "teardown", tool.teardown, entry["vars"], env, tool.setup_timeout_seconds,
+            if sweep_setup_failure:
+                if tool.teardown_per_sweep:
+                    sweep_teardown_failure, sweep_teardown_records = run_phase(
+                        "per_sweep_teardown", tool.teardown_per_sweep, phase_vars, base_env, tool.setup_timeout_seconds,
                     )
-                row = _make_row(
-                    entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
-                    command=cmd, result=None, parsed={}, failure_reason=setup_failure,
-                )
-                raw_path = store.write_raw_run(
-                    results_dir, row["run_id"],
-                    _build_raw(result=None, output_file_record=None,
-                               setup=setup_steps, teardown=teardown_steps),
-                )
-                row["raw_output_path"] = str(raw_path.relative_to(results_dir))
-                store.append_run(results_dir, row)
-                store.update_aggregates_for_hash(results_dir, ch)
-                failed += 1
-                _progress(progress_stream, i, total, t_sweep, "FAIL", ch)
+                for entry, _r, is_warmup in items:
+                    sweep_idx += 1
+                    ch = config_hash(entry["vars"])
+                    if skip_existing and not is_warmup and skip_counts[ch] >= repeat:
+                        skipped += 1
+                        _progress(progress_stream, sweep_idx, total, t_sweep, "skip", ch)
+                        continue
+                    tags = list(entry.get("tags") or [])
+                    if is_warmup:
+                        tags.append("warmup")
+                    row = _make_row(
+                        entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
+                        command="<not-run>", result=None, parsed={}, failure_reason=sweep_setup_failure,
+                    )
+                    store.append_run(results_dir, row)
+                    store.update_aggregates_for_hash(results_dir, ch)
+                    failed += 1
+                    _progress(progress_stream, sweep_idx, total, t_sweep, "FAIL", ch)
+                _maybe_write_sweep_raw(results_dir, group_slug, sweep_setup_records, sweep_teardown_records, force=True)
                 continue
 
-            result = None
-            teardown_failure: str | None = None
-            teardown_steps = []
+            last_runnable = runnable_idx[-1]
             try:
-                try:
-                    result = executor.execute(request)
-                except KeyboardInterrupt:
-                    _progress(progress_stream, i, total, t_sweep, "INT", ch)
-                    raise
-            finally:
-                if tool.teardown:
-                    teardown_failure, teardown_steps = run_phase(
-                        "teardown", tool.teardown, entry["vars"], env, tool.setup_timeout_seconds,
-                    )
-
-            parsed: dict[str, Any] = {}
-            extract_failure: str | None = None
-            output_file_record: dict[str, Any] | None = None
-            if result.exit_code == 0:
-                output_for_extraction = result.stdout
-                if tool.output_file:
+                for j, (entry, _r, is_warmup) in enumerate(items):
+                    sweep_idx += 1
+                    ch = config_hash(entry["vars"])
+                    if skip_existing and not is_warmup and skip_counts[ch] >= repeat:
+                        skipped += 1
+                        _progress(progress_stream, sweep_idx, total, t_sweep, "skip", ch)
+                        continue
                     try:
-                        out_path = interpolate.resolve_string(tool.output_file, entry["vars"], env=os.environ)
-                        output_for_extraction = Path(out_path).read_text()
-                        output_file_record = {"path": out_path, "content": output_for_extraction}
-                    except FileNotFoundError:
-                        extract_failure = f"output_file: not found: {out_path}"
-                        output_file_record = {"path": out_path, "content": None}
-                    except Exception as e:
-                        extract_failure = f"output_file: {type(e).__name__}: {e}"
-                        output_file_record = {"path": out_path, "content": None}
-                if extract_failure is None:
-                    parsed, extract_failure = extract.apply(tool, output_for_extraction)
+                        row = _execute_one_rep(
+                            entry=entry, is_warmup=is_warmup, tool=tool, tool_version=tool_version,
+                            manifest_dir=manifest_dir, results_dir=results_dir,
+                            executor=executor, keep_raw=keep_raw,
+                        )
+                    except KeyboardInterrupt:
+                        _progress(progress_stream, sweep_idx, total, t_sweep, "INT", ch)
+                        raise
 
-            failure_reason = result.failure_reason or extract_failure
-            if teardown_failure:
-                failure_reason = f"{failure_reason}; {teardown_failure}" if failure_reason else teardown_failure
+                    if j == last_runnable and tool.teardown_per_sweep:
+                        sweep_teardown_failure, sweep_teardown_records = run_phase(
+                            "per_sweep_teardown", tool.teardown_per_sweep, phase_vars, base_env, tool.setup_timeout_seconds,
+                        )
+                        if sweep_teardown_failure:
+                            prior = row.get("failure_reason")
+                            row["failure_reason"] = (
+                                f"{prior}; {sweep_teardown_failure}" if prior else sweep_teardown_failure
+                            )
 
-            row = _make_row(
-                entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
-                command=cmd, result=result, parsed=parsed, failure_reason=failure_reason,
+                    store.append_run(results_dir, row)
+                    store.update_aggregates_for_hash(results_dir, ch)
+                    if row.get("failure_reason") or row.get("exit_code", -1) != 0:
+                        failed += 1
+                        _progress(progress_stream, sweep_idx, total, t_sweep, "FAIL", ch)
+                    else:
+                        succeeded += 1
+                        _progress(progress_stream, sweep_idx, total, t_sweep, "ok", ch)
+            except KeyboardInterrupt:
+                if tool.teardown_per_sweep:
+                    run_phase(
+                        "per_sweep_teardown", tool.teardown_per_sweep, phase_vars, base_env, tool.setup_timeout_seconds,
+                    )
+                raise
+
+            _maybe_write_sweep_raw(
+                results_dir, group_slug, sweep_setup_records, sweep_teardown_records,
+                force=bool(sweep_teardown_failure or keep_raw),
             )
-
-            if keep_raw or extract_failure or result.exit_code != 0 or teardown_failure:
-                raw_path = store.write_raw_run(
-                    results_dir, row["run_id"],
-                    _build_raw(result=result, output_file_record=output_file_record,
-                               setup=setup_steps, teardown=teardown_steps),
-                )
-                row["raw_output_path"] = str(raw_path.relative_to(results_dir))
-
-            store.append_run(results_dir, row)
-            store.update_aggregates_for_hash(results_dir, ch)
-
-            if failure_reason or result.exit_code != 0:
-                failed += 1
-                _progress(progress_stream, i, total, t_sweep, "FAIL", ch)
-            else:
-                succeeded += 1
-                _progress(progress_stream, i, total, t_sweep, "ok", ch)
 
         return {"runs": total - skipped, "failed": failed, "skipped": skipped, "succeeded": succeeded}
 
@@ -342,6 +393,160 @@ def _to_str(buf: Any) -> str:
     if isinstance(buf, bytes):
         return buf.decode(errors="replace")
     return buf
+
+
+def _execute_one_rep(
+    *,
+    entry: dict[str, Any],
+    is_warmup: bool,
+    tool: ToolSpec,
+    tool_version: str | None,
+    manifest_dir: Path,
+    results_dir: Path,
+    executor: Executor,
+    keep_raw: bool,
+) -> dict[str, Any]:
+    """Run one rep end-to-end (per_rep setup → tool → per_rep teardown) and
+    return the row dict. Does NOT append to runs.jsonl — the caller appends
+    after optionally folding in a per_sweep_teardown failure."""
+    ch = config_hash(entry["vars"])
+    tags = list(entry.get("tags") or [])
+    if is_warmup:
+        tags.append("warmup")
+
+    try:
+        cmd = interpolate.resolve_string(tool.command, entry["vars"], env=os.environ)
+    except Exception as e:
+        return _make_row(
+            entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
+            command="<unresolved>", result=None, parsed={}, failure_reason=f"interpolation: {e}",
+        )
+
+    env_file = manifest_dir / entry["filename"]
+    env = (
+        {**os.environ, **load_envfile(env_file)} if env_file.exists()
+        else {**os.environ, **{k: str(v) for k, v in entry["vars"].items()}}
+    )
+
+    request = RunRequest(
+        config_hash=ch, vars={k: str(v) for k, v in entry["vars"].items()},
+        tags=tags, tool=tool.name, tool_version=tool_version,
+        command=cmd, env=env, timeout_seconds=tool.timeout_seconds,
+    )
+
+    setup_failure: str | None = None
+    setup_steps: list[dict[str, Any]] = []
+    if tool.setup:
+        setup_failure, setup_steps = run_phase(
+            "setup", tool.setup, entry["vars"], env, tool.setup_timeout_seconds,
+        )
+
+    if setup_failure:
+        teardown_steps: list[dict[str, Any]] = []
+        if tool.teardown:
+            _, teardown_steps = run_phase(
+                "teardown", tool.teardown, entry["vars"], env, tool.setup_timeout_seconds,
+            )
+        row = _make_row(
+            entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
+            command=cmd, result=None, parsed={}, failure_reason=setup_failure,
+        )
+        raw_path = store.write_raw_run(
+            results_dir, row["run_id"],
+            _build_raw(result=None, output_file_record=None,
+                       setup=setup_steps, teardown=teardown_steps),
+        )
+        row["raw_output_path"] = str(raw_path.relative_to(results_dir))
+        return row
+
+    result = None
+    teardown_failure: str | None = None
+    teardown_steps = []
+    try:
+        result = executor.execute(request)
+    finally:
+        if tool.teardown:
+            teardown_failure, teardown_steps = run_phase(
+                "teardown", tool.teardown, entry["vars"], env, tool.setup_timeout_seconds,
+            )
+
+    parsed: dict[str, Any] = {}
+    extract_failure: str | None = None
+    output_file_record: dict[str, Any] | None = None
+    if result.exit_code == 0:
+        output_for_extraction = result.stdout
+        if tool.output_file:
+            try:
+                out_path = interpolate.resolve_string(tool.output_file, entry["vars"], env=os.environ)
+                output_for_extraction = Path(out_path).read_text()
+                output_file_record = {"path": out_path, "content": output_for_extraction}
+            except FileNotFoundError:
+                extract_failure = f"output_file: not found: {out_path}"
+                output_file_record = {"path": out_path, "content": None}
+            except Exception as e:
+                extract_failure = f"output_file: {type(e).__name__}: {e}"
+                output_file_record = {"path": out_path, "content": None}
+        if extract_failure is None:
+            parsed, extract_failure = extract.apply(tool, output_for_extraction)
+
+    failure_reason = result.failure_reason or extract_failure
+    if teardown_failure:
+        failure_reason = f"{failure_reason}; {teardown_failure}" if failure_reason else teardown_failure
+
+    row = _make_row(
+        entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
+        command=cmd, result=result, parsed=parsed, failure_reason=failure_reason,
+    )
+
+    if keep_raw or extract_failure or result.exit_code != 0 or teardown_failure:
+        raw_path = store.write_raw_run(
+            results_dir, row["run_id"],
+            _build_raw(result=result, output_file_record=output_file_record,
+                       setup=setup_steps, teardown=teardown_steps),
+        )
+        row["raw_output_path"] = str(raw_path.relative_to(results_dir))
+
+    return row
+
+
+def _maybe_write_sweep_raw(
+    results_dir: Path,
+    group_slug: str | None,
+    setup_records: list[dict[str, Any]],
+    teardown_records: list[dict[str, Any]],
+    *,
+    force: bool,
+) -> None:
+    if not force:
+        return
+    raw: dict[str, Any] = {}
+    if setup_records:
+        raw["setup"] = setup_records
+    if teardown_records:
+        raw["teardown"] = teardown_records
+    if raw:
+        store.write_raw_sweep_phase(results_dir, group_slug, raw)
+
+
+def _dry_run_preview(
+    groups: list[tuple[str | None, list[tuple[dict[str, Any], int, bool]]]],
+    tool: ToolSpec,
+    stream,
+) -> None:
+    for group_key, items in groups:
+        phase_vars: dict[str, Any] = {tool.per_sweep_var: group_key} if tool.per_sweep_var else {}
+        label = f", {tool.per_sweep_var}={group_key}" if tool.per_sweep_var else ""
+        for k, template in enumerate(tool.setup_per_sweep):
+            cmd = interpolate.resolve_string(template, phase_vars, env=os.environ)
+            print(f"[per_sweep setup {k}{label}]: {cmd}", file=stream)
+        for entry, rep, is_warmup in items:
+            ch = config_hash(entry["vars"])
+            cmd = interpolate.resolve_string(tool.command, entry["vars"], env=os.environ)
+            tag = " [warmup]" if is_warmup else ""
+            print(f"{ch} rep={rep}{tag}: {cmd}", file=stream)
+        for k, template in enumerate(tool.teardown_per_sweep):
+            cmd = interpolate.resolve_string(template, phase_vars, env=os.environ)
+            print(f"[per_sweep teardown {k}{label}]: {cmd}", file=stream)
 
 
 def _build_raw(

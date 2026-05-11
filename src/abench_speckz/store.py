@@ -117,6 +117,20 @@ def write_raw_run(results_dir: Path, run_id: str, raw: dict[str, Any]) -> Path:
     return target
 
 
+def write_raw_sweep_phase(results_dir: Path, group_slug: str | None, raw: dict[str, Any]) -> Path:
+    """Persist per_sweep setup/teardown records.
+
+    Without a scoping variable (Mode A), the record goes to ``raw/sweep.json``.
+    When ``per_sweep_var`` is set (Mode B), one file per distinct value is
+    written as ``raw/sweep-{slug}.json``.
+    """
+    name = "sweep.json" if group_slug is None else f"sweep-{group_slug}.json"
+    target = results_dir / "raw" / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(raw, indent=2))
+    return target
+
+
 def snapshot_manifest(results_dir: Path, manifest_path: Path) -> Path:
     target = results_dir / "manifest.snapshot.json"
     if target.exists():
