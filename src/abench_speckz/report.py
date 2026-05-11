@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from benchspec import prettynames
+from abench_speckz import prettynames
 
 _CHART_JS_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4"
 _COLORS = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7"]
@@ -46,7 +46,7 @@ def _html_shell(sections: list[str], scripts: list[str]) -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>benchspec report</title>
+  <title>abench_speckz report</title>
   <script src="{_CHART_JS_CDN}"></script>
   <style>
     body {{ font-family: system-ui, sans-serif; max-width: 1100px; margin: 0 auto; padding: 1rem 2rem; color: #222; }}
@@ -63,7 +63,7 @@ def _html_shell(sections: list[str], scripts: list[str]) -> str:
   </style>
 </head>
 <body>
-  <h1>benchspec report</h1>
+  <h1>abench_speckz report</h1>
   <p class="meta">Generated: {timestamp}</p>
 {"".join(sections)}
   <script>
@@ -153,7 +153,7 @@ def generate_plots_html(
     output_path: Path,
     pretty_map: dict,
 ) -> None:
-    from benchspec import query
+    from abench_speckz import query
 
     sections: list[str] = []
     scripts: list[str] = []

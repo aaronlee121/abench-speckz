@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Self-contained sample benchmark tool for benchspec examples.
+"""Self-contained sample benchmark tool for abench-speckz examples.
 
 Simulates a CPU-bound workload (hash iterations) whose latency scales with
 concurrency and workload type. Reads config from environment variables set
-by benchspec, outputs JSON that sample.tool.yaml extracts via JSONPath.
+by abench-speckz, outputs JSON that sample.tool.yaml extracts via JSONPath.
 
 Usage (standalone):
     concurrency=8 workload=write python examples/sample_bench.py
 
-Usage (via benchspec):
-    benchspec gen examples/sample.yaml --out out/
-    benchspec run out/ --tool examples/sample.tool.yaml --repeat 5
-    benchspec stats results/
+Usage (via abench-speckz):
+    abench-speckz gen examples/sample.yaml --out out/
+    abench-speckz run out/ --tool examples/sample.tool.yaml --repeat 5
+    abench-speckz stats results/
 """
 import hashlib
 import json

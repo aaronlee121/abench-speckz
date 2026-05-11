@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from benchspec import query, store
-from benchspec.model import RunError
+from abench_speckz import query, store
+from abench_speckz.model import RunError
 
 
 def _seed(results_dir):

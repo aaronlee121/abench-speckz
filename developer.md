@@ -45,7 +45,7 @@ Test files live in [tests/](tests/) and fixtures in [tests/fixtures/](tests/fixt
 ## Project Layout
 
 ```
-src/benchspec/       # Main package
+src/abench_speckz/       # Main package
 tests/               # Pytest tests
 tests/fixtures/      # YAML specs and tool definitions used by tests
 examples/            # Example benchmark specs
@@ -53,38 +53,38 @@ examples/            # Example benchmark specs
 
 ## CLI Usage
 
-After `pip install -e '.[dev]'`, the `benchspec` command is available:
+After `pip install -e '.[dev]'`, the `abench-speckz` command is available:
 
 ```sh
 # Generate env-file combos (dry run)
-benchspec gen examples/full.yaml --dry-run
+abench-speckz gen examples/full.yaml --dry-run
 
 # Generate env-file combos to a directory
-benchspec gen examples/full.yaml --out out/
+abench-speckz gen examples/full.yaml --out out/
 
 # Apply a named profile
-benchspec gen examples/full.yaml --profile smoke --out out/
+abench-speckz gen examples/full.yaml --profile smoke --out out/
 
 # Run a benchmark sweep
-benchspec run out/ --tool mytool.yaml --repeat 3
+abench-speckz run out/ --tool mytool.yaml --repeat 3
 
 # Show aggregated stats
-benchspec stats results/
+abench-speckz stats results/
 ```
 
 ## Key Modules
 
 | Module | Purpose |
 |--------|---------|
-| [cli.py](src/benchspec/cli.py) | Entry point and argument parsing |
-| [generate.py](src/benchspec/generate.py) | Combo generation pipeline |
-| [spec.py](src/benchspec/spec.py) | YAML spec loading |
-| [model.py](src/benchspec/model.py) | `Spec` and `Combo` data classes |
-| [runner.py](src/benchspec/runner.py) | Benchmark sweep orchestration |
-| [executor.py](src/benchspec/executor.py) | Subprocess execution |
-| [extract.py](src/benchspec/extract.py) | Metric extraction from stdout |
-| [query.py](src/benchspec/query.py) | DuckDB-backed stats queries |
-| [tools.py](src/benchspec/tools.py) | Tool YAML loading (`ToolSpec`) |
+| [cli.py](src/abench_speckz/cli.py) | Entry point and argument parsing |
+| [generate.py](src/abench_speckz/generate.py) | Combo generation pipeline |
+| [spec.py](src/abench_speckz/spec.py) | YAML spec loading |
+| [model.py](src/abench_speckz/model.py) | `Spec` and `Combo` data classes |
+| [runner.py](src/abench_speckz/runner.py) | Benchmark sweep orchestration |
+| [executor.py](src/abench_speckz/executor.py) | Subprocess execution |
+| [extract.py](src/abench_speckz/extract.py) | Metric extraction from stdout |
+| [query.py](src/abench_speckz/query.py) | DuckDB-backed stats queries |
+| [tools.py](src/abench_speckz/tools.py) | Tool YAML loading (`ToolSpec`) |
 
 ## Adding a New Test
 

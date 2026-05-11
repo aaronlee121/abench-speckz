@@ -1,7 +1,7 @@
 import json
 
-from benchspec import extract
-from benchspec.runspec import ToolSpec
+from abench_speckz import extract
+from abench_speckz.runspec import ToolSpec
 
 
 def _tool(capture=None, parser=None, output_format="json"):

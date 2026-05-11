@@ -1,8 +1,8 @@
 import os
 import sys
 
-from benchspec.executor import LocalSubprocessExecutor
-from benchspec.runspec import RunRequest
+from abench_speckz.executor import LocalSubprocessExecutor
+from abench_speckz.runspec import RunRequest
 
 
 def _request(command, env=None, timeout=10):

@@ -1,4 +1,4 @@
-from benchspec.cli import main
+from abench_speckz.cli import main
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -4,7 +4,7 @@ import json
 import re
 from collections import defaultdict
 
-from benchspec.model import Combo
+from abench_speckz.model import Combo
 
 _BAD_CHAR = re.compile(r"[^a-z0-9._-]")
 _DASH_RUN = re.compile(r"-+")

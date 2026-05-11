@@ -1,7 +1,7 @@
 import json
 
-from benchspec import writers
-from benchspec.model import Combo
+from abench_speckz import writers
+from abench_speckz.model import Combo
 
 
 def test_envfile_format(tmp_path):

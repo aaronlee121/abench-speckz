@@ -2,7 +2,7 @@
 import re
 import warnings
 
-from benchspec.model import Combo, Spec, SpecError
+from abench_speckz.model import Combo, Spec, SpecError
 
 _ENV_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 

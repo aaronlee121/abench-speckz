@@ -9,8 +9,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from benchspec import aggregate
-from benchspec.runspec import AggregateRow
+from abench_speckz import aggregate
+from abench_speckz.runspec import AggregateRow
 
 SCHEMA_VERSION = 1
 

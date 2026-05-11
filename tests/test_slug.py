@@ -1,5 +1,5 @@
-from benchspec import slug
-from benchspec.model import Combo
+from abench_speckz import slug
+from abench_speckz.model import Combo
 
 
 def test_slug_lowercases_and_replaces():

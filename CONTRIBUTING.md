@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in benchspec. This file covers what you need to make a change locally and open a pull request.
+Thanks for your interest in abench-speckz. This file covers what you need to make a change locally and open a pull request.
 
 ## Setup
 

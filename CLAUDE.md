@@ -19,15 +19,15 @@ pytest tests/test_generate.py
 pytest tests/test_generate.py::test_expand_basic
 
 # CLI (after install)
-benchspec gen examples/full.yaml --dry-run
-benchspec gen examples/full.yaml --out out
-benchspec run out/ --tool mytool.yaml --repeat 3
-benchspec stats results/
+abench-speckz gen examples/full.yaml --dry-run
+abench-speckz gen examples/full.yaml --out out
+abench-speckz run out/ --tool mytool.yaml --repeat 3
+abench-speckz stats results/
 ```
 
 ## Architecture
 
-**benchspec** is a CLI tool with three main workflows:
+**abench-speckz** is a CLI tool with three main workflows:
 
 ### 1. `gen` — Combo generation pipeline
 

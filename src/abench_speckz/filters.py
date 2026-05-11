@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from benchspec.model import RunError
+from abench_speckz.model import RunError
 
 _OP_RE = re.compile(r"^([^=!<>]+)\s*(=|!=|>=|<=|>|<)\s*(.*)$")
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")

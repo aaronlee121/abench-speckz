@@ -1,6 +1,6 @@
 import math
 
-from benchspec import aggregate
+from abench_speckz import aggregate
 
 
 def _run(config_hash="h", exit_code=0, results=None, tags=()):

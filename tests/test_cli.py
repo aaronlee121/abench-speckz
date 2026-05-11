@@ -8,7 +8,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 def _run(*args, cwd=None):
     return subprocess.run(
-        [sys.executable, "-m", "benchspec", *args],
+        [sys.executable, "-m", "abench_speckz", *args],
         capture_output=True,
         text=True,
         cwd=cwd,
@@ -109,7 +109,7 @@ def test_run_all_failed_exits_3(tmp_path):
 
 
 def test_rebuild_aggregates(tmp_path):
-    from benchspec import store
+    from abench_speckz import store
     store.init_results_dir(tmp_path)
     for i in range(3):
         store.append_run(tmp_path, {

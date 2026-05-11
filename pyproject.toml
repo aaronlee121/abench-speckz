@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "benchspec"
+name = "abench-speckz"
 version = "0.1.0"
 description = "Generate Docker env-file combinations from a YAML benchmark spec, run a tool across every combination, and query the results."
 readme = "README.md"
@@ -43,12 +43,12 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/benixon/benchspec"
-Issues = "https://github.com/benixon/benchspec/issues"
-Changelog = "https://github.com/benixon/benchspec/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/benixon/abench-speckz"
+Issues = "https://github.com/benixon/abench-speckz/issues"
+Changelog = "https://github.com/benixon/abench-speckz/blob/main/CHANGELOG.md"
 
 [project.scripts]
-benchspec = "benchspec.cli:main"
+abench-speckz = "abench_speckz.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -79,7 +79,7 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.10"
-files = ["src/benchspec"]
+files = ["src/abench_speckz"]
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true

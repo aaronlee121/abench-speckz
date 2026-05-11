@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from benchspec import runner, store
+from abench_speckz import runner, store
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

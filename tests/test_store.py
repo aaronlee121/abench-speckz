@@ -1,6 +1,6 @@
 
-from benchspec import store
-from benchspec.runspec import AggregateRow
+from abench_speckz import store
+from abench_speckz.runspec import AggregateRow
 
 
 def test_append_and_read(tmp_path):

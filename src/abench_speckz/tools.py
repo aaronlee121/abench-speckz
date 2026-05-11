@@ -5,8 +5,8 @@ from pathlib import Path
 
 import yaml
 
-from benchspec.model import RunError
-from benchspec.runspec import ToolSpec
+from abench_speckz.model import RunError
+from abench_speckz.runspec import ToolSpec
 
 _FIELDS = {
     "name", "command", "timeout_seconds", "version_command",

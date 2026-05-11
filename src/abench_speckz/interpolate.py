@@ -3,7 +3,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from benchspec.model import SpecError
+from abench_speckz.model import SpecError
 
 _PATTERN = re.compile(r"\$\{(env:)?([A-Za-z_][A-Za-z0-9_]*)\}")
 _DOLLAR_SENTINEL = "\x00BENCHSPEC_DOLLAR\x00"

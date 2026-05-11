@@ -1,7 +1,7 @@
 import pytest
 
-from benchspec import generate
-from benchspec.model import Combo, ExcludeRule, Spec, SpecError, WhenRule
+from abench_speckz import generate
+from abench_speckz.model import Combo, ExcludeRule, Spec, SpecError, WhenRule
 
 
 def _spec(**overrides) -> Spec:
@@ -85,7 +85,7 @@ def test_filter_tags():
 
 
 def test_full_pipeline_smoke(fixtures_dir):
-    from benchspec import spec as spec_mod
+    from abench_speckz import spec as spec_mod
 
     s = spec_mod.load(fixtures_dir / "full.yaml", profile="full")
     combos = generate.run_pipeline(s)

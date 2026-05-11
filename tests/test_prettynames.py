@@ -1,5 +1,5 @@
-from benchspec import prettynames
-from benchspec.runspec import ToolSpec
+from abench_speckz import prettynames
+from abench_speckz.runspec import ToolSpec
 
 
 def test_from_tool():

@@ -5,7 +5,7 @@ import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 
-from benchspec.runspec import RunRequest, RunResult
+from abench_speckz.runspec import RunRequest, RunResult
 
 
 def _now_iso() -> str:

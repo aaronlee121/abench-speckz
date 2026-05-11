@@ -1,7 +1,7 @@
 import pytest
 
-from benchspec import interpolate
-from benchspec.model import SpecError
+from abench_speckz import interpolate
+from abench_speckz.model import SpecError
 
 
 def test_simple_substitution():

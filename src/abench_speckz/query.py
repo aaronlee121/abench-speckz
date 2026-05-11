@@ -6,8 +6,8 @@ from typing import Any
 
 import duckdb
 
-from benchspec import aggregate, prettynames
-from benchspec.filters import check_ident, parse_kv
+from abench_speckz import aggregate, prettynames
+from abench_speckz.filters import check_ident, parse_kv
 
 _AGGREGATE_COLUMNS = ("n", "n_failed", "mean", "stddev", "p50", "p95", "p99", "ci95_low", "ci95_high")
 
@@ -78,8 +78,8 @@ def stats(
     _render(rows, fmt, out, pretty_map=pretty_map)
 
     if report is not None:
-        from benchspec import plots as _plots
-        from benchspec import report as _report
+        from abench_speckz import plots as _plots
+        from abench_speckz import report as _report
         pm = prettynames.load(results_dir / "pretty_names.json")
         if plots is not None:
             specs = _plots.load_plots_file(plots)

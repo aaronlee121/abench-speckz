@@ -4,7 +4,7 @@ from typing import Any
 
 import yaml
 
-from benchspec.model import ExcludeRule, Spec, SpecError, WhenRule
+from abench_speckz.model import ExcludeRule, Spec, SpecError, WhenRule
 
 _SECTIONS = {"static", "variables", "when", "exclude", "tags", "profiles", "default_profile"}
 

@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from benchspec.runspec import ToolSpec
+from abench_speckz.runspec import ToolSpec
 
 
 def from_tool(tool: ToolSpec) -> dict[str, dict[str, str]]:

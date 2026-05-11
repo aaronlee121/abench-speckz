@@ -1,7 +1,7 @@
 import pytest
 
-from benchspec import plots
-from benchspec.model import RunError
+from abench_speckz import plots
+from abench_speckz.model import RunError
 
 
 def test_parse_minimal_bar():

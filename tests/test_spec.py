@@ -1,7 +1,7 @@
 import pytest
 
-from benchspec import spec
-from benchspec.model import SpecError
+from abench_speckz import spec
+from abench_speckz.model import SpecError
 
 
 def test_load_minimal(fixtures_dir):

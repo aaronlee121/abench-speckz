@@ -1,4 +1,4 @@
-# benchspec
+# abench-speckz
 
 Generate Docker env-file combinations from a YAML benchmark spec, execute a benchmark tool across every combination, and query the results.
 
@@ -14,11 +14,11 @@ pip install -e '.[dev]'
 ## Workflow
 
 ```
-spec.yaml  →  benchspec gen  →  out/ (env-files + manifest.json)
+spec.yaml  →  abench-speckz gen  →  out/ (env-files + manifest.json)
                                     ↓
-              benchspec run  →  results/ (runs.jsonl + aggregates.jsonl)
+              abench-speckz run  →  results/ (runs.jsonl + aggregates.jsonl)
                                     ↓
-              benchspec stats →  table / JSON / TSV
+              abench-speckz stats →  table / JSON / TSV
 ```
 
 ## Commands
@@ -26,12 +26,12 @@ spec.yaml  →  benchspec gen  →  out/ (env-files + manifest.json)
 ### `gen` — generate env-file combinations
 
 ```sh
-benchspec gen spec.yaml --out out/           # write env-files
-benchspec gen spec.yaml --dry-run            # print summary table
-benchspec gen spec.yaml --list               # print TSV
-benchspec gen spec.yaml --profile smoke --out out/
-benchspec gen spec.yaml --tag stress --out out/
-benchspec gen spec.yaml --exclude-tag slow --out out/
+abench-speckz gen spec.yaml --out out/           # write env-files
+abench-speckz gen spec.yaml --dry-run            # print summary table
+abench-speckz gen spec.yaml --list               # print TSV
+abench-speckz gen spec.yaml --profile smoke --out out/
+abench-speckz gen spec.yaml --tag stress --out out/
+abench-speckz gen spec.yaml --exclude-tag slow --out out/
 ```
 
 Each combination is written as a Docker env-file (`KEY=value` per line). A `manifest.json` in the output directory maps each filename back to its full variable assignment and tags.
@@ -39,12 +39,12 @@ Each combination is written as a Docker env-file (`KEY=value` per line). A `mani
 ### `run` — execute a tool across every combination
 
 ```sh
-benchspec run out/ --tool oha.tool.yaml
-benchspec run out/ --tool oha.tool.yaml --repeat 5 --warmup 1
-benchspec run out/ --tool oha.tool.yaml --filter workload=read
-benchspec run out/ --tool oha.tool.yaml --filter-tag stress
-benchspec run out/ --tool oha.tool.yaml --skip-existing --keep-raw
-benchspec run out/ --tool oha.tool.yaml --dry-run   # print planned commands
+abench-speckz run out/ --tool oha.tool.yaml
+abench-speckz run out/ --tool oha.tool.yaml --repeat 5 --warmup 1
+abench-speckz run out/ --tool oha.tool.yaml --filter workload=read
+abench-speckz run out/ --tool oha.tool.yaml --filter-tag stress
+abench-speckz run out/ --tool oha.tool.yaml --skip-existing --keep-raw
+abench-speckz run out/ --tool oha.tool.yaml --dry-run   # print planned commands
 ```
 
 Results are written to `results/` (configurable with `--results`).
@@ -52,21 +52,21 @@ Results are written to `results/` (configurable with `--results`).
 ### `stats` — aggregate and display results
 
 ```sh
-benchspec stats results/
-benchspec stats results/ --group-by workload --group-by concurrency
-benchspec stats results/ --metric requests_per_sec --metric p50_ms
-benchspec stats results/ --where workload=read
-benchspec stats results/ --filter-tag stress
-benchspec stats results/ --format json
-benchspec stats results/ --format tsv
-benchspec stats results/ --pretty            # use display names from tool YAML
-benchspec stats results/ --from-raw          # recompute from runs.jsonl
+abench-speckz stats results/
+abench-speckz stats results/ --group-by workload --group-by concurrency
+abench-speckz stats results/ --metric requests_per_sec --metric p50_ms
+abench-speckz stats results/ --where workload=read
+abench-speckz stats results/ --filter-tag stress
+abench-speckz stats results/ --format json
+abench-speckz stats results/ --format tsv
+abench-speckz stats results/ --pretty            # use display names from tool YAML
+abench-speckz stats results/ --from-raw          # recompute from runs.jsonl
 ```
 
 ### `rebuild-aggregates` — regenerate aggregates from raw runs
 
 ```sh
-benchspec rebuild-aggregates results/
+abench-speckz rebuild-aggregates results/
 ```
 
 ## Spec format

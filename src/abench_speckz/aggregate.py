@@ -5,7 +5,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from typing import Any
 
-from benchspec.runspec import AggregateRow
+from abench_speckz.runspec import AggregateRow
 
 _T_CRIT_95: dict[int, float] = {
     1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,

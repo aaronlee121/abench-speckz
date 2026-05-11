@@ -1,7 +1,7 @@
 import pytest
 
-from benchspec import tools
-from benchspec.model import RunError
+from abench_speckz import tools
+from abench_speckz.model import RunError
 
 
 def test_load_minimal(tmp_path):

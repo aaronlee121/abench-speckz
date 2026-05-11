@@ -3,8 +3,8 @@ from collections.abc import Iterable
 from itertools import product
 from typing import Any
 
-from benchspec import interpolate
-from benchspec.model import Combo, ExcludeRule, Spec, SpecError, WhenRule
+from abench_speckz import interpolate
+from abench_speckz.model import Combo, ExcludeRule, Spec, SpecError, WhenRule
 
 
 def expand(spec: Spec) -> list[Combo]:

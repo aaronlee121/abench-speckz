@@ -1,7 +1,7 @@
 import pytest
 
-from benchspec import filters
-from benchspec.model import RunError
+from abench_speckz import filters
+from abench_speckz.model import RunError
 
 
 def test_parse_eq():

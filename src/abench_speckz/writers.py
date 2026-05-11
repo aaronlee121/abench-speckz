@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from benchspec.model import Combo
+from abench_speckz.model import Combo
 
 
 def write_envfile(path: Path, vars_: dict[str, str]) -> None:

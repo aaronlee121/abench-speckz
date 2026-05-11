@@ -12,11 +12,11 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from benchspec import extract, interpolate, prettynames, store, tools
-from benchspec.executor import Executor, LocalSubprocessExecutor
-from benchspec.filters import make_filter
-from benchspec.model import RunError
-from benchspec.runspec import RunRequest, ToolSpec
+from abench_speckz import extract, interpolate, prettynames, store, tools
+from abench_speckz.executor import Executor, LocalSubprocessExecutor
+from abench_speckz.filters import make_filter
+from abench_speckz.model import RunError
+from abench_speckz.runspec import RunRequest, ToolSpec
 
 
 def config_hash(vars_: dict[str, Any]) -> str:

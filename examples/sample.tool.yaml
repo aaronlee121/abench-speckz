@@ -30,7 +30,7 @@ higher_is_better:
   p95_ms:  false
   p99_ms:  false
 
-# Declarative plot definitions used by `benchspec stats --report`.
+# Declarative plot definitions used by `abench-speckz stats --report`.
 # When any plots are defined, they replace the default per-metric charts.
 plots:
   - id: rps_by_workload

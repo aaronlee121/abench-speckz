@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a defect in benchspec
+about: Report a defect in abench-speckz
 labels: bug
 ---
 
@@ -37,6 +37,6 @@ paste here
 
 ## Environment
 
-- benchspec version: <!-- `pip show benchspec` or `git rev-parse HEAD` -->
+- abench-speckz version: <!-- `pip show abench-speckz` or `git rev-parse HEAD` -->
 - Python version: <!-- `python --version` -->
 - OS: <!-- e.g. macOS 14.5, Ubuntu 22.04 -->

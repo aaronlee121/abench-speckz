@@ -5,7 +5,7 @@ from typing import Any
 
 import yaml
 
-from benchspec.model import RunError
+from abench_speckz.model import RunError
 
 ALLOWED_TYPES = {"bar", "stacked-bar", "line", "scatter"}
 

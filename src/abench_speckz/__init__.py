@@ -1,6 +1,6 @@
 """Public re-exports of the dataclasses and exceptions used across the package."""
-from benchspec.model import Combo, ExcludeRule, RunError, Spec, SpecError, WhenRule
-from benchspec.runspec import AggregateRow, RunRequest, RunResult, ToolSpec
+from abench_speckz.model import Combo, ExcludeRule, RunError, Spec, SpecError, WhenRule
+from abench_speckz.runspec import AggregateRow, RunRequest, RunResult, ToolSpec
 
 __version__ = "0.1.0"
 

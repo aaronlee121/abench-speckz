@@ -1,14 +1,14 @@
-"""Argparse entry point for ``benchspec gen | run | stats | rebuild-aggregates``."""
+"""Argparse entry point for ``abench-speckz gen | run | stats | rebuild-aggregates``."""
 import argparse
 import sys
 from pathlib import Path
 
-from benchspec import generate, query, runner, slug, spec, store, validate, writers
-from benchspec.model import Combo, RunError, SpecError
+from abench_speckz import generate, query, runner, slug, spec, store, validate, writers
+from abench_speckz.model import Combo, RunError, SpecError
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="benchspec")
+    parser = argparse.ArgumentParser(prog="abench-speckz")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     gen = sub.add_parser("gen", help="generate env-file combinations from a YAML spec")
@@ -65,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "rebuild-aggregates":
             return _rebuild(args)
     except (SpecError, RunError) as e:
-        print(f"benchspec: error: {e}", file=sys.stderr)
+        print(f"abench-speckz: error: {e}", file=sys.stderr)
         return 2
     return 1
 
@@ -84,7 +84,7 @@ def _gen(args: argparse.Namespace) -> int:
         return 0
 
     if not combos:
-        print("benchspec: 0 combos after filters; nothing to write", file=sys.stderr)
+        print("abench-speckz: 0 combos after filters; nothing to write", file=sys.stderr)
         return 0
 
     validate.validate_env_keys(combos)
@@ -110,7 +110,7 @@ def _run(args: argparse.Namespace) -> int:
             dry_run=args.dry_run,
         )
     except KeyboardInterrupt:
-        print("\nbenchspec: interrupted", file=sys.stderr)
+        print("\nabench-speckz: interrupted", file=sys.stderr)
         return 130
     if args.dry_run:
         return 0

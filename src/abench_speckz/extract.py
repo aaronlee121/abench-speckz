@@ -6,7 +6,7 @@ from typing import Any
 
 from jsonpath_ng.ext import parse as jsonpath_parse
 
-from benchspec.runspec import ToolSpec
+from abench_speckz.runspec import ToolSpec
 
 _INT_RE = re.compile(r"^-?\d+$")
 _FLOAT_RE = re.compile(r"^-?\d+\.\d+([eE][+-]?\d+)?$|^-?\d+[eE][+-]?\d+$")

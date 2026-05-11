@@ -1,7 +1,7 @@
 import pytest
 
-from benchspec import validate
-from benchspec.model import Combo, ExcludeRule, Spec, SpecError, WhenRule
+from abench_speckz import validate
+from abench_speckz.model import Combo, ExcludeRule, Spec, SpecError, WhenRule
 
 
 def _spec(**overrides) -> Spec:

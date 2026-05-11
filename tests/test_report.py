@@ -1,6 +1,6 @@
 import io
 
-from benchspec import query, store
+from abench_speckz import query, store
 
 
 def _seed(results_dir):
@@ -73,7 +73,7 @@ def test_report_stdout_confirms_path(tmp_path):
 
 def test_report_pretty_names(tmp_path):
     _seed(tmp_path)
-    from benchspec import prettynames
+    from abench_speckz import prettynames
     prettynames.write(
         tmp_path / "pretty_names.json",
         {"my-tool": {"rps": "Requests/sec", "p95_latency_ms": "P95 Latency (ms)"}},
