@@ -7,7 +7,7 @@ from typing import Any
 import duckdb
 
 from benchspec import aggregate, prettynames
-from benchspec.filters import parse_kv
+from benchspec.filters import check_ident, parse_kv
 from benchspec.model import RunError
 
 
@@ -36,6 +36,9 @@ def compute_rows(
     require_tags = require_tags or []
     exclude_tags = exclude_tags or []
     metrics = metrics or []
+
+    for g in group_by:
+        check_ident(g, context="group-by key")
 
     must_recompute = bool(group_by)
     if from_raw or must_recompute:

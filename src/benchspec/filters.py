@@ -7,6 +7,22 @@ from benchspec.model import RunError
 
 
 _OP_RE = re.compile(r"^([^=!<>]+)\s*(=|!=|>=|<=|>|<)\s*(.*)$")
+_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def check_ident(name: str, *, context: str) -> str:
+    """Reject identifiers that don't match ``[A-Za-z_][A-Za-z0-9_]*``.
+
+    Used at every boundary where a user-supplied axis name reaches a SQL
+    f-string (group-by keys, filter keys). Legitimate axis names already
+    pass: validate.validate_env_keys enforces the same shape on combo
+    generation.
+    """
+    if not _IDENT_RE.fullmatch(name):
+        raise RunError(
+            f"invalid {context}: {name!r} (must match [A-Za-z_][A-Za-z0-9_]*)"
+        )
+    return name
 
 
 @dataclass(frozen=True)
@@ -31,6 +47,7 @@ def parse_kv(expressions: Iterable[str]) -> list[Predicate]:
         key, op, value = m.group(1).strip(), m.group(2), m.group(3).strip()
         if not key:
             raise RunError(f"empty key in filter: {raw!r}")
+        check_ident(key, context="filter key")
         out.append(Predicate(key=key, op=op, value=value))
     return out
 

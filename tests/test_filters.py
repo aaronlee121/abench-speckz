@@ -40,3 +40,29 @@ def test_kv_and_tag_combine():
 def test_rejects_malformed():
     with pytest.raises(RunError):
         filters.parse_kv(["nope"])
+
+
+def test_rejects_injection_key():
+    with pytest.raises(RunError, match="invalid filter key"):
+        filters.parse_kv(["x'); DROP TABLE foo;--=bar"])
+
+
+def test_rejects_key_with_space():
+    with pytest.raises(RunError, match="invalid filter key"):
+        filters.parse_kv(["a b=1"])
+
+
+def test_check_ident_accepts_normal_names():
+    assert filters.check_ident("workload", context="x") == "workload"
+    assert filters.check_ident("THREAD_POOL", context="x") == "THREAD_POOL"
+    assert filters.check_ident("a1_b2", context="x") == "a1_b2"
+
+
+def test_check_ident_rejects_quote():
+    with pytest.raises(RunError):
+        filters.check_ident("a'", context="x")
+
+
+def test_check_ident_rejects_leading_digit():
+    with pytest.raises(RunError):
+        filters.check_ident("1abc", context="x")

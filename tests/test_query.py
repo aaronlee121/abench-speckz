@@ -1,7 +1,10 @@
 import io
 import json
 
+import pytest
+
 from benchspec import query, store
+from benchspec.model import RunError
 from benchspec.runspec import AggregateRow
 
 
@@ -85,3 +88,16 @@ def test_empty_dir(tmp_path):
     out = io.StringIO()
     query.stats(tmp_path, group_by=["workload"], metrics=["rps"], fmt="tsv", out=out)
     assert "0 rows" in out.getvalue()
+
+
+def test_group_by_rejects_injection_key(tmp_path):
+    _seed(tmp_path)
+    out = io.StringIO()
+    with pytest.raises(RunError, match="invalid group-by key"):
+        query.stats(
+            tmp_path,
+            group_by=["x'); DROP TABLE foo;--"],
+            metrics=["rps"],
+            fmt="tsv",
+            out=out,
+        )
