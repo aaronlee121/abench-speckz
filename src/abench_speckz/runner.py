@@ -190,18 +190,28 @@ def execute_sweep(
             )
 
             setup_failure: str | None = None
+            setup_steps: list[dict[str, Any]] = []
             if tool.setup:
-                setup_failure = run_phase(
+                setup_failure, setup_steps = run_phase(
                     "setup", tool.setup, entry["vars"], env, tool.setup_timeout_seconds,
                 )
 
             if setup_failure:
+                teardown_steps: list[dict[str, Any]] = []
                 if tool.teardown:
-                    run_phase("teardown", tool.teardown, entry["vars"], env, tool.setup_timeout_seconds)
+                    _, teardown_steps = run_phase(
+                        "teardown", tool.teardown, entry["vars"], env, tool.setup_timeout_seconds,
+                    )
                 row = _make_row(
                     entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
                     command=cmd, result=None, parsed={}, failure_reason=setup_failure,
                 )
+                raw_path = store.write_raw_run(
+                    results_dir, row["run_id"],
+                    _build_raw(result=None, output_file_record=None,
+                               setup=setup_steps, teardown=teardown_steps),
+                )
+                row["raw_output_path"] = str(raw_path.relative_to(results_dir))
                 store.append_run(results_dir, row)
                 store.update_aggregates_for_hash(results_dir, ch)
                 failed += 1
@@ -210,6 +220,7 @@ def execute_sweep(
 
             result = None
             teardown_failure: str | None = None
+            teardown_steps = []
             try:
                 try:
                     result = executor.execute(request)
@@ -218,24 +229,26 @@ def execute_sweep(
                     raise
             finally:
                 if tool.teardown:
-                    teardown_failure = run_phase(
+                    teardown_failure, teardown_steps = run_phase(
                         "teardown", tool.teardown, entry["vars"], env, tool.setup_timeout_seconds,
                     )
 
             parsed: dict[str, Any] = {}
             extract_failure: str | None = None
-            raw_output = result.stdout
+            output_file_record: dict[str, Any] | None = None
             if result.exit_code == 0:
                 output_for_extraction = result.stdout
                 if tool.output_file:
                     try:
                         out_path = interpolate.resolve_string(tool.output_file, entry["vars"], env=os.environ)
                         output_for_extraction = Path(out_path).read_text()
-                        raw_output = output_for_extraction
+                        output_file_record = {"path": out_path, "content": output_for_extraction}
                     except FileNotFoundError:
                         extract_failure = f"output_file: not found: {out_path}"
+                        output_file_record = {"path": out_path, "content": None}
                     except Exception as e:
                         extract_failure = f"output_file: {type(e).__name__}: {e}"
+                        output_file_record = {"path": out_path, "content": None}
                 if extract_failure is None:
                     parsed, extract_failure = extract.apply(tool, output_for_extraction)
 
@@ -248,8 +261,12 @@ def execute_sweep(
                 command=cmd, result=result, parsed=parsed, failure_reason=failure_reason,
             )
 
-            if keep_raw or extract_failure or result.exit_code != 0:
-                raw_path = store.write_raw_stdout(results_dir, row["run_id"], raw_output)
+            if keep_raw or extract_failure or result.exit_code != 0 or teardown_failure:
+                raw_path = store.write_raw_run(
+                    results_dir, row["run_id"],
+                    _build_raw(result=result, output_file_record=output_file_record,
+                               setup=setup_steps, teardown=teardown_steps),
+                )
                 row["raw_output_path"] = str(raw_path.relative_to(results_dir))
 
             store.append_run(results_dir, row)
@@ -271,13 +288,21 @@ def run_phase(
     vars_: dict[str, Any],
     env: dict[str, str],
     timeout_seconds: int,
-) -> str | None:
-    """Run a list of shell-command steps. Returns None on success, else 'phase[i]: <reason>'."""
+) -> tuple[str | None, list[dict[str, Any]]]:
+    """Run a list of shell-command steps.
+
+    Returns (failure_reason, step_records). failure_reason is None on success,
+    otherwise 'phase[i]: <reason>'. step_records is a list of dicts with
+    ``command``, ``exit_code``, ``stdout``, ``stderr`` for each step that was
+    attempted (including the failing one when the failure came from the
+    subprocess). Interpolation failures produce no record for that step.
+    """
+    records: list[dict[str, Any]] = []
     for i, template in enumerate(steps):
         try:
             cmd = interpolate.resolve_string(template, vars_, env=env)
         except Exception as e:
-            return f"{phase}[{i}]: interpolation: {e}"
+            return f"{phase}[{i}]: interpolation: {e}", records
         try:
             result = subprocess.run(
                 shlex.split(cmd),
@@ -287,15 +312,56 @@ def run_phase(
                 timeout=timeout_seconds,
                 check=False,
             )
-        except subprocess.TimeoutExpired:
-            return f"{phase}[{i}]: timeout after {timeout_seconds}s: {cmd}"
+        except subprocess.TimeoutExpired as e:
+            records.append({
+                "command": cmd,
+                "exit_code": -1,
+                "stdout": _to_str(e.stdout),
+                "stderr": _to_str(e.stderr),
+            })
+            return f"{phase}[{i}]: timeout after {timeout_seconds}s: {cmd}", records
         except FileNotFoundError as e:
-            return f"{phase}[{i}]: command_not_found: {e}"
+            records.append({"command": cmd, "exit_code": -1, "stdout": "", "stderr": str(e)})
+            return f"{phase}[{i}]: command_not_found: {e}", records
+        records.append({
+            "command": cmd,
+            "exit_code": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+        })
         if result.returncode != 0:
             tail = (result.stderr or result.stdout or "").strip().splitlines()
             hint = tail[-1] if tail else ""
-            return f"{phase}[{i}]: exit_code={result.returncode}: {cmd}" + (f" ({hint})" if hint else "")
-    return None
+            return f"{phase}[{i}]: exit_code={result.returncode}: {cmd}" + (f" ({hint})" if hint else ""), records
+    return None, records
+
+
+def _to_str(buf: Any) -> str:
+    if buf is None:
+        return ""
+    if isinstance(buf, bytes):
+        return buf.decode(errors="replace")
+    return buf
+
+
+def _build_raw(
+    *,
+    result,
+    output_file_record: dict[str, Any] | None,
+    setup: list[dict[str, Any]],
+    teardown: list[dict[str, Any]],
+) -> dict[str, Any]:
+    raw: dict[str, Any] = {
+        "stdout": result.stdout if result is not None else "",
+        "stderr": result.stderr if result is not None else "",
+    }
+    if output_file_record is not None:
+        raw["output_file"] = output_file_record
+    if setup:
+        raw["setup"] = setup
+    if teardown:
+        raw["teardown"] = teardown
+    return raw
 
 
 def _make_row(*, entry, ch, tags, tool: ToolSpec, tool_version, command, result, parsed, failure_reason):

@@ -103,10 +103,17 @@ def rebuild_aggregates(results_dir: Path) -> int:
     return sum(len(v) for v in table.values())
 
 
-def write_raw_stdout(results_dir: Path, run_id: str, stdout: str) -> Path:
+def write_raw_run(results_dir: Path, run_id: str, raw: dict[str, Any]) -> Path:
+    """Persist a structured raw record for a run.
+
+    The document captures, when applicable: the tool's ``stdout`` and ``stderr``,
+    an ``output_file`` block (path + content) when the tool wrote to a file, and
+    ``setup`` / ``teardown`` arrays with one entry per step (command, exit_code,
+    stdout, stderr).
+    """
     target = results_dir / "raw" / f"{run_id}.json"
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(stdout)
+    target.write_text(json.dumps(raw, indent=2))
     return target
 
 

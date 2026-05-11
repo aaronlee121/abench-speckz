@@ -344,6 +344,111 @@ capture:
     assert marker.read_text().splitlines() == ["read"]
 
 
+def test_raw_output_captures_setup_teardown_steps(tmp_path):
+    phase = _phase_script(tmp_path)
+    marker = tmp_path / "marker.txt"
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+setup:
+  - "python {phase} setup-out {marker}"
+teardown:
+  - "python {phase} teardown-out {marker}"
+capture:
+  rps: $.summary.requestsPerSec
+"""
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results,
+        repeat=1, keep_raw=True,
+    )
+    assert summary["succeeded"] == 1
+
+    run = store.read_runs(results)[0]
+    assert run["raw_output_path"]
+    raw = json.loads((results / run["raw_output_path"]).read_text())
+    assert "setup" in raw and "teardown" in raw
+    assert len(raw["setup"]) == 1 and len(raw["teardown"]) == 1
+    assert raw["setup"][0]["exit_code"] == 0
+    assert "setup-out" in raw["setup"][0]["command"]
+    assert raw["teardown"][0]["exit_code"] == 0
+    assert "teardown-out" in raw["teardown"][0]["command"]
+
+
+def test_raw_output_separates_tool_stdout_from_output_file(tmp_path):
+    out_file = tmp_path / "result.json"
+    tool_script = tmp_path / "noisy_tool.py"
+    tool_script.write_text(
+        "import json, sys\n"
+        "print('hello from stdout')\n"
+        "sys.stderr.write('warn line\\n')\n"
+        f"open(r'{out_file}', 'w').write(json.dumps({{'summary': {{'requestsPerSec': 7.0}}}}))\n"
+    )
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {tool_script}"
+timeout_seconds: 10
+output_file: "{out_file}"
+capture:
+  rps: $.summary.requestsPerSec
+"""
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results,
+        repeat=1, keep_raw=True,
+    )
+    assert summary["succeeded"] == 1
+
+    run = store.read_runs(results)[0]
+    raw = json.loads((results / run["raw_output_path"]).read_text())
+    assert raw["stdout"].strip() == "hello from stdout"
+    assert "warn line" in raw["stderr"]
+    assert raw["output_file"]["path"] == str(out_file)
+    assert '"requestsPerSec": 7.0' in raw["output_file"]["content"]
+
+
+def test_raw_output_captures_setup_failure_with_teardown(tmp_path):
+    phase = _phase_script(tmp_path)
+    marker = tmp_path / "marker.txt"
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+setup:
+  - "python -c \\"import sys; sys.stdout.write('setup-stdout'); sys.exit(7)\\""
+teardown:
+  - "python {phase} td {marker}"
+capture:
+  rps: $.summary.requestsPerSec
+"""
+    )
+    results = tmp_path / "results"
+
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    run = store.read_runs(results)[0]
+    assert run["raw_output_path"]  # written on failure regardless of keep_raw
+    raw = json.loads((results / run["raw_output_path"]).read_text())
+    assert raw["setup"][0]["exit_code"] == 7
+    assert "setup-stdout" in raw["setup"][0]["stdout"]
+    assert raw["teardown"][0]["exit_code"] == 0
+
+
 def test_output_file_with_var_interpolation(tmp_path):
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
     tool_path = tmp_path / "tool.yaml"

@@ -182,6 +182,12 @@ plots:
 - Setup failure → the command is skipped, teardown still runs best-effort, and `failure_reason` is recorded as `setup[i]: …`.
 - Teardown failure → the benchmark's `exit_code` and metrics are preserved, but `teardown[i]: …` is appended to `failure_reason` (so the run is counted as failed).
 
+**Raw output records.** When a raw record is written, `raw/{run_id}.json` is a JSON object with:
+
+- `stdout`, `stderr` — the tool's own streams (always present).
+- `output_file` — `{path, content}` when `output_file` is configured in the tool YAML, so the tool's stdout/stderr stay separate from the file content used for extraction.
+- `setup`, `teardown` — one entry per step that ran, each with `command`, `exit_code`, `stdout`, `stderr`.
+
 ## Results directory layout
 
 ```
@@ -192,5 +198,7 @@ results/
   tools/{name}.yaml       # copy of the tool YAML used
   env.snapshot.json       # host info (OS, CPU, git SHA)
   pretty_names.json       # merged metric display names
-  raw/{run_id}.json       # raw stdout (only with --keep-raw or on extract failure)
+  raw/{run_id}.json       # structured raw record (see below); written with
+                          # --keep-raw, on extract failure, on tool failure,
+                          # or when setup/teardown failed
 ```
