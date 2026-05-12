@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-11
+
+### Changed
+
+- Raw output fields (`stdout`, `stderr`, `output_file.content`, per-step stdout/stderr) exceeding 8 KiB are now spilled to adjacent sidecar files (`raw/{run_id}.{field}`) and replaced with a `{"$ref": "raw/…"}` pointer in the raw JSON. This keeps `raw/*.json` small for metadata queries. Use the new `store.load_raw_run()` helper to read a record with all pointers resolved.
+
+## [0.2.0] - 2026-05-11
+
+### Added
+
+- `per_sweep_var`, `setup_per_sweep`, and `teardown_per_sweep` tool YAML fields — expensive setup/teardown can now run outside the per-rep loop. Without `per_sweep_var` the phases fire once for the whole sweep; with it, combos are grouped by that variable's value and phases fire once per distinct value. Setup failures record failure rows for the affected group; teardown failures fold into the group's last rep row.
+- Raw run records (`raw/{run_id}.json`) are now structured JSON capturing the tool's own `stdout`/`stderr`, the `output_file` path and content separately when configured, and per-step `command`/`exit_code`/`stdout`/`stderr` for `setup` and `teardown`. Raw records are also written when setup or teardown fail. Per-sweep phase output lands in `raw/sweep.json` or `raw/sweep-{slug}.json`.
+
+## [0.1.1] - 2026-05-10
+
+### Changed
+
+- Expanded README and `CLAUDE.md` to document `output_file`, `output_format`, `plots`, `setup`/`teardown`, `--exclude-tag`, `--report`/`--plots`, and `rebuild-aggregates`.
+
 ## [0.1.0] - 2026-05-10
 
 Initial public release.
