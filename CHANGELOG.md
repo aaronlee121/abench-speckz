@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-13
+
+### Changed
+
+- Plot legends for multi-key `group_by` now render as a color-keyed HTML table instead of concatenating all variable values with ` / `. Group-by keys whose value is identical across all series are shown once in a "Fixed: key = value" block above the chart rather than repeated in every legend entry. Chart.js's built-in legend is hidden when the table legend is active. This particularly improves readability when negation syntax (e.g. `group_by: "!concurrency"`) expands to many variables. The `--group-by` CLI path receives the same treatment: axis labels omit constant keys and the fixed-vars block appears above each metric chart.
+
 ## [0.4.0] - 2026-05-13
 
 ### Added
