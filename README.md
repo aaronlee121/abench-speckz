@@ -183,21 +183,27 @@ plots:
   - id: rps_vs_concurrency
     type: line
     title: "Throughput scaling"
-    x: concurrency                   # combo variable on x-axis
+    x: concurrency                        # combo variable on x-axis
     y: requests_per_sec
-    group_by: workload               # one line per workload value
+    group_by: workload                    # one line per workload value
+  - id: rps_vs_concurrency_multi
+    type: line
+    title: "Throughput scaling by workload + backend"
+    x: concurrency
+    y: requests_per_sec
+    group_by: [workload, backend]         # one line per workload+backend combo
   - id: throughput_vs_latency
     type: scatter
     title: "Throughput / latency tradeoff"
-    x: requests_per_sec             # metric on x-axis (not a variable)
-    y: p95_ms                       # metric on y-axis
-    group_by: workload              # one labeled point per workload value
+    x: requests_per_sec                  # metric on x-axis (not a variable)
+    y: p95_ms                            # metric on y-axis
+    group_by: workload                   # one labeled point per workload value
 ```
 
-**`group_by` in plots.** Splits data into multiple series based on a combo variable's values:
+**`group_by` in plots.** Splits data into multiple series based on combo variable values. Accepts a single variable name or a list of variable names; multiple keys are joined with ` / ` in the legend label.
 
-- `bar` / `stacked-bar` / `line`: without `group_by`, each `y` metric becomes one series. With `group_by: somevar`, you get one series per (metric, variable-value) pair, labeled `"metric / value"`. Use this to compare multiple configurations at each x point (e.g. one line per backend type across concurrency levels).
-- `scatter`: `x` and `y` are both metric names (not variables). `group_by` maps each unique variable value to its own labeled point in the scatter plot. Without `group_by`, all points collapse into a single `"all"` series.
+- `bar` / `stacked-bar` / `line`: without `group_by`, each `y` metric becomes one series. With `group_by`, you get one series per (metric, group-value) pair. A single string and a one-element list are equivalent.
+- `scatter`: `x` and `y` are both metric names (not variables). Each unique combination of `group_by` values becomes its own labeled point. Without `group_by`, all points collapse into a single `"all"` series.
 
 **`env_probes`.** A mapping of key → shell command run **once** at the very start of the sweep (before any rep). The trimmed stdout of each command is stored in `env.snapshot.json` under `"probes"`. A non-zero exit code or missing command stores `null` for that key — probes never abort a sweep.
 

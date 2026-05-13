@@ -160,12 +160,10 @@ def generate_plots_html(
 
     for plot in plot_specs:
         if plot.type == "scatter":
-            group_by = [plot.group_by] if plot.group_by else []
+            group_by = list(plot.group_by) if plot.group_by else []
             metrics = [plot.x] + plot.y
         else:
-            group_by = [plot.x]
-            if plot.group_by:
-                group_by.append(plot.group_by)
+            group_by = [plot.x] + (list(plot.group_by) if plot.group_by else [])
             metrics = plot.y
 
         rows = query.compute_rows(results_dir, group_by=group_by, metrics=metrics)
@@ -218,7 +216,7 @@ def _build_bar_or_line_config(
     seen: set[tuple] = set()
     for r in rows:
         x_val = str(r.get(plot.x, ""))
-        gb_val = str(r.get(plot.group_by, "")) if plot.group_by else None
+        gb_val = " / ".join(str(r.get(k, "")) for k in plot.group_by) if plot.group_by else None
         metric = r.get("metric")
         key = (metric, gb_val)
         if key not in seen:
@@ -267,7 +265,7 @@ def _build_bar_or_line_config(
 def _build_scatter_config(plot, rows: list[dict], pretty_map: dict) -> dict:
     groups: dict[str, dict[str, float | None]] = {}
     for r in rows:
-        gb = str(r.get(plot.group_by, "")) if plot.group_by else "all"
+        gb = " / ".join(str(r.get(k, "")) for k in plot.group_by) if plot.group_by else "all"
         groups.setdefault(gb, {})[str(r.get("metric"))] = r.get("mean")
 
     datasets = []

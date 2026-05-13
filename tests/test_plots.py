@@ -22,12 +22,31 @@ def test_parse_y_as_list():
     assert specs[0].y == ["p50", "p95"]
 
 
-def test_parse_with_group_by_and_title():
+def test_parse_with_group_by_string():
     raw = [{"id": "p1", "type": "line", "x": "concurrency", "y": "rps",
             "group_by": "backend", "title": "RPS"}]
     specs = plots.parse_plots(raw, source="<t>")
-    assert specs[0].group_by == "backend"
+    assert specs[0].group_by == ["backend"]
     assert specs[0].title == "RPS"
+
+
+def test_parse_with_group_by_list():
+    raw = [{"id": "p1", "type": "line", "x": "concurrency", "y": "rps",
+            "group_by": ["workload", "backend"]}]
+    specs = plots.parse_plots(raw, source="<t>")
+    assert specs[0].group_by == ["workload", "backend"]
+
+
+def test_parse_group_by_empty_list_rejected():
+    raw = [{"id": "p1", "type": "line", "x": "concurrency", "y": "rps", "group_by": []}]
+    with pytest.raises(RunError, match="must not be empty"):
+        plots.parse_plots(raw, source="<t>")
+
+
+def test_parse_group_by_list_with_non_string_rejected():
+    raw = [{"id": "p1", "type": "line", "x": "c", "y": "rps", "group_by": ["ok", 42]}]
+    with pytest.raises(RunError, match=r"group_by\[1\]"):
+        plots.parse_plots(raw, source="<t>")
 
 
 def test_parse_none_returns_empty():

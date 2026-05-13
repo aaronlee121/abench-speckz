@@ -17,7 +17,7 @@ class PlotSpec:
     x: str
     y: list[str]
     title: str | None = None
-    group_by: str | None = None
+    group_by: list[str] | None = None
 
 
 def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
@@ -77,9 +77,22 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
         if title is not None and not isinstance(title, str):
             raise RunError(f"{source}: plot {plot_id!r}: title must be a string")
 
-        group_by = item.get("group_by")
-        if group_by is not None and (not isinstance(group_by, str) or not group_by):
-            raise RunError(f"{source}: plot {plot_id!r}: group_by must be a string")
+        group_by_raw = item.get("group_by")
+        if group_by_raw is None:
+            group_by = None
+        elif isinstance(group_by_raw, str):
+            if not group_by_raw:
+                raise RunError(f"{source}: plot {plot_id!r}: group_by must be a non-empty string or list")
+            group_by = [group_by_raw]
+        elif isinstance(group_by_raw, list):
+            if not group_by_raw:
+                raise RunError(f"{source}: plot {plot_id!r}: group_by list must not be empty")
+            for j, k in enumerate(group_by_raw):
+                if not isinstance(k, str) or not k:
+                    raise RunError(f"{source}: plot {plot_id!r}: group_by[{j}] must be a non-empty string")
+            group_by = list(group_by_raw)
+        else:
+            raise RunError(f"{source}: plot {plot_id!r}: group_by must be a string or list of strings")
 
         unknown = set(item) - {"id", "type", "x", "y", "title", "group_by"}
         if unknown:

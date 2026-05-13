@@ -55,12 +55,12 @@ Profiles overlay the base spec (variables, static, when, exclude are merged); `d
 
 **Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `output_file` (read extraction input from a file the tool writes instead of stdout), `output_format` (`json` default, or `jsonl` for one object per line), `pretty_names`, `units`, `higher_is_better`, `plots` (declarative Chart.js plot definitions consumed by `stats --report`), `env_probes` (mapping of key → shell command run once at sweep start; stdout captured into `env.snapshot.json` under `"probes"`), `setup` / `teardown` (per-rep shell steps), `setup_timeout_seconds` (per-step timeout, default 120).
 
-**Plot fields:** Each entry in `plots` has: `id` (unique string), `type` (`bar`, `stacked-bar`, `line`, `scatter`), `x` (variable name for the x-axis, or a metric name for `scatter`), `y` (metric name or list of metric names; `scatter` requires exactly one, `stacked-bar` requires at least two), `title` (optional display title), `group_by` (optional variable name — see below).
+**Plot fields:** Each entry in `plots` has: `id` (unique string), `type` (`bar`, `stacked-bar`, `line`, `scatter`), `x` (variable name for the x-axis, or a metric name for `scatter`), `y` (metric name or list of metric names; `scatter` requires exactly one, `stacked-bar` requires at least two), `title` (optional display title), `group_by` (optional variable name or list of variable names — see below).
 
-**`group_by` in plots:** Splits chart data into multiple series based on a combo variable's values.
+**`group_by` in plots:** Splits chart data into multiple series. Accepts a single variable name (`group_by: workload`) or a list (`group_by: [workload, backend]`); multiple keys are joined with ` / ` in the legend label.
 
-- `bar` / `stacked-bar` / `line`: without `group_by`, each `y` metric is a single series across x-axis values. With `group_by: somevar`, each unique value of `somevar` produces a separate series per metric, labeled `"metric / group_value"`. This is the standard way to compare e.g. different backends at varying concurrency levels.
-- `scatter`: `x` and `y` are both metrics (not variables). `group_by` splits points into labeled series — each unique value of the variable becomes its own named point. Without `group_by`, all data collapses into a single `"all"` series.
+- `bar` / `stacked-bar` / `line`: without `group_by`, each `y` metric is a single series across x-axis values. With `group_by`, each unique combination of variable values produces a separate series per metric.
+- `scatter`: `x` and `y` are both metrics (not variables). Each unique combination of `group_by` values becomes its own named point. Without `group_by`, all data collapses into a single `"all"` series.
 
 Example — line chart of throughput vs. concurrency, one line per workload type:
 ```yaml
