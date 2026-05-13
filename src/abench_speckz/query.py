@@ -12,6 +12,23 @@ from abench_speckz.filters import check_ident, parse_kv
 _AGGREGATE_COLUMNS = ("n", "n_failed", "mean", "stddev", "p50", "p95", "p99", "ci95_low", "ci95_high")
 
 
+def var_names(results_dir: Path) -> list[str]:
+    """Return variable names present in results, in their original order.
+
+    Reads the first row of aggregates.jsonl (or runs.jsonl as fallback).
+    Returns an empty list when no data exists yet.
+    """
+    for fname in ("aggregates.jsonl", "runs.jsonl"):
+        path = results_dir / fname
+        if path.exists() and path.stat().st_size > 0:
+            with path.open() as f:
+                for line in f:
+                    row = json.loads(line)
+                    if isinstance(row.get("vars"), dict):
+                        return list(row["vars"].keys())
+    return []
+
+
 def compute_rows(
     results_dir: Path,
     *,

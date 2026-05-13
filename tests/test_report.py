@@ -180,3 +180,31 @@ def test_default_report_when_no_plots(tmp_path):
     # Default uses metric name as chart id
     assert "chart-rps" in html
     assert "chart-p95_latency_ms" in html
+
+
+def test_resolve_group_by_no_negation():
+    from abench_speckz.report import _resolve_group_by
+    assert _resolve_group_by(["workload", "backend"], ["workload", "backend", "concurrency"]) == ["workload", "backend"]
+
+
+def test_resolve_group_by_negation_excludes_var():
+    from abench_speckz.report import _resolve_group_by
+    result = _resolve_group_by(["!concurrency"], ["workload", "backend", "concurrency"])
+    assert result == ["workload", "backend"]
+
+
+def test_resolve_group_by_negation_mixed():
+    from abench_speckz.report import _resolve_group_by
+    result = _resolve_group_by(["workload", "!concurrency"], ["workload", "backend", "concurrency"])
+    assert result == ["workload", "backend"]
+
+
+def test_resolve_group_by_negation_unknown_var_ignored():
+    from abench_speckz.report import _resolve_group_by
+    result = _resolve_group_by(["!nonexistent"], ["workload", "backend"])
+    assert result == ["workload", "backend"]
+
+
+def test_resolve_group_by_empty_all_vars():
+    from abench_speckz.report import _resolve_group_by
+    assert _resolve_group_by(["!concurrency"], []) == []

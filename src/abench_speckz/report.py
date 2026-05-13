@@ -147,6 +147,16 @@ def generate_html(
     path.write_text(_html_shell(sections, chart_scripts))
 
 
+def _resolve_group_by(group_by: list[str], all_vars: list[str]) -> list[str]:
+    """Expand !var negation entries: replace them with all vars not excluded."""
+    if not any(k.startswith("!") for k in group_by):
+        return group_by
+    excluded = {k[1:] for k in group_by if k.startswith("!")}
+    positives = [k for k in group_by if not k.startswith("!")]
+    expanded = [v for v in all_vars if v not in excluded and v not in positives]
+    return positives + expanded
+
+
 def generate_plots_html(
     results_dir: Path,
     plot_specs: list,
@@ -155,30 +165,35 @@ def generate_plots_html(
 ) -> None:
     from abench_speckz import query
 
+    all_vars = query.var_names(results_dir)
     sections: list[str] = []
     scripts: list[str] = []
 
     for plot in plot_specs:
+        gb_keys = _resolve_group_by(list(plot.group_by or []), all_vars)
+
         if plot.type == "scatter":
-            group_by = list(plot.group_by) if plot.group_by else []
+            group_by = gb_keys
             metrics = [plot.x] + plot.y
         else:
-            group_by = [plot.x] + (list(plot.group_by) if plot.group_by else [])
+            group_by = [plot.x] + gb_keys
             metrics = plot.y
 
         rows = query.compute_rows(results_dir, group_by=group_by, metrics=metrics)
 
         if plot.type == "scatter":
-            chart_config = _build_scatter_config(plot, rows, pretty_map)
+            chart_config = _build_scatter_config(plot, rows, pretty_map, group_by=gb_keys)
         elif plot.type in ("bar", "stacked-bar"):
             chart_config = _build_bar_or_line_config(
                 plot, rows, pretty_map,
                 chart_type="bar",
                 stacked=(plot.type == "stacked-bar"),
+                group_by=gb_keys,
             )
         elif plot.type == "line":
             chart_config = _build_bar_or_line_config(
                 plot, rows, pretty_map, chart_type="line", stacked=False,
+                group_by=gb_keys,
             )
         else:
             continue
@@ -204,6 +219,7 @@ def generate_plots_html(
 
 def _build_bar_or_line_config(
     plot, rows: list[dict], pretty_map: dict, *, chart_type: str, stacked: bool,
+    group_by: list[str],
 ) -> dict:
     x_values_raw = sorted({str(r.get(plot.x, "")) for r in rows})
     if chart_type == "line":
@@ -216,7 +232,7 @@ def _build_bar_or_line_config(
     seen: set[tuple] = set()
     for r in rows:
         x_val = str(r.get(plot.x, ""))
-        gb_val = " / ".join(str(r.get(k, "")) for k in plot.group_by) if plot.group_by else None
+        gb_val = " / ".join(str(r.get(k, "")) for k in group_by) if group_by else None
         metric = r.get("metric")
         key = (metric, gb_val)
         if key not in seen:
@@ -262,10 +278,10 @@ def _build_bar_or_line_config(
     }
 
 
-def _build_scatter_config(plot, rows: list[dict], pretty_map: dict) -> dict:
+def _build_scatter_config(plot, rows: list[dict], pretty_map: dict, *, group_by: list[str]) -> dict:
     groups: dict[str, dict[str, float | None]] = {}
     for r in rows:
-        gb = " / ".join(str(r.get(k, "")) for k in plot.group_by) if plot.group_by else "all"
+        gb = " / ".join(str(r.get(k, "")) for k in group_by) if group_by else "all"
         groups.setdefault(gb, {})[str(r.get("metric"))] = r.get("mean")
 
     datasets = []

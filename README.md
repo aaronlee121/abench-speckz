@@ -200,10 +200,28 @@ plots:
     group_by: workload                   # one labeled point per workload value
 ```
 
-**`group_by` in plots.** Splits data into multiple series based on combo variable values. Accepts a single variable name or a list of variable names; multiple keys are joined with ` / ` in the legend label.
+**`group_by` in plots.** Splits data into multiple series based on combo variable values. Accepts a single variable name or a list; multiple keys are joined with ` / ` in the legend label.
 
-- `bar` / `stacked-bar` / `line`: without `group_by`, each `y` metric becomes one series. With `group_by`, you get one series per (metric, group-value) pair. A single string and a one-element list are equivalent.
+- `bar` / `stacked-bar` / `line`: without `group_by`, each `y` metric becomes one series. With `group_by`, you get one series per (metric, group-value) pair.
 - `scatter`: `x` and `y` are both metric names (not variables). Each unique combination of `group_by` values becomes its own labeled point. Without `group_by`, all points collapse into a single `"all"` series.
+
+**Negation in `group_by`.** Prefix a variable name with `!` to mean "all variables *except* this one". Useful when you have many variables and don't want to list them all:
+
+```yaml
+- id: rps_all_configs
+  type: line
+  x: concurrency
+  y: rps
+  group_by: "!concurrency"       # one line per every other variable combination
+
+- id: rps_except_region
+  type: line
+  x: concurrency
+  y: rps
+  group_by: ["!concurrency", "!region"]   # exclude multiple vars; keep the rest
+```
+
+Negation is resolved at report time against the actual variable names in `aggregates.jsonl`. Unknown excluded names are silently ignored.
 
 **`env_probes`.** A mapping of key → shell command run **once** at the very start of the sweep (before any rep). The trimmed stdout of each command is stored in `env.snapshot.json` under `"probes"`. A non-zero exit code or missing command stores `null` for that key — probes never abort a sweep.
 

@@ -100,3 +100,13 @@ def test_group_by_rejects_injection_key(tmp_path):
             fmt="tsv",
             out=out,
         )
+
+
+def test_var_names_from_aggregates(tmp_path):
+    _seed(tmp_path)
+    names = query.var_names(tmp_path)
+    assert names == ["workload", "backend"]
+
+
+def test_var_names_empty_when_no_data(tmp_path):
+    assert query.var_names(tmp_path) == []

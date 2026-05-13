@@ -80,19 +80,21 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
         group_by_raw = item.get("group_by")
         if group_by_raw is None:
             group_by = None
-        elif isinstance(group_by_raw, str):
-            if not group_by_raw:
-                raise RunError(f"{source}: plot {plot_id!r}: group_by must be a non-empty string or list")
-            group_by = [group_by_raw]
-        elif isinstance(group_by_raw, list):
-            if not group_by_raw:
+        else:
+            if isinstance(group_by_raw, str):
+                entries = [group_by_raw]
+            elif isinstance(group_by_raw, list):
+                entries = group_by_raw
+            else:
+                raise RunError(f"{source}: plot {plot_id!r}: group_by must be a string or list of strings")
+            if not entries:
                 raise RunError(f"{source}: plot {plot_id!r}: group_by list must not be empty")
-            for j, k in enumerate(group_by_raw):
+            for j, k in enumerate(entries):
                 if not isinstance(k, str) or not k:
                     raise RunError(f"{source}: plot {plot_id!r}: group_by[{j}] must be a non-empty string")
-            group_by = list(group_by_raw)
-        else:
-            raise RunError(f"{source}: plot {plot_id!r}: group_by must be a string or list of strings")
+                if k.startswith("!") and not k[1:]:
+                    raise RunError(f"{source}: plot {plot_id!r}: group_by[{j}] '!' must be followed by a variable name")
+            group_by = list(entries)
 
         unknown = set(item) - {"id", "type", "x", "y", "title", "group_by"}
         if unknown:

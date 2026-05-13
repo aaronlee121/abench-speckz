@@ -159,3 +159,24 @@ def test_discover_dedupes_by_id(tmp_path):
     )
     specs = plots.discover_from_tool_snapshots(tmp_path)
     assert len([s for s in specs if s.id == "shared"]) == 1
+
+
+def test_parse_group_by_negation_single_string():
+    raw = [{"id": "p1", "type": "line", "x": "concurrency", "y": "rps",
+            "group_by": "!concurrency"}]
+    specs = plots.parse_plots(raw, source="<t>")
+    assert specs[0].group_by == ["!concurrency"]
+
+
+def test_parse_group_by_negation_in_list():
+    raw = [{"id": "p1", "type": "line", "x": "concurrency", "y": "rps",
+            "group_by": ["!concurrency", "workload"]}]
+    specs = plots.parse_plots(raw, source="<t>")
+    assert specs[0].group_by == ["!concurrency", "workload"]
+
+
+def test_parse_group_by_bare_bang_rejected():
+    raw = [{"id": "p1", "type": "line", "x": "c", "y": "rps",
+            "group_by": ["!"]}]
+    with pytest.raises(RunError, match="must be followed by"):
+        plots.parse_plots(raw, source="<t>")
