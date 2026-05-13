@@ -172,10 +172,21 @@ plots:
   - id: rps_vs_concurrency
     type: line
     title: "Throughput scaling"
-    x: concurrency
+    x: concurrency                   # combo variable on x-axis
     y: requests_per_sec
-    group_by: workload
+    group_by: workload               # one line per workload value
+  - id: throughput_vs_latency
+    type: scatter
+    title: "Throughput / latency tradeoff"
+    x: requests_per_sec             # metric on x-axis (not a variable)
+    y: p95_ms                       # metric on y-axis
+    group_by: workload              # one labeled point per workload value
 ```
+
+**`group_by` in plots.** Splits data into multiple series based on a combo variable's values:
+
+- `bar` / `stacked-bar` / `line`: without `group_by`, each `y` metric becomes one series. With `group_by: somevar`, you get one series per (metric, variable-value) pair, labeled `"metric / value"`. Use this to compare multiple configurations at each x point (e.g. one line per backend type across concurrency levels).
+- `scatter`: `x` and `y` are both metric names (not variables). `group_by` maps each unique variable value to its own labeled point in the scatter plot. Without `group_by`, all points collapse into a single `"all"` series.
 
 **Setup / teardown.** Each rep is wrapped `setup → command → teardown`. Teardown runs in a `finally` block, so it also fires on benchmark failure or `Ctrl-C`. Combo vars (`${var}`) and `${env:VAR}` interpolate in setup/teardown commands. Steps are split with `shlex.split` and executed without a shell, so chain via multiple list entries rather than `&&`.
 

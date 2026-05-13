@@ -55,6 +55,31 @@ Profiles overlay the base spec (variables, static, when, exclude are merged); `d
 
 **Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `output_file` (read extraction input from a file the tool writes instead of stdout), `output_format` (`json` default, or `jsonl` for one object per line), `pretty_names`, `units`, `higher_is_better`, `plots` (declarative Chart.js plot definitions consumed by `stats --report`), `setup` / `teardown` (per-rep shell steps), `setup_timeout_seconds` (per-step timeout, default 120).
 
+**Plot fields:** Each entry in `plots` has: `id` (unique string), `type` (`bar`, `stacked-bar`, `line`, `scatter`), `x` (variable name for the x-axis, or a metric name for `scatter`), `y` (metric name or list of metric names; `scatter` requires exactly one, `stacked-bar` requires at least two), `title` (optional display title), `group_by` (optional variable name — see below).
+
+**`group_by` in plots:** Splits chart data into multiple series based on a combo variable's values.
+
+- `bar` / `stacked-bar` / `line`: without `group_by`, each `y` metric is a single series across x-axis values. With `group_by: somevar`, each unique value of `somevar` produces a separate series per metric, labeled `"metric / group_value"`. This is the standard way to compare e.g. different backends at varying concurrency levels.
+- `scatter`: `x` and `y` are both metrics (not variables). `group_by` splits points into labeled series — each unique value of the variable becomes its own named point. Without `group_by`, all data collapses into a single `"all"` series.
+
+Example — line chart of throughput vs. concurrency, one line per workload type:
+```yaml
+- id: rps_vs_concurrency
+  type: line
+  x: concurrency       # combo variable swept across x-axis
+  y: rps               # metric on y-axis
+  group_by: workload   # one line per workload value
+```
+
+Example — scatter plot of throughput vs. latency tradeoff, one point per workload:
+```yaml
+- id: throughput_vs_latency
+  type: scatter
+  x: rps               # metric on x-axis
+  y: p95_ms            # metric on y-axis
+  group_by: workload   # one labeled point per workload value
+```
+
 Metric extraction (`extract.py`): reads stdout (or `output_file`) as JSON or JSONL, then applies JSONPath expressions from `capture`. A key ending in `[]` collects all matches as a list. Alternatively, `parser: "module:func"` calls an arbitrary Python function.
 
 ### 4. `rebuild-aggregates` — recompute aggregates

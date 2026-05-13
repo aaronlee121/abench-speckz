@@ -70,6 +70,12 @@ abench-speckz run out/ --tool mytool.yaml --repeat 3
 
 # Show aggregated stats
 abench-speckz stats results/
+
+# Generate HTML report with Chart.js plots (from tool YAML plots: definition)
+abench-speckz stats results/ --report report.html
+
+# Regenerate aggregates.jsonl from runs.jsonl (e.g. after editing raw runs)
+abench-speckz rebuild-aggregates results/
 ```
 
 ## Key Modules
@@ -80,11 +86,16 @@ abench-speckz stats results/
 | [generate.py](src/abench_speckz/generate.py) | Combo generation pipeline |
 | [spec.py](src/abench_speckz/spec.py) | YAML spec loading |
 | [model.py](src/abench_speckz/model.py) | `Spec` and `Combo` data classes |
+| [runspec.py](src/abench_speckz/runspec.py) | `ToolSpec`, `RunRequest/Result`, `AggregateRow` |
 | [runner.py](src/abench_speckz/runner.py) | Benchmark sweep orchestration |
 | [executor.py](src/abench_speckz/executor.py) | Subprocess execution |
 | [extract.py](src/abench_speckz/extract.py) | Metric extraction from stdout |
+| [store.py](src/abench_speckz/store.py) | `runs.jsonl` / `aggregates.jsonl` persistence |
 | [query.py](src/abench_speckz/query.py) | DuckDB-backed stats queries |
 | [tools.py](src/abench_speckz/tools.py) | Tool YAML loading (`ToolSpec`) |
+| [plots.py](src/abench_speckz/plots.py) | `PlotSpec` parsing and validation |
+| [report.py](src/abench_speckz/report.py) | Chart.js HTML report rendering |
+| [prettynames.py](src/abench_speckz/prettynames.py) | Metric display-name resolution |
 
 ## Adding a New Test
 
