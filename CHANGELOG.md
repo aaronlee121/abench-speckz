@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-13
+
+### Added
+
+- `post_run` tool YAML field — a list of shell steps run after `teardown` completes, always (including on benchmark failure). Receives result-scoped synthetic variables: `${_exit_code}`, `${_started_at}`, `${_finished_at}`, `${_duration_ms}`. Intended for collecting time-windowed metrics from external systems (Prometheus, InfluxDB, etc.) keyed to the exact run. Failure is folded into `failure_reason` but does not suppress the benchmark result or its metrics. Step records are stored in `raw/{run_id}.json` under `"post_run"`.
+- `combo_probes` tool YAML field — a mapping of key → command template run **once per unique config hash** (before the first rep for that combo, after per-sweep setup). Commands interpolate combo vars (`${var}`, `${_envfile}`, `${env:VAR}`). Trimmed stdout is the value; non-zero exit, missing command, timeout, or interpolation error stores `null`. Results are written to `combo_probes.json` (keyed by config hash) and embedded in every `runs.jsonl` row under `"combo_probes"`. Useful for capturing system or service state that varies per combo (e.g. effective DB config, dataset row counts after per-sweep seeding).
+- `${_run_id}` built-in synthetic variable — the UUID for the current rep, matching the `run_id` field written to `runs.jsonl`. Available in `command`, `setup`, `teardown`, and `post_run`. Run ID is now pre-generated before setup, so it is available throughout the full rep lifecycle.
+
+### Fixed
+
+- `raw/{run_id}.json` now correctly spills large `post_run` step stdout/stderr to sidecar files (the `_spill_phases` helper was not covering the `post_run` key).
+
 ## [0.3.0] - 2026-05-12
 
 ### Added
