@@ -149,6 +149,13 @@ higher_is_better:
   requests_per_sec: true
   p50_ms: false
 
+# optional: run once at the start of the sweep; output captured into env.snapshot.json
+# under a "probes" key. Non-zero exit or missing command stores null for that key.
+env_probes:
+  kernel:       "uname -r"
+  cpu:          "sysctl -n machdep.cpu.brand_string"
+  redis_version: "redis-cli --version"
+
 # optional: shell steps run around every rep (warmup and measured)
 setup:
   - "docker compose up -d redis"
@@ -187,6 +194,20 @@ plots:
 
 - `bar` / `stacked-bar` / `line`: without `group_by`, each `y` metric becomes one series. With `group_by: somevar`, you get one series per (metric, variable-value) pair, labeled `"metric / value"`. Use this to compare multiple configurations at each x point (e.g. one line per backend type across concurrency levels).
 - `scatter`: `x` and `y` are both metric names (not variables). `group_by` maps each unique variable value to its own labeled point in the scatter plot. Without `group_by`, all points collapse into a single `"all"` series.
+
+**`env_probes`.** A mapping of key → shell command run **once** at the very start of the sweep (before any rep). The trimmed stdout of each command is stored in `env.snapshot.json` under `"probes"`. A non-zero exit code or missing command stores `null` for that key — probes never abort a sweep.
+
+```json
+// env.snapshot.json (excerpt)
+{
+  "host": "...",
+  "probes": {
+    "kernel": "24.2.0",
+    "redis_version": "Redis server v=7.2.3 sha=...",
+    "cpu": null
+  }
+}
+```
 
 **Setup / teardown.** Each rep is wrapped `setup → command → teardown`. Teardown runs in a `finally` block, so it also fires on benchmark failure or `Ctrl-C`. Combo vars (`${var}`) and `${env:VAR}` interpolate in setup/teardown commands. Steps are split with `shlex.split` and executed without a shell, so chain via multiple list entries rather than `&&`.
 

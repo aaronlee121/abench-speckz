@@ -725,3 +725,61 @@ def test_per_sweep_dry_run_prints_preview(tmp_path):
     assert "[per_sweep teardown 0, workload=read]: echo teardown-read" in out
     assert "[per_sweep setup 0, workload=write]: echo setup-write" in out
     assert not (results / "runs.jsonl").exists()
+
+
+# ---------------------------------------------------------------------------
+# env_probes
+# ---------------------------------------------------------------------------
+
+def test_collect_probe_results_success():
+    probes = {"py_version": "python --version", "echo_hi": "echo hi"}
+    results = runner.collect_probe_results(probes, timeout_seconds=10)
+    assert results["py_version"] is not None and "Python" in results["py_version"]
+    assert results["echo_hi"] == "hi"
+
+
+def test_collect_probe_results_nonzero_returns_none():
+    probes = {"bad": "python -c \"import sys; sys.exit(1)\""}
+    results = runner.collect_probe_results(probes, timeout_seconds=10)
+    assert results["bad"] is None
+
+
+def test_collect_probe_results_missing_command_returns_none():
+    probes = {"nope": "no_such_command_abcxyz --version"}
+    results = runner.collect_probe_results(probes, timeout_seconds=10)
+    assert results["nope"] is None
+
+
+def test_env_probes_written_to_snapshot(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+env_probes:
+  echo_probe: "echo probe-value"
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    snapshot = json.loads((results / "env.snapshot.json").read_text())
+    assert "probes" in snapshot
+    assert snapshot["probes"]["echo_probe"] == "probe-value"
+
+
+def test_env_probes_absent_when_not_configured(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = _tool_yaml(tmp_path)
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    snapshot = json.loads((results / "env.snapshot.json").read_text())
+    assert "probes" not in snapshot
+

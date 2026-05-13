@@ -16,6 +16,7 @@ class ToolSpec:
     units: dict[str, str] = field(default_factory=dict)
     higher_is_better: dict[str, bool] = field(default_factory=dict)
     plots: list[dict] = field(default_factory=list)
+    env_probes: dict[str, str] = field(default_factory=dict)
     setup: list[str] = field(default_factory=list)
     teardown: list[str] = field(default_factory=list)
     setup_timeout_seconds: int = 120

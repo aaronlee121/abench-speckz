@@ -11,7 +11,7 @@ from abench_speckz.runspec import ToolSpec
 _FIELDS = {
     "name", "command", "timeout_seconds", "version_command",
     "capture", "parser", "output_file", "output_format", "pretty_names", "units", "higher_is_better",
-    "plots",
+    "plots", "env_probes",
     "setup", "teardown", "setup_timeout_seconds",
     "setup_per_sweep", "teardown_per_sweep", "per_sweep_var",
 }
@@ -64,6 +64,15 @@ def load_tool(path: str | Path) -> ToolSpec:
     if plots is not None and not isinstance(plots, list):
         raise RunError(f"{path}: tool.plots must be a list")
 
+    env_probes = raw.get("env_probes") or {}
+    if not isinstance(env_probes, dict):
+        raise RunError(f"{path}: tool.env_probes must be a mapping")
+    for k, v in env_probes.items():
+        if not isinstance(k, str) or not k:
+            raise RunError(f"{path}: tool.env_probes keys must be non-empty strings")
+        if not isinstance(v, str) or not v:
+            raise RunError(f"{path}: tool.env_probes[{k!r}] value must be a non-empty command string")
+
     setup = _load_phase(raw, path, "setup")
     teardown = _load_phase(raw, path, "teardown")
     setup_per_sweep = _load_phase(raw, path, "setup_per_sweep")
@@ -90,6 +99,7 @@ def load_tool(path: str | Path) -> ToolSpec:
         units=dict(raw.get("units") or {}),
         higher_is_better=dict(raw.get("higher_is_better") or {}),
         plots=list(plots or []),
+        env_probes=dict(env_probes),
         setup=setup,
         teardown=teardown,
         setup_timeout_seconds=setup_timeout,

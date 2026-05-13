@@ -72,6 +72,22 @@ def collect_env_metadata() -> dict[str, Any]:
     return info
 
 
+def collect_probe_results(env_probes: dict[str, str], timeout_seconds: int) -> dict[str, Any]:
+    """Run each probe command once and return key → stripped stdout (or None on failure)."""
+    results: dict[str, Any] = {}
+    for key, command in env_probes.items():
+        try:
+            result = subprocess.run(
+                shlex.split(command),
+                capture_output=True, text=True,
+                timeout=timeout_seconds, check=False,
+            )
+            results[key] = result.stdout.strip() if result.returncode == 0 else None
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            results[key] = None
+    return results
+
+
 def plan_sweep(
     manifest_entries: list[dict[str, Any]],
     repeat: int,
@@ -217,7 +233,10 @@ def execute_sweep(
         store.init_results_dir(results_dir)
         store.snapshot_manifest(results_dir, actual_manifest_path)
         store.snapshot_tool(results_dir, tool_path, tool.name)
-        store.write_env_snapshot(results_dir, collect_env_metadata())
+        env_meta = collect_env_metadata()
+        if tool.env_probes:
+            env_meta["probes"] = collect_probe_results(tool.env_probes, tool.setup_timeout_seconds)
+        store.write_env_snapshot(results_dir, env_meta)
         _persist_pretty_names(results_dir, tool)
 
         tool_version = tools.resolve_tool_version(tool)

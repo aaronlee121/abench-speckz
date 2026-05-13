@@ -142,3 +142,34 @@ def test_setup_timeout_must_be_positive_int(tmp_path):
     p.write_text("name: t\ncommand: x\nsetup_timeout_seconds: 0\n")
     with pytest.raises(RunError, match="setup_timeout_seconds"):
         tools.load_tool(p)
+
+
+def test_env_probes_loaded(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text(
+        "name: t\ncommand: x\n"
+        "env_probes:\n  kernel: 'uname -r'\n  py: 'python --version'\n"
+    )
+    spec = tools.load_tool(p)
+    assert spec.env_probes == {"kernel": "uname -r", "py": "python --version"}
+
+
+def test_env_probes_default_empty(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\n")
+    spec = tools.load_tool(p)
+    assert spec.env_probes == {}
+
+
+def test_env_probes_must_be_mapping(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nenv_probes: [a, b]\n")
+    with pytest.raises(RunError, match="env_probes must be a mapping"):
+        tools.load_tool(p)
+
+
+def test_env_probes_value_must_be_string(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nenv_probes:\n  key: 42\n")
+    with pytest.raises(RunError, match=r"env_probes\[.key.\]"):
+        tools.load_tool(p)
