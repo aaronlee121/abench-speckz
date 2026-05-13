@@ -208,3 +208,114 @@ def test_resolve_group_by_negation_unknown_var_ignored():
 def test_resolve_group_by_empty_all_vars():
     from abench_speckz.report import _resolve_group_by
     assert _resolve_group_by(["!concurrency"], []) == []
+
+
+# ---------------------------------------------------------------------------
+# _split_group_by_vars
+# ---------------------------------------------------------------------------
+
+def test_split_group_by_all_varying(tmp_path):
+    from abench_speckz.report import _split_group_by_vars
+    rows = [{"workload": "read", "backend": "postgres"}, {"workload": "write", "backend": "mysql"}]
+    static, varying = _split_group_by_vars(rows, ["workload", "backend"])
+    assert static == {}
+    assert varying == ["workload", "backend"]
+
+
+def test_split_group_by_one_static(tmp_path):
+    from abench_speckz.report import _split_group_by_vars
+    rows = [{"workload": "read", "region": "us-east-1"}, {"workload": "write", "region": "us-east-1"}]
+    static, varying = _split_group_by_vars(rows, ["workload", "region"])
+    assert static == {"region": "us-east-1"}
+    assert varying == ["workload"]
+
+
+def test_split_group_by_empty_rows():
+    from abench_speckz.report import _split_group_by_vars
+    static, varying = _split_group_by_vars([], ["workload", "backend"])
+    assert static == {}
+    assert varying == ["workload", "backend"]
+
+
+# ---------------------------------------------------------------------------
+# Table legend and fixed-vars rendering
+# ---------------------------------------------------------------------------
+
+def _seed_three_vars(results_dir):
+    """Seed with workload×backend×region where region is always us-east-1."""
+    store.init_results_dir(results_dir)
+    combos = [
+        ("h1", {"workload": "read",  "backend": "postgres", "region": "us-east-1"}, {"rps": 1000.0}),
+        ("h2", {"workload": "write", "backend": "postgres", "region": "us-east-1"}, {"rps":  800.0}),
+        ("h3", {"workload": "read",  "backend": "mysql",    "region": "us-east-1"}, {"rps":  900.0}),
+    ]
+    for hash_, vars_, results in combos:
+        for i in range(3):
+            store.append_run(results_dir, {
+                "run_id": f"{hash_}-{i}", "config_hash": hash_,
+                "vars": vars_, "tags": ["bench"], "exit_code": 0,
+                "results": results, "failure_reason": None,
+            })
+        store.update_aggregates_for_hash(results_dir, hash_)
+
+
+def test_fixed_vars_shown_for_constant_group_by(tmp_path):
+    _seed_three_vars(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n"
+        "  group_by: [backend, region]\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=__import__("io").StringIO())
+    html = report_path.read_text()
+    # region is constant across all series — should appear in fixed-vars block
+    assert "Fixed:" in html
+    assert "us-east-1" in html
+    # backend varies — should NOT appear in fixed-vars
+    assert "backend" in html  # appears in legend table header
+
+
+def test_legend_table_rendered_for_varying_keys(tmp_path):
+    _seed_three_vars(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n"
+        "  group_by: [backend, region]\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=__import__("io").StringIO())
+    html = report_path.read_text()
+    # Legend table should be present with color swatches
+    assert "legend-wrap" in html
+    assert "border-radius" in html  # color swatch style
+    # Chart.js legend should be disabled
+    assert '"display": false' in html
+
+
+def test_chartjs_legend_kept_for_no_group_by(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n")
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=__import__("io").StringIO())
+    html = report_path.read_text()
+    # No group_by → no table legend div, Chart.js legend kept
+    assert '<div class="legend-wrap' not in html
+    assert '"display": false' not in html
+
+
+def test_short_labels_exclude_static_vars(tmp_path):
+    _seed_three_vars(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n"
+        "  group_by: [backend, region]\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=__import__("io").StringIO())
+    html = report_path.read_text()
+    # Dataset labels use only varying key (backend), not the static region
+    assert '"postgres"' in html or "postgres" in html
+    # The label should NOT include "us-east-1 / postgres" style (region in label)
+    assert "us-east-1 / postgres" not in html

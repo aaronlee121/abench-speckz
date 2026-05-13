@@ -60,6 +60,10 @@ def _html_shell(sections: list[str], scripts: list[str]) -> str:
     th, td {{ border: 1px solid #ddd; padding: 4px 8px; text-align: right; }}
     th {{ background: #f5f5f5; text-align: center; }}
     td:first-child {{ text-align: left; }}
+    .legend-wrap {{ margin-bottom: 0.75rem; }}
+    .legend-wrap table {{ font-size: 0.8rem; }}
+    .legend-wrap th, .legend-wrap td {{ padding: 3px 8px; }}
+    .fixed-vars {{ color: #555; font-size: 0.85rem; margin: 0.25rem 0 0.5rem; }}
   </style>
 </head>
 <body>
@@ -89,6 +93,66 @@ def _table_html(rows: list[dict], headers: list[str]) -> str:
     )
 
 
+def _split_group_by_vars(
+    rows: list[dict], group_by: list[str],
+) -> tuple[dict[str, str], list[str]]:
+    """Partition group_by keys into static (one unique value) and varying (multiple values)."""
+    if not group_by or not rows:
+        return {}, list(group_by)
+    unique: dict[str, set] = {k: set() for k in group_by}
+    for r in rows:
+        for k in group_by:
+            unique[k].add(str(r.get(k, "")))
+    static_vars = {k: next(iter(v)) for k, v in unique.items() if len(v) == 1}
+    varying_keys = [k for k in group_by if k not in static_vars]
+    return static_vars, varying_keys
+
+
+def _fixed_vars_html(static_vars: dict[str, str], pretty_map: dict) -> str:
+    if not static_vars:
+        return ""
+    parts = ", ".join(
+        f"<b>{_resolve_metric(pretty_map, k)}</b>&nbsp;=&nbsp;{v}"
+        for k, v in static_vars.items()
+    )
+    return f'<p class="fixed-vars">Fixed: {parts}</p>'
+
+
+def _legend_table_html(
+    series_meta: list[dict],
+    varying_keys: list[str],
+    pretty_map: dict,
+    multi_metric: bool,
+) -> str:
+    """Color-coded table legend replacing Chart.js's built-in legend for multi-key plots."""
+    if not series_meta or not varying_keys:
+        return ""
+    header_cells = "<th></th>"
+    if multi_metric:
+        header_cells += "<th>metric</th>"
+    for k in varying_keys:
+        header_cells += f"<th>{_resolve_metric(pretty_map, k)}</th>"
+    body_rows = ""
+    for s in series_meta:
+        color = s["color"]
+        swatch = (
+            f'<span style="display:inline-block;width:13px;height:13px;'
+            f'border-radius:3px;background:{color};vertical-align:middle"></span>'
+        )
+        cells = f'<td style="text-align:center;border-right:none">{swatch}</td>'
+        if multi_metric:
+            cells += f"<td>{_resolve_metric(pretty_map, s['metric'])}</td>"
+        for k in varying_keys:
+            cells += f"<td>{s['vals'].get(k, '')}</td>"
+        body_rows += f"<tr>{cells}</tr>"
+    return (
+        f'<div class="legend-wrap table-wrap">'
+        f'<table><thead><tr>{header_cells}</tr></thead>'
+        f'<tbody>{body_rows}</tbody>'
+        f'</table></div>'
+    )
+
+
 def generate_html(
     rows: list[dict[str, Any]],
     path: Path,
@@ -106,10 +170,15 @@ def generate_html(
         display_name = _resolve_metric(pretty_map, metric)
         safe = _safe_id(metric)
 
-        if group_by:
-            labels = [" / ".join(str(r.get(g, "")) for g in group_by) for r in metric_rows]
+        static_vars, varying_keys = _split_group_by_vars(metric_rows, group_by)
+        label_keys = varying_keys if varying_keys else group_by
+
+        if label_keys:
+            labels = [" / ".join(str(r.get(g, "")) for g in label_keys) for r in metric_rows]
         else:
             labels = ["all"] * len(metric_rows)
+
+        fixed_html = _fixed_vars_html(static_vars, pretty_map)
 
         datasets = [
             {
@@ -126,6 +195,7 @@ def generate_html(
         sections.append(f"""
   <section>
     <h2>{display_name}</h2>
+    {fixed_html}
     <div class="chart-wrap"><canvas id="chart-{safe}"></canvas></div>
     {_table_html(metric_rows, all_headers)}
   </section>""")
@@ -180,23 +250,36 @@ def generate_plots_html(
             metrics = plot.y
 
         rows = query.compute_rows(results_dir, group_by=group_by, metrics=metrics)
+        static_vars, varying_keys = _split_group_by_vars(rows, gb_keys)
+        multi_metric = len(plot.y) > 1
 
         if plot.type == "scatter":
-            chart_config = _build_scatter_config(plot, rows, pretty_map, group_by=gb_keys)
+            chart_config, series_meta = _build_scatter_config(
+                plot, rows, pretty_map, group_by=gb_keys, varying_keys=varying_keys,
+            )
         elif plot.type in ("bar", "stacked-bar"):
-            chart_config = _build_bar_or_line_config(
+            chart_config, series_meta = _build_bar_or_line_config(
                 plot, rows, pretty_map,
                 chart_type="bar",
                 stacked=(plot.type == "stacked-bar"),
                 group_by=gb_keys,
+                varying_keys=varying_keys,
             )
         elif plot.type == "line":
-            chart_config = _build_bar_or_line_config(
+            chart_config, series_meta = _build_bar_or_line_config(
                 plot, rows, pretty_map, chart_type="line", stacked=False,
                 group_by=gb_keys,
+                varying_keys=varying_keys,
             )
         else:
             continue
+
+        use_table_legend = bool(varying_keys)
+        if use_table_legend:
+            chart_config["options"]["plugins"]["legend"] = {"display": False}
+
+        fixed_html = _fixed_vars_html(static_vars, pretty_map)
+        legend_html = _legend_table_html(series_meta, varying_keys, pretty_map, multi_metric)
 
         safe = _safe_id(plot.id)
         title = plot.title or plot.id
@@ -205,6 +288,8 @@ def generate_plots_html(
   <section>
     <h2>{title}</h2>
     <p class="meta">type: {plot.type}</p>
+    {fixed_html}
+    {legend_html}
     <div class="chart-wrap"><canvas id="chart-{safe}"></canvas></div>
     {_table_html(rows, table_headers)}
   </section>""")
@@ -219,45 +304,54 @@ def generate_plots_html(
 
 def _build_bar_or_line_config(
     plot, rows: list[dict], pretty_map: dict, *, chart_type: str, stacked: bool,
-    group_by: list[str],
-) -> dict:
+    group_by: list[str], varying_keys: list[str],
+) -> tuple[dict, list[dict]]:
     x_values_raw = sorted({str(r.get(plot.x, "")) for r in rows})
     if chart_type == "line":
         x_values = _try_numeric_sort(x_values_raw)
     else:
         x_values = x_values_raw
 
+    # Label uses only varying keys (omits static ones); falls back to all group_by if none vary.
+    label_keys = varying_keys if varying_keys else group_by
+
     indexed: dict[tuple, float | None] = {}
-    series_keys: list[tuple] = []
+    series_keys: list[tuple] = []  # (metric, gb_tuple)
     seen: set[tuple] = set()
     for r in rows:
         x_val = str(r.get(plot.x, ""))
-        gb_val = " / ".join(str(r.get(k, "")) for k in group_by) if group_by else None
+        gb_tuple = tuple(str(r.get(k, "")) for k in group_by) if group_by else ()
         metric = r.get("metric")
-        key = (metric, gb_val)
+        key = (metric, gb_tuple)
         if key not in seen:
             seen.add(key)
             series_keys.append(key)
-        indexed[(x_val, metric, gb_val)] = r.get("mean")
+        indexed[(x_val, metric, gb_tuple)] = r.get("mean")
 
     datasets = []
-    for i, (metric, gb_val) in enumerate(series_keys):
+    series_meta = []
+    for i, (metric, gb_tuple) in enumerate(series_keys):
+        color = _color(i)
+        vals = dict(zip(group_by, gb_tuple)) if group_by else {}
+        varying_parts = [str(vals[k]) for k in label_keys if k in vals]
         label_parts = [_resolve_metric(pretty_map, metric)]
-        if gb_val is not None:
-            label_parts.append(gb_val)
+        if varying_parts:
+            label_parts.append(" / ".join(varying_parts))
         label = " / ".join(label_parts)
-        data = [indexed.get((x, metric, gb_val)) for x in x_values]
+
+        data = [indexed.get((x, metric, gb_tuple)) for x in x_values]
         ds = {
             "label": label,
             "data": data,
-            "backgroundColor": _color(i),
-            "borderColor": _color(i),
+            "backgroundColor": color,
+            "borderColor": color,
             "borderWidth": 1,
         }
         if chart_type == "line":
             ds["fill"] = False
             ds["tension"] = 0.1
         datasets.append(ds)
+        series_meta.append({"metric": metric, "vals": vals, "color": color})
 
     options: dict = {
         "responsive": True,
@@ -275,29 +369,42 @@ def _build_bar_or_line_config(
         "type": chart_type,
         "data": {"labels": x_values, "datasets": datasets},
         "options": options,
-    }
+    }, series_meta
 
 
-def _build_scatter_config(plot, rows: list[dict], pretty_map: dict, *, group_by: list[str]) -> dict:
-    groups: dict[str, dict[str, float | None]] = {}
+def _build_scatter_config(
+    plot, rows: list[dict], pretty_map: dict, *, group_by: list[str], varying_keys: list[str],
+) -> tuple[dict, list[dict]]:
+    label_keys = varying_keys if varying_keys else group_by
+
+    groups: dict[tuple, dict[str, float | None]] = {}
+    group_vals: dict[tuple, dict[str, str]] = {}
     for r in rows:
-        gb = " / ".join(str(r.get(k, "")) for k in group_by) if group_by else "all"
-        groups.setdefault(gb, {})[str(r.get("metric"))] = r.get("mean")
+        gb_tuple = tuple(str(r.get(k, "")) for k in group_by) if group_by else ("all",)
+        vals = dict(zip(group_by, gb_tuple)) if group_by else {}
+        groups.setdefault(gb_tuple, {})[str(r.get("metric"))] = r.get("mean")
+        group_vals[gb_tuple] = vals
 
     datasets = []
+    series_meta = []
     y_metric = plot.y[0]
-    for i, (gb_val, by_metric) in enumerate(groups.items()):
+    for i, (gb_tuple, by_metric) in enumerate(groups.items()):
         x_val = by_metric.get(plot.x)
         y_val = by_metric.get(y_metric)
         if x_val is None or y_val is None:
             continue
+        color = _color(i)
+        vals = group_vals.get(gb_tuple, {})
+        varying_parts = [str(vals[k]) for k in label_keys if k in vals]
+        label = " / ".join(varying_parts) if varying_parts else "all"
         datasets.append({
-            "label": gb_val,
+            "label": label,
             "data": [{"x": x_val, "y": y_val}],
-            "backgroundColor": _color(i),
-            "borderColor": _color(i),
+            "backgroundColor": color,
+            "borderColor": color,
             "pointRadius": 6,
         })
+        series_meta.append({"metric": y_metric, "vals": vals, "color": color})
 
     return {
         "type": "scatter",
@@ -310,4 +417,4 @@ def _build_scatter_config(plot, rows: list[dict], pretty_map: dict, *, group_by:
                 "y": {"title": {"display": True, "text": _resolve_metric(pretty_map, y_metric)}},
             },
         },
-    }
+    }, series_meta
