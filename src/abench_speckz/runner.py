@@ -290,7 +290,7 @@ def execute_sweep(
                     if is_warmup:
                         tags.append("warmup")
                     row = _make_row(
-                        entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
+                        run_id=str(uuid.uuid4()), entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
                         command="<not-run>", result=None, parsed={}, failure_reason=sweep_setup_failure,
                     )
                     store.append_run(results_dir, row)
@@ -428,13 +428,14 @@ def _execute_one_rep(
     """Run one rep end-to-end (per_rep setup → tool → per_rep teardown) and
     return the row dict. Does NOT append to runs.jsonl — the caller appends
     after optionally folding in a per_sweep_teardown failure."""
+    run_id = str(uuid.uuid4())
     ch = config_hash(entry["vars"])
     tags = list(entry.get("tags") or [])
     if is_warmup:
         tags.append("warmup")
 
     env_file = manifest_dir / entry["filename"]
-    combo_vars = {**entry["vars"], "_envfile": str(env_file.resolve())}
+    combo_vars = {**entry["vars"], "_envfile": str(env_file.resolve()), "_run_id": run_id}
 
     try:
         cmd = interpolate.resolve_string(tool.command, combo_vars, env=os.environ)
@@ -469,13 +470,13 @@ def _execute_one_rep(
                 "teardown", tool.teardown, combo_vars, env, tool.setup_timeout_seconds,
             )
         row = _make_row(
-            entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
+            run_id=run_id, entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
             command=cmd, result=None, parsed={}, failure_reason=setup_failure,
         )
         raw_path = store.write_raw_run(
             results_dir, row["run_id"],
             _build_raw(result=None, output_file_record=None,
-                       setup=setup_steps, teardown=teardown_steps),
+                       setup=setup_steps, teardown=teardown_steps, post_run=[]),
         )
         row["raw_output_path"] = str(raw_path.relative_to(results_dir))
         return row
@@ -490,6 +491,20 @@ def _execute_one_rep(
             teardown_failure, teardown_steps = run_phase(
                 "teardown", tool.teardown, combo_vars, env, tool.setup_timeout_seconds,
             )
+
+    post_run_failure: str | None = None
+    post_run_steps: list[dict[str, Any]] = []
+    if tool.post_run:
+        post_run_vars = {
+            **combo_vars,
+            "_started_at": result.started_at,
+            "_finished_at": result.finished_at,
+            "_duration_ms": str(result.duration_ms),
+            "_exit_code": str(result.exit_code),
+        }
+        post_run_failure, post_run_steps = run_phase(
+            "post_run", tool.post_run, post_run_vars, env, tool.setup_timeout_seconds,
+        )
 
     parsed: dict[str, Any] = {}
     extract_failure: str | None = None
@@ -513,17 +528,19 @@ def _execute_one_rep(
     failure_reason = result.failure_reason or extract_failure
     if teardown_failure:
         failure_reason = f"{failure_reason}; {teardown_failure}" if failure_reason else teardown_failure
+    if post_run_failure:
+        failure_reason = f"{failure_reason}; {post_run_failure}" if failure_reason else post_run_failure
 
     row = _make_row(
-        entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
+        run_id=run_id, entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
         command=cmd, result=result, parsed=parsed, failure_reason=failure_reason,
     )
 
-    if keep_raw or extract_failure or result.exit_code != 0 or teardown_failure:
+    if keep_raw or extract_failure or result.exit_code != 0 or teardown_failure or post_run_failure:
         raw_path = store.write_raw_run(
             results_dir, row["run_id"],
             _build_raw(result=result, output_file_record=output_file_record,
-                       setup=setup_steps, teardown=teardown_steps),
+                       setup=setup_steps, teardown=teardown_steps, post_run=post_run_steps),
         )
         row["raw_output_path"] = str(raw_path.relative_to(results_dir))
 
@@ -576,6 +593,7 @@ def _build_raw(
     output_file_record: dict[str, Any] | None,
     setup: list[dict[str, Any]],
     teardown: list[dict[str, Any]],
+    post_run: list[dict[str, Any]],
 ) -> dict[str, Any]:
     raw: dict[str, Any] = {
         "stdout": result.stdout if result is not None else "",
@@ -587,12 +605,14 @@ def _build_raw(
         raw["setup"] = setup
     if teardown:
         raw["teardown"] = teardown
+    if post_run:
+        raw["post_run"] = post_run
     return raw
 
 
-def _make_row(*, entry, ch, tags, tool: ToolSpec, tool_version, command, result, parsed, failure_reason):
+def _make_row(*, run_id, entry, ch, tags, tool: ToolSpec, tool_version, command, result, parsed, failure_reason):
     row = {
-        "run_id": str(uuid.uuid4()),
+        "run_id": run_id,
         "config_hash": ch,
         "vars": {k: str(v) for k, v in entry["vars"].items()},
         "tags": tags,

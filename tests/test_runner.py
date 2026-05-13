@@ -812,3 +812,103 @@ setup:
     written = out_file.read_text().strip()
     assert written.endswith(".env")
     assert Path(written).exists()
+
+
+# ---------------------------------------------------------------------------
+# post_run phase
+# ---------------------------------------------------------------------------
+
+def test_post_run_receives_result_vars(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    sidecar = tmp_path / "post_run_vars.txt"
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+post_run:
+  - "python -c \\"import sys; open('{sidecar}', 'w').write(','.join(sys.argv[1:]))\\" ${{_exit_code}} ${{_run_id}} ${{_started_at}} ${{_finished_at}} ${{_duration_ms}}"
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    parts = sidecar.read_text().strip().split(",")
+    assert parts[0] == "0"          # _exit_code
+    assert len(parts[1]) == 36      # _run_id is a UUID
+    assert "T" in parts[2]          # _started_at is ISO timestamp
+    assert "T" in parts[3]          # _finished_at is ISO timestamp
+    assert parts[4].isdigit()       # _duration_ms
+
+
+def test_post_run_runs_on_benchmark_failure(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    sidecar = tmp_path / "post_run_exit_code.txt"
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python -c \\"import sys; sys.exit(1)\\""
+timeout_seconds: 10
+post_run:
+  - "python -c \\"open('{sidecar}', 'w').write('${{_exit_code}}')\\"  "
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    assert sidecar.read_text().strip() == "1"
+
+
+def test_post_run_run_id_matches_runs_jsonl(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    sidecar = tmp_path / "run_id.txt"
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+post_run:
+  - "python -c \\"open('{sidecar}', 'w').write('${{_run_id}}')\\"  "
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    runs = store.read_runs(results)
+    assert len(runs) == 1
+    assert runs[0]["run_id"] == sidecar.read_text().strip()
+
+
+def test_post_run_steps_in_raw_output(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+post_run:
+  - "python -c \\"print('collected')\\"  "
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1, keep_raw=True,
+    )
+    runs = store.read_runs(results)
+    raw = store.load_raw_run(results, runs[0]["run_id"])
+    assert "post_run" in raw
+    assert raw["post_run"][0]["exit_code"] == 0
+    assert "collected" in raw["post_run"][0]["stdout"]

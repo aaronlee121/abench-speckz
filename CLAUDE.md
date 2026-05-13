@@ -53,7 +53,7 @@ Profiles overlay the base spec (variables, static, when, exclude are merged); `d
 - Writes to `runs.jsonl` (one JSON line per run) and updates `aggregates.jsonl` after each run
 - Results directory is protected by a `flock` during the sweep
 
-**Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `output_file` (read extraction input from a file the tool writes instead of stdout), `output_format` (`json` default, or `jsonl` for one object per line), `pretty_names`, `units`, `higher_is_better`, `plots` (declarative Chart.js plot definitions consumed by `stats --report`), `env_probes` (mapping of key → shell command run once at sweep start; stdout captured into `env.snapshot.json` under `"probes"`), `setup` / `teardown` (per-rep shell steps), `setup_timeout_seconds` (per-step timeout, default 120).
+**Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `output_file` (read extraction input from a file the tool writes instead of stdout), `output_format` (`json` default, or `jsonl` for one object per line), `pretty_names`, `units`, `higher_is_better`, `plots` (declarative Chart.js plot definitions consumed by `stats --report`), `env_probes` (mapping of key → shell command run once at sweep start; stdout captured into `env.snapshot.json` under `"probes"`), `setup` / `teardown` (per-rep shell steps), `post_run` (per-rep shell steps that run after teardown with access to run-result vars; see below), `setup_timeout_seconds` (per-step timeout, default 120).
 
 **Plot fields:** Each entry in `plots` has: `id` (unique string), `type` (`bar`, `stacked-bar`, `line`, `scatter`), `x` (variable name for the x-axis, or a metric name for `scatter`), `y` (metric name or list of metric names; `scatter` requires exactly one, `stacked-bar` requires at least two), `title` (optional display title), `group_by` (optional variable name or list of variable names — see below).
 
@@ -118,4 +118,10 @@ results/
 `${var}` references other combo vars; `${env:VAR}` reads from the process environment. Resolved iteratively up to 16 times to support chained references. Use `$$` to escape a literal `$`.
 
 Built-in synthetic variables (injected per-rep, not user-definable):
-- `${_envfile}` — absolute path to the current combo's env file. Available in `command`, `setup`, `teardown`, and `output_file`. Variable names starting with `_` are reserved and rejected in spec YAML.
+- `${_envfile}` — absolute path to the current combo's env file. Available in `command`, `setup`, `teardown`, `post_run`, and `output_file`.
+- `${_run_id}` — UUID for this rep (same value written to `runs.jsonl`). Available in `command`, `setup`, `teardown`, and `post_run`.
+- `${_exit_code}`, `${_started_at}`, `${_finished_at}`, `${_duration_ms}` — benchmark result fields. Available in `post_run` only (result isn't known earlier).
+
+Variable names starting with `_` are reserved and rejected in spec YAML.
+
+**`post_run`** steps run after `teardown` completes, always — including when the benchmark exits non-zero. The extra synthetic vars let scripts collect time-windowed metrics from external systems (Prometheus, InfluxDB, etc.) keyed to the exact run. `post_run` failure is folded into `failure_reason` but does not suppress the benchmark result. Step records are stored in `raw/{run_id}.json` under `"post_run"`.

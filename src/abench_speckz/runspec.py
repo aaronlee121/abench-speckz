@@ -19,6 +19,7 @@ class ToolSpec:
     env_probes: dict[str, str] = field(default_factory=dict)
     setup: list[str] = field(default_factory=list)
     teardown: list[str] = field(default_factory=list)
+    post_run: list[str] = field(default_factory=list)
     setup_timeout_seconds: int = 120
     setup_per_sweep: list[str] = field(default_factory=list)
     teardown_per_sweep: list[str] = field(default_factory=list)

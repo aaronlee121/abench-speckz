@@ -12,7 +12,7 @@ _FIELDS = {
     "name", "command", "timeout_seconds", "version_command",
     "capture", "parser", "output_file", "output_format", "pretty_names", "units", "higher_is_better",
     "plots", "env_probes",
-    "setup", "teardown", "setup_timeout_seconds",
+    "setup", "teardown", "post_run", "setup_timeout_seconds",
     "setup_per_sweep", "teardown_per_sweep", "per_sweep_var",
 }
 
@@ -75,6 +75,7 @@ def load_tool(path: str | Path) -> ToolSpec:
 
     setup = _load_phase(raw, path, "setup")
     teardown = _load_phase(raw, path, "teardown")
+    post_run = _load_phase(raw, path, "post_run")
     setup_per_sweep = _load_phase(raw, path, "setup_per_sweep")
     teardown_per_sweep = _load_phase(raw, path, "teardown_per_sweep")
 
@@ -102,6 +103,7 @@ def load_tool(path: str | Path) -> ToolSpec:
         env_probes=dict(env_probes),
         setup=setup,
         teardown=teardown,
+        post_run=post_run,
         setup_timeout_seconds=setup_timeout,
         setup_per_sweep=setup_per_sweep,
         teardown_per_sweep=teardown_per_sweep,

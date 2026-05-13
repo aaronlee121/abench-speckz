@@ -117,7 +117,16 @@ default_profile: smoke
 
 **Interpolation:** use `${var}` to reference other variables and `${env:VAR}` to read from the process environment. Use `$$` for a literal `$`.
 
-Variable names starting with `_` are reserved and will be rejected at load time. The built-in `${_envfile}` variable is available in tool `command`, `setup`, and `teardown` fields — it resolves to the absolute path of the current combo's env file.
+Variable names starting with `_` are reserved and will be rejected at load time. Built-in synthetic variables:
+
+| Variable | Available in | Description |
+|---|---|---|
+| `${_envfile}` | `command`, `setup`, `teardown`, `post_run`, `output_file` | Absolute path to the current combo's env file |
+| `${_run_id}` | `command`, `setup`, `teardown`, `post_run` | UUID for this rep — same value written to `runs.jsonl` |
+| `${_exit_code}` | `post_run` | Benchmark exit code |
+| `${_started_at}` | `post_run` | ISO timestamp when the benchmark started |
+| `${_finished_at}` | `post_run` | ISO timestamp when the benchmark finished |
+| `${_duration_ms}` | `post_run` | Wall-clock duration in milliseconds |
 
 Profiles overlay the base spec — variables, static, when, and exclude lists are merged. The `default_profile` is used when `--profile` is not specified.
 
@@ -166,7 +175,12 @@ setup:
   - "sleep 1"
 teardown:
   - "docker compose down -v"
-setup_timeout_seconds: 120   # per-step timeout for setup/teardown (default 120)
+setup_timeout_seconds: 120   # per-step timeout for setup/teardown/post_run (default 120)
+
+# optional: shell steps run after teardown, always (even on benchmark failure)
+# receives run-result vars: ${_run_id}, ${_exit_code}, ${_started_at}, ${_finished_at}, ${_duration_ms}
+post_run:
+  - "prom-query.sh ${_started_at} ${_finished_at} ${_run_id}"
 
 # optional: declarative plots used by `stats --report`
 plots:
@@ -237,10 +251,11 @@ Negation is resolved at report time against the actual variable names in `aggreg
 }
 ```
 
-**Setup / teardown.** Each rep is wrapped `setup → command → teardown`. Teardown runs in a `finally` block, so it also fires on benchmark failure or `Ctrl-C`. Combo vars (`${var}`), `${_envfile}`, and `${env:VAR}` interpolate in setup/teardown commands. Steps are split with `shlex.split` and executed without a shell, so chain via multiple list entries rather than `&&`.
+**Setup / teardown / post_run.** Each rep follows the sequence `setup → command → teardown → post_run`. Teardown runs in a `finally` block, so it fires even on benchmark failure or `Ctrl-C`. Combo vars (`${var}`), `${_envfile}`, `${_run_id}`, and `${env:VAR}` interpolate in all three phases. Steps are split with `shlex.split` and executed without a shell, so chain via multiple list entries rather than `&&`.
 
-- Setup failure → the command is skipped, teardown still runs best-effort, and `failure_reason` is recorded as `setup[i]: …`.
-- Teardown failure → the benchmark's `exit_code` and metrics are preserved, but `teardown[i]: …` is appended to `failure_reason` (so the run is counted as failed).
+- Setup failure → the command is skipped, teardown still runs best-effort, `post_run` is skipped, and `failure_reason` is recorded as `setup[i]: …`.
+- Teardown failure → the benchmark's `exit_code` and metrics are preserved, but `teardown[i]: …` is appended to `failure_reason`.
+- `post_run` → runs after teardown completes, always — including when the benchmark exits non-zero. In addition to combo vars, it receives `${_exit_code}`, `${_started_at}`, `${_finished_at}`, and `${_duration_ms}`. Useful for collecting time-windowed metrics from external systems (Prometheus, InfluxDB, etc.) keyed to the exact run via `${_run_id}`. `post_run` failure is appended to `failure_reason` but does not suppress the benchmark result or its metrics.
 
 **Sweep-scoped setup / teardown.** `setup_per_sweep` and `teardown_per_sweep` run *outside* the per-rep loop, useful for expensive prep like seeding a database. By default each fires exactly once for the whole sweep. Set `per_sweep_var: <name>` to scope each fire to a single variable: combos are stably grouped by that variable's value, and the phases fire once per distinct value (around the reps for that group).
 
@@ -261,7 +276,7 @@ per_sweep_var:      workload                    # optional; one var only
 
 - `stdout`, `stderr` — the tool's own streams (always present).
 - `output_file` — `{path, content}` when `output_file` is configured in the tool YAML, so the tool's stdout/stderr stay separate from the file content used for extraction.
-- `setup`, `teardown` — one entry per step that ran, each with `command`, `exit_code`, `stdout`, `stderr`.
+- `setup`, `teardown`, `post_run` — one entry per step that ran, each with `command`, `exit_code`, `stdout`, `stderr`.
 
 ## Results directory layout
 
@@ -275,7 +290,7 @@ results/
   pretty_names.json       # merged metric display names
   raw/{run_id}.json       # structured raw record (see below); written with
                           # --keep-raw, on extract failure, on tool failure,
-                          # or when setup/teardown failed
+                          # or when setup/teardown/post_run failed
   raw/sweep[-{slug}].json # per_sweep setup/teardown records; written on
                           # --keep-raw or any per_sweep phase failure
 ```
