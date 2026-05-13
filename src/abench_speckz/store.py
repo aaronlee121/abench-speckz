@@ -124,9 +124,9 @@ def _maybe_spill(content: str, sidecar_path: Path, results_dir: Path) -> "str | 
 def _spill_phases(
     doc: dict[str, Any], base_name: str, raw_dir: Path, results_dir: Path
 ) -> dict[str, Any]:
-    """Spill stdout/stderr in setup/teardown step lists. Returns a new dict."""
+    """Spill stdout/stderr in setup/teardown/post_run step lists. Returns a new dict."""
     doc = dict(doc)
-    for phase in ("setup", "teardown"):
+    for phase in ("setup", "teardown", "post_run"):
         if not isinstance(doc.get(phase), list):
             continue
         steps = []
@@ -235,6 +235,26 @@ def snapshot_tool(results_dir: Path, tool_path: Path, tool_name: str) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(tool_path, target)
     return target
+
+
+def read_combo_probes(results_dir: Path) -> dict[str, dict[str, Any]]:
+    path = results_dir / "combo_probes.json"
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text())
+
+
+def write_combo_probes_atomic(results_dir: Path, probes: dict[str, dict[str, Any]]) -> None:
+    target = results_dir / "combo_probes.json"
+    tmp = target.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(probes, indent=2, sort_keys=True) + "\n")
+    os.rename(tmp, target)
+
+
+def update_combo_probes(results_dir: Path, config_hash: str, probe_results: dict[str, Any]) -> None:
+    existing = read_combo_probes(results_dir)
+    existing[config_hash] = probe_results
+    write_combo_probes_atomic(results_dir, existing)
 
 
 def write_env_snapshot(results_dir: Path, env: dict[str, Any]) -> Path:

@@ -169,6 +169,13 @@ env_probes:
   cpu:          "sysctl -n machdep.cpu.brand_string"
   redis_version: "redis-cli --version"
 
+# optional: run once per unique config hash (before the first rep for that combo);
+# commands may reference combo vars. Results stored in combo_probes.json and
+# embedded in every runs.jsonl row under "combo_probes".
+combo_probes:
+  effective_maxmemory: "redis-cli -p ${PORT} CONFIG GET maxmemory"
+  row_count:           "psql ${DSN} -tAc 'SELECT count(*) FROM events'"
+
 # optional: shell steps run around every rep (warmup and measured)
 setup:
   - "docker compose up -d redis"
@@ -239,6 +246,8 @@ Negation is resolved at report time against the actual variable names in `aggreg
 
 **`env_probes`.** A mapping of key → shell command run **once** at the very start of the sweep (before any rep). The trimmed stdout of each command is stored in `env.snapshot.json` under `"probes"`. A non-zero exit code or missing command stores `null` for that key — probes never abort a sweep.
 
+**`combo_probes`.** A mapping of key → command template run **once per unique config hash**, before the first rep for that combo (after per-sweep setup). Commands interpolate combo vars (`${var}`, `${_envfile}`, `${env:VAR}`). Results are stored in two places: `combo_probes.json` (keyed by config hash) and embedded in every `runs.jsonl` row under `"combo_probes"`. Non-zero exit, missing command, timeout, or interpolation error stores `null` — probes never abort a sweep. Useful for capturing system or service state that varies per combo (e.g. effective DB config after per-sweep setup seeded a different dataset, kernel tuning parameters set per workload).
+
 ```json
 // env.snapshot.json (excerpt)
 {
@@ -287,6 +296,7 @@ results/
   manifest.snapshot.json  # copy of the manifest used
   tools/{name}.yaml       # copy of the tool YAML used
   env.snapshot.json       # host info (OS, CPU, git SHA) + env_probes results under "probes"
+  combo_probes.json       # combo_probes results keyed by config hash
   pretty_names.json       # merged metric display names
   raw/{run_id}.json       # structured raw record (see below); written with
                           # --keep-raw, on extract failure, on tool failure,

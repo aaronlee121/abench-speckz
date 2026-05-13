@@ -912,3 +912,104 @@ post_run:
     assert "post_run" in raw
     assert raw["post_run"][0]["exit_code"] == 0
     assert "collected" in raw["post_run"][0]["stdout"]
+
+
+# ---------------------------------------------------------------------------
+# combo_probes
+# ---------------------------------------------------------------------------
+
+def test_combo_probes_results_in_runs_jsonl(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+combo_probes:
+  workload_echo: "python -c \\"import sys; print(sys.argv[1])\\" ${{workload}}"
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    runs = store.read_runs(results)
+    assert runs[0]["combo_probes"] == {"workload_echo": "read"}
+
+
+def test_combo_probes_stored_in_combo_probes_json(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}, {"workload": "write"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+combo_probes:
+  workload_echo: "python -c \\"import sys; print(sys.argv[1])\\" ${{workload}}"
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    probes = store.read_combo_probes(results)
+    assert len(probes) == 2
+    values = {v["workload_echo"] for v in probes.values()}
+    assert values == {"read", "write"}
+
+
+def test_combo_probes_run_once_per_hash_not_per_rep(tmp_path):
+    counter_file = tmp_path / "count.txt"
+    counter_file.write_text("0")
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+combo_probes:
+  count: "python -c \\"c=int(open('{counter_file}').read())+1; open('{counter_file}','w').write(str(c)); print(c)\\""
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=3,
+    )
+    # Probe ran once; all 3 reps share the same probe result
+    assert counter_file.read_text() == "1"
+    runs = store.read_runs(results)
+    assert all(r["combo_probes"]["count"] == "1" for r in runs)
+
+
+def test_combo_probes_null_on_failure(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+combo_probes:
+  failing: "python -c \\"import sys; sys.exit(1)\\""
+  missing: "nonexistent-command-xyz"
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    runs = store.read_runs(results)
+    assert runs[0]["combo_probes"] == {"failing": None, "missing": None}
+    # Benchmark still ran despite probe failures
+    assert runs[0]["exit_code"] == 0

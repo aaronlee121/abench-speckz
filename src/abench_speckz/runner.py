@@ -72,6 +72,34 @@ def collect_env_metadata() -> dict[str, Any]:
     return info
 
 
+def collect_combo_probe_results(
+    probes: dict[str, str],
+    vars_: dict[str, Any],
+    env: dict[str, str],
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    """Run combo-scoped probe commands once per unique config hash.
+
+    Commands are interpolated against combo vars before execution. Non-zero
+    exit, missing command, timeout, or interpolation failure stores None for
+    that key — probes never abort a sweep.
+    """
+    results: dict[str, Any] = {}
+    for key, template in probes.items():
+        try:
+            command = interpolate.resolve_string(template, vars_, env=env)
+            result = subprocess.run(
+                shlex.split(command),
+                env=env,
+                capture_output=True, text=True,
+                timeout=timeout_seconds, check=False,
+            )
+            results[key] = result.stdout.strip() if result.returncode == 0 else None
+        except Exception:
+            results[key] = None
+    return results
+
+
 def collect_probe_results(env_probes: dict[str, str], timeout_seconds: int) -> dict[str, Any]:
     """Run each probe command once and return key → stripped stdout (or None on failure)."""
     results: dict[str, Any] = {}
@@ -248,6 +276,8 @@ def execute_sweep(
         sweep_idx = 0
         t_sweep = time.monotonic()
         base_env = {**os.environ}
+        probed_hashes: set[str] = set()
+        combo_probe_cache: dict[str, dict[str, Any]] = {}
 
         for group_key, items in groups:
             group_slug = slug_mod.slug(group_key) if (tool.per_sweep_var and group_key is not None) else None
@@ -292,6 +322,7 @@ def execute_sweep(
                     row = _make_row(
                         run_id=str(uuid.uuid4()), entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
                         command="<not-run>", result=None, parsed={}, failure_reason=sweep_setup_failure,
+                        probe_results={},
                     )
                     store.append_run(results_dir, row)
                     store.update_aggregates_for_hash(results_dir, ch)
@@ -309,11 +340,25 @@ def execute_sweep(
                         skipped += 1
                         _progress(progress_stream, sweep_idx, total, t_sweep, "skip", ch)
                         continue
+                    if tool.combo_probes and ch not in probed_hashes:
+                        env_file = manifest_dir / entry["filename"]
+                        probe_vars = {**entry["vars"], "_envfile": str(env_file.resolve())}
+                        probe_env = (
+                            {**os.environ, **load_envfile(env_file)} if env_file.exists()
+                            else {**os.environ, **{k: str(v) for k, v in entry["vars"].items()}}
+                        )
+                        combo_probe_cache[ch] = collect_combo_probe_results(
+                            tool.combo_probes, probe_vars, probe_env, tool.setup_timeout_seconds,
+                        )
+                        store.update_combo_probes(results_dir, ch, combo_probe_cache[ch])
+                        probed_hashes.add(ch)
+
                     try:
                         row = _execute_one_rep(
                             entry=entry, is_warmup=is_warmup, tool=tool, tool_version=tool_version,
                             manifest_dir=manifest_dir, results_dir=results_dir,
                             executor=executor, keep_raw=keep_raw,
+                            probe_results=combo_probe_cache.get(ch, {}),
                         )
                     except KeyboardInterrupt:
                         _progress(progress_stream, sweep_idx, total, t_sweep, "INT", ch)
@@ -424,6 +469,7 @@ def _execute_one_rep(
     results_dir: Path,
     executor: Executor,
     keep_raw: bool,
+    probe_results: dict[str, Any],
 ) -> dict[str, Any]:
     """Run one rep end-to-end (per_rep setup → tool → per_rep teardown) and
     return the row dict. Does NOT append to runs.jsonl — the caller appends
@@ -441,8 +487,9 @@ def _execute_one_rep(
         cmd = interpolate.resolve_string(tool.command, combo_vars, env=os.environ)
     except Exception as e:
         return _make_row(
-            entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
+            run_id=run_id, entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
             command="<unresolved>", result=None, parsed={}, failure_reason=f"interpolation: {e}",
+            probe_results=probe_results,
         )
 
     env = (
@@ -472,6 +519,7 @@ def _execute_one_rep(
         row = _make_row(
             run_id=run_id, entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
             command=cmd, result=None, parsed={}, failure_reason=setup_failure,
+            probe_results=probe_results,
         )
         raw_path = store.write_raw_run(
             results_dir, row["run_id"],
@@ -534,6 +582,7 @@ def _execute_one_rep(
     row = _make_row(
         run_id=run_id, entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
         command=cmd, result=result, parsed=parsed, failure_reason=failure_reason,
+        probe_results=probe_results,
     )
 
     if keep_raw or extract_failure or result.exit_code != 0 or teardown_failure or post_run_failure:
@@ -610,7 +659,7 @@ def _build_raw(
     return raw
 
 
-def _make_row(*, run_id, entry, ch, tags, tool: ToolSpec, tool_version, command, result, parsed, failure_reason):
+def _make_row(*, run_id, entry, ch, tags, tool: ToolSpec, tool_version, command, result, parsed, failure_reason, probe_results):
     row = {
         "run_id": run_id,
         "config_hash": ch,
@@ -624,6 +673,7 @@ def _make_row(*, run_id, entry, ch, tags, tool: ToolSpec, tool_version, command,
         "started_at": result.started_at if result is not None else None,
         "finished_at": result.finished_at if result is not None else None,
         "results": parsed,
+        "combo_probes": probe_results,
         "failure_reason": failure_reason,
         "raw_output_path": None,
     }
