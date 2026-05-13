@@ -58,3 +58,38 @@ default_profile: p
     assert len(s.when) == 2
     assert s.when[0].set_["A"] == "base"
     assert s.when[1].set_["A"] == "profile"
+
+
+def test_underscore_variable_rejected(tmp_path):
+    p = tmp_path / "spec.yaml"
+    p.write_text("variables:\n  _myvar: [1, 2]\n")
+    with pytest.raises(SpecError, match="reserved"):
+        spec.load(p)
+
+
+def test_underscore_static_rejected(tmp_path):
+    p = tmp_path / "spec.yaml"
+    p.write_text("static:\n  _mykey: val\n")
+    with pytest.raises(SpecError, match="reserved"):
+        spec.load(p)
+
+
+def test_underscore_when_set_rejected(tmp_path):
+    p = tmp_path / "spec.yaml"
+    p.write_text(
+        "variables:\n  x: [1]\n"
+        "when:\n  - if: {x: 1}\n    set: {_synthetic: val}\n"
+    )
+    with pytest.raises(SpecError, match="reserved"):
+        spec.load(p)
+
+
+def test_underscore_in_profile_variable_rejected(tmp_path):
+    p = tmp_path / "spec.yaml"
+    p.write_text(
+        "variables:\n  x: [1]\n"
+        "profiles:\n  p:\n    variables:\n      _bad: [1]\n"
+        "default_profile: p\n"
+    )
+    with pytest.raises(SpecError, match="reserved"):
+        spec.load(p)

@@ -117,6 +117,8 @@ default_profile: smoke
 
 **Interpolation:** use `${var}` to reference other variables and `${env:VAR}` to read from the process environment. Use `$$` for a literal `$`.
 
+Variable names starting with `_` are reserved and will be rejected at load time.
+
 Profiles overlay the base spec — variables, static, when, and exclude lists are merged. The `default_profile` is used when `--profile` is not specified.
 
 ## Tool YAML format
@@ -124,6 +126,8 @@ Profiles overlay the base spec — variables, static, when, and exclude lists ar
 ```yaml
 name: oha
 command: "oha ${URL} -n ${REQUESTS} -c ${concurrency} --json"
+# ${_envfile} is a built-in variable: absolute path to the current combo's env file.
+# Example: docker run --env-file ${_envfile} myimage
 timeout_seconds: 300
 version_command: "oha --version"
 
@@ -209,7 +213,7 @@ plots:
 }
 ```
 
-**Setup / teardown.** Each rep is wrapped `setup → command → teardown`. Teardown runs in a `finally` block, so it also fires on benchmark failure or `Ctrl-C`. Combo vars (`${var}`) and `${env:VAR}` interpolate in setup/teardown commands. Steps are split with `shlex.split` and executed without a shell, so chain via multiple list entries rather than `&&`.
+**Setup / teardown.** Each rep is wrapped `setup → command → teardown`. Teardown runs in a `finally` block, so it also fires on benchmark failure or `Ctrl-C`. Combo vars (`${var}`), `${_envfile}`, and `${env:VAR}` interpolate in setup/teardown commands. Steps are split with `shlex.split` and executed without a shell, so chain via multiple list entries rather than `&&`.
 
 - Setup failure → the command is skipped, teardown still runs best-effort, and `failure_reason` is recorded as `setup[i]: …`.
 - Teardown failure → the benchmark's `exit_code` and metrics are preserved, but `teardown[i]: …` is appended to `failure_reason` (so the run is counted as failed).

@@ -60,7 +60,12 @@ def _extract_partial(node: dict[str, Any], source: str) -> Spec:
     if not isinstance(tags, list):
         raise SpecError(f"{source}.tags: must be a list")
 
+    for k in static:
+        if k.startswith("_"):
+            raise SpecError(f"{source}.static.{k}: variable names starting with '_' are reserved")
     for k, v in variables.items():
+        if k.startswith("_"):
+            raise SpecError(f"{source}.variables.{k}: variable names starting with '_' are reserved")
         if not isinstance(v, list):
             raise SpecError(f"{source}.variables.{k}: must be a list")
 
@@ -75,6 +80,9 @@ def _extract_partial(node: dict[str, Any], source: str) -> Spec:
             raise SpecError(f"{source}.when[{i}].if: must be a mapping")
         if not isinstance(set_, dict):
             raise SpecError(f"{source}.when[{i}].set: must be a mapping")
+        for k in set_:
+            if k.startswith("_"):
+                raise SpecError(f"{source}.when[{i}].set.{k}: variable names starting with '_' are reserved")
         if isinstance(tag, str):
             tag = [tag]
         if not isinstance(tag, list):

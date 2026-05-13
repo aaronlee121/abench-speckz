@@ -433,15 +433,17 @@ def _execute_one_rep(
     if is_warmup:
         tags.append("warmup")
 
+    env_file = manifest_dir / entry["filename"]
+    combo_vars = {**entry["vars"], "_envfile": str(env_file.resolve())}
+
     try:
-        cmd = interpolate.resolve_string(tool.command, entry["vars"], env=os.environ)
+        cmd = interpolate.resolve_string(tool.command, combo_vars, env=os.environ)
     except Exception as e:
         return _make_row(
             entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
             command="<unresolved>", result=None, parsed={}, failure_reason=f"interpolation: {e}",
         )
 
-    env_file = manifest_dir / entry["filename"]
     env = (
         {**os.environ, **load_envfile(env_file)} if env_file.exists()
         else {**os.environ, **{k: str(v) for k, v in entry["vars"].items()}}
@@ -457,14 +459,14 @@ def _execute_one_rep(
     setup_steps: list[dict[str, Any]] = []
     if tool.setup:
         setup_failure, setup_steps = run_phase(
-            "setup", tool.setup, entry["vars"], env, tool.setup_timeout_seconds,
+            "setup", tool.setup, combo_vars, env, tool.setup_timeout_seconds,
         )
 
     if setup_failure:
         teardown_steps: list[dict[str, Any]] = []
         if tool.teardown:
             _, teardown_steps = run_phase(
-                "teardown", tool.teardown, entry["vars"], env, tool.setup_timeout_seconds,
+                "teardown", tool.teardown, combo_vars, env, tool.setup_timeout_seconds,
             )
         row = _make_row(
             entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
@@ -486,7 +488,7 @@ def _execute_one_rep(
     finally:
         if tool.teardown:
             teardown_failure, teardown_steps = run_phase(
-                "teardown", tool.teardown, entry["vars"], env, tool.setup_timeout_seconds,
+                "teardown", tool.teardown, combo_vars, env, tool.setup_timeout_seconds,
             )
 
     parsed: dict[str, Any] = {}
@@ -496,7 +498,7 @@ def _execute_one_rep(
         output_for_extraction = result.stdout
         if tool.output_file:
             try:
-                out_path = interpolate.resolve_string(tool.output_file, entry["vars"], env=os.environ)
+                out_path = interpolate.resolve_string(tool.output_file, combo_vars, env=os.environ)
                 output_for_extraction = Path(out_path).read_text()
                 output_file_record = {"path": out_path, "content": output_for_extraction}
             except FileNotFoundError:

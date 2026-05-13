@@ -783,3 +783,32 @@ def test_env_probes_absent_when_not_configured(tmp_path):
     snapshot = json.loads((results / "env.snapshot.json").read_text())
     assert "probes" not in snapshot
 
+
+
+# ---------------------------------------------------------------------------
+# _envfile synthetic variable
+# ---------------------------------------------------------------------------
+
+def test_envfile_variable_available_in_command(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    # Command writes _envfile path to a sidecar so we can inspect it
+    out_file = tmp_path / "envfile_path.txt"
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+setup:
+  - "python -c \\"import sys; open('{out_file}', 'w').write(sys.argv[1])\\" ${{_envfile}}"
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    written = out_file.read_text().strip()
+    assert written.endswith(".env")
+    assert Path(written).exists()
