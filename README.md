@@ -117,7 +117,7 @@ default_profile: smoke
 
 **Interpolation:** use `${var}` to reference other variables and `${env:VAR}` to read from the process environment. Use `$$` for a literal `$`.
 
-Variable names starting with `_` are reserved and will be rejected at load time.
+Variable names starting with `_` are reserved and will be rejected at load time. The built-in `${_envfile}` variable is available in tool `command`, `setup`, and `teardown` fields — it resolves to the absolute path of the current combo's env file.
 
 Profiles overlay the base spec — variables, static, when, and exclude lists are merged. The `default_profile` is used when `--profile` is not specified.
 
@@ -271,7 +271,7 @@ results/
   aggregates.jsonl        # per-combo stats (n, mean, stddev, p50/95/99, CI95)
   manifest.snapshot.json  # copy of the manifest used
   tools/{name}.yaml       # copy of the tool YAML used
-  env.snapshot.json       # host info (OS, CPU, git SHA)
+  env.snapshot.json       # host info (OS, CPU, git SHA) + env_probes results under "probes"
   pretty_names.json       # merged metric display names
   raw/{run_id}.json       # structured raw record (see below); written with
                           # --keep-raw, on extract failure, on tool failure,

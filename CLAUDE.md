@@ -116,3 +116,6 @@ results/
 ### Interpolation
 
 `${var}` references other combo vars; `${env:VAR}` reads from the process environment. Resolved iteratively up to 16 times to support chained references. Use `$$` to escape a literal `$`.
+
+Built-in synthetic variables (injected per-rep, not user-definable):
+- `${_envfile}` — absolute path to the current combo's env file. Available in `command`, `setup`, `teardown`, and `output_file`. Variable names starting with `_` are reserved and rejected in spec YAML.

@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-12
+
+### Added
+
+- `env_probes` tool YAML field — a mapping of key → shell command run **once** at sweep start (before any rep). Trimmed stdout is stored in `env.snapshot.json` under `"probes"`. Non-zero exit or missing command stores `null`; probes never abort a sweep.
+- `${_envfile}` built-in variable — resolves to the absolute path of the current combo's env file. Available in tool `command`, `setup`, `teardown`, and `output_file` fields.
+- `group_by` in plot definitions now accepts a **list** of variable names in addition to a single string. Multiple keys are joined with ` / ` in the chart legend label (e.g. `group_by: [workload, backend]`).
+- Negation syntax for `group_by`: prefix a variable name with `!` to mean "all variables except this one" (e.g. `group_by: "!concurrency"`). Multiple negations are supported. Resolved at report time against the variable names present in `aggregates.jsonl`.
+
+### Changed
+
+- Variable names starting with `_` are now rejected at spec load time (`static`, `variables`, and `when[].set` keys). The `_` namespace is reserved for built-in synthetic variables such as `${_envfile}`.
+
 ## [0.2.1] - 2026-05-11
 
 ### Changed
