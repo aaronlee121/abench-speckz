@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "abench-speckz"
-version = "0.4.1"
+version = "0.4.2"
 description = "YAML-driven benchmark sweeps: generate env-file combinations, execute a tool across each, and query DuckDB-backed aggregate stats."
 readme = "README.md"
 license = {file = "LICENSE"}

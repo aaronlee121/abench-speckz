@@ -121,8 +121,8 @@ Variable names starting with `_` are reserved and will be rejected at load time.
 
 | Variable | Available in | Description |
 |---|---|---|
-| `${_envfile}` | `command`, `setup`, `teardown`, `post_run`, `output_file` | Absolute path to the current combo's env file |
-| `${_run_id}` | `command`, `setup`, `teardown`, `post_run` | UUID for this rep — same value written to `runs.jsonl` |
+| `${_envfile}` | `command`, `setup`, `teardown`, `post_run`, `monitor`, `output_file` | Absolute path to the current combo's env file |
+| `${_run_id}` | `command`, `setup`, `teardown`, `post_run`, `monitor` | UUID for this rep — same value written to `runs.jsonl` |
 | `${_exit_code}` | `post_run` | Benchmark exit code |
 | `${_started_at}` | `post_run` | ISO timestamp when the benchmark started |
 | `${_finished_at}` | `post_run` | ISO timestamp when the benchmark finished |
@@ -188,6 +188,13 @@ setup_timeout_seconds: 120   # per-step timeout for setup/teardown/post_run (def
 # receives run-result vars: ${_run_id}, ${_exit_code}, ${_started_at}, ${_finished_at}, ${_duration_ms}
 post_run:
   - "prom-query.sh ${_started_at} ${_finished_at} ${_run_id}"
+
+# optional: background processes launched before the benchmark command and
+# terminated after it completes (SIGTERM, then SIGKILL after 5s).
+# Interpolates combo vars including ${_envfile} and ${_run_id}.
+monitor:
+  - "python collect-metrics.py --run-id ${_run_id}"
+  - "perf stat -p $(cat service.pid)"
 
 # optional: declarative plots used by `stats --report`
 plots:
@@ -260,11 +267,18 @@ Negation is resolved at report time against the actual variable names in `aggreg
 }
 ```
 
-**Setup / teardown / post_run.** Each rep follows the sequence `setup → command → teardown → post_run`. Teardown runs in a `finally` block, so it fires even on benchmark failure or `Ctrl-C`. Combo vars (`${var}`), `${_envfile}`, `${_run_id}`, and `${env:VAR}` interpolate in all three phases. Steps are split with `shlex.split` and executed without a shell, so chain via multiple list entries rather than `&&`.
+**Setup / teardown / post_run / monitor.** The full per-rep lifecycle is:
 
-- Setup failure → the command is skipped, teardown still runs best-effort, `post_run` is skipped, and `failure_reason` is recorded as `setup[i]: …`.
+```
+setup  →  [monitor start]  →  command  →  [monitor stop]  →  teardown  →  post_run
+```
+
+Teardown runs in a `finally` block, so it fires even on benchmark failure or `Ctrl-C`. Combo vars (`${var}`), `${_envfile}`, `${_run_id}`, and `${env:VAR}` interpolate in all phases. Steps are split with `shlex.split` and executed without a shell, so chain via multiple list entries rather than `&&`.
+
+- Setup failure → the command is skipped, monitor is not started, teardown still runs best-effort, `post_run` is skipped, and `failure_reason` is recorded as `setup[i]: …`.
 - Teardown failure → the benchmark's `exit_code` and metrics are preserved, but `teardown[i]: …` is appended to `failure_reason`.
 - `post_run` → runs after teardown completes, always — including when the benchmark exits non-zero. In addition to combo vars, it receives `${_exit_code}`, `${_started_at}`, `${_finished_at}`, and `${_duration_ms}`. Useful for collecting time-windowed metrics from external systems (Prometheus, InfluxDB, etc.) keyed to the exact run via `${_run_id}`. `post_run` failure is appended to `failure_reason` but does not suppress the benchmark result or its metrics.
+- `monitor` → each command is launched as a background process immediately after setup succeeds. Processes receive SIGTERM once the benchmark command finishes; any that don't exit within 5 seconds receive SIGKILL. A monitor that fails to start is recorded but never aborts the run. Interpolates combo vars including `${_run_id}` and `${_envfile}`. Start and stop records are written to `raw/{run_id}.json` under `--keep-raw` or when any monitor fails to start.
 
 **Sweep-scoped setup / teardown.** `setup_per_sweep` and `teardown_per_sweep` run *outside* the per-rep loop, useful for expensive prep like seeding a database. By default each fires exactly once for the whole sweep. Set `per_sweep_var: <name>` to scope each fire to a single variable: combos are stably grouped by that variable's value, and the phases fire once per distinct value (around the reps for that group).
 
@@ -286,6 +300,8 @@ per_sweep_var:      workload                    # optional; one var only
 - `stdout`, `stderr` — the tool's own streams (always present).
 - `output_file` — `{path, content}` when `output_file` is configured in the tool YAML, so the tool's stdout/stderr stay separate from the file content used for extraction.
 - `setup`, `teardown`, `post_run` — one entry per step that ran, each with `command`, `exit_code`, `stdout`, `stderr`.
+- `monitor_start` — one entry per monitor command with `command`, `pid` (or `error` if it failed to start).
+- `monitor_stop` — one entry per running monitor process with `pid`, `exit_code`, `stdout`, `stderr`.
 
 ## Results directory layout
 

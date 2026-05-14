@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-05-13
+
+### Added
+
+- `monitor` tool YAML field — a list of shell commands launched as **background processes** after `setup` completes and before the benchmark command runs. Each process is sent SIGTERM when the benchmark finishes (success or failure); if it does not exit within 5 seconds it receives SIGKILL. Commands interpolate combo vars (`${var}`, `${_envfile}`, `${_run_id}`, `${env:VAR}`). A monitor that fails to start is recorded but never aborts the run. Start records (`monitor_start`) and stop records (`monitor_stop`) are written to `raw/{run_id}.json` under `--keep-raw` or when any monitor fails to start. Useful for side-car collectors that must run concurrently with each rep (e.g. scraping a Prometheus endpoint, streaming perf counters, or sampling a flame graph).
+
 ## [0.4.1] - 2026-05-13
 
 ### Changed
