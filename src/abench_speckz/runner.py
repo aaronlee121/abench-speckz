@@ -397,6 +397,66 @@ def execute_sweep(
         return {"runs": total - skipped, "failed": failed, "skipped": skipped, "succeeded": succeeded}
 
 
+_MONITOR_STOP_GRACE = 5  # seconds before escalating to SIGKILL
+
+
+def _run_monitors(
+    steps: list[str],
+    vars_: dict[str, Any],
+    env: dict[str, str],
+) -> tuple[list[subprocess.Popen], list[dict[str, Any]]]:
+    """Launch each monitor command as a background process.
+
+    Returns (running_procs, start_records). Commands that fail to start are
+    recorded but never abort the run.
+    """
+    procs: list[subprocess.Popen] = []
+    records: list[dict[str, Any]] = []
+    for template in steps:
+        try:
+            cmd = interpolate.resolve_string(template, vars_, env=env)
+        except Exception as e:
+            records.append({"command": template, "pid": None, "error": f"interpolation: {e}"})
+            continue
+        try:
+            proc = subprocess.Popen(
+                shlex.split(cmd),
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            procs.append(proc)
+            records.append({"command": cmd, "pid": proc.pid})
+        except FileNotFoundError as e:
+            records.append({"command": cmd, "pid": None, "error": f"command_not_found: {e}"})
+        except Exception as e:
+            records.append({"command": cmd, "pid": None, "error": str(e)})
+    return procs, records
+
+
+def _stop_monitors(procs: list[subprocess.Popen]) -> list[dict[str, Any]]:
+    """Terminate each monitor process and collect its final output."""
+    records: list[dict[str, Any]] = []
+    for proc in procs:
+        try:
+            proc.terminate()
+            try:
+                stdout, stderr = proc.communicate(timeout=_MONITOR_STOP_GRACE)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                stdout, stderr = proc.communicate()
+            records.append({
+                "pid": proc.pid,
+                "exit_code": proc.returncode,
+                "stdout": stdout,
+                "stderr": stderr,
+            })
+        except Exception as e:
+            records.append({"pid": proc.pid, "error": str(e)})
+    return records
+
+
 def run_phase(
     phase: str,
     steps: list[str],
@@ -529,12 +589,20 @@ def _execute_one_rep(
         row["raw_output_path"] = str(raw_path.relative_to(results_dir))
         return row
 
+    monitor_procs: list[subprocess.Popen] = []
+    monitor_start_records: list[dict[str, Any]] = []
+    monitor_stop_records: list[dict[str, Any]] = []
+    if tool.monitor:
+        monitor_procs, monitor_start_records = _run_monitors(tool.monitor, combo_vars, env)
+
     result = None
     teardown_failure: str | None = None
     teardown_steps = []
     try:
         result = executor.execute(request)
     finally:
+        if monitor_procs:
+            monitor_stop_records = _stop_monitors(monitor_procs)
         if tool.teardown:
             teardown_failure, teardown_steps = run_phase(
                 "teardown", tool.teardown, combo_vars, env, tool.setup_timeout_seconds,
@@ -585,11 +653,13 @@ def _execute_one_rep(
         probe_results=probe_results,
     )
 
-    if keep_raw or extract_failure or result.exit_code != 0 or teardown_failure or post_run_failure:
+    monitor_start_failure = any(r.get("error") for r in monitor_start_records)
+    if keep_raw or extract_failure or result.exit_code != 0 or teardown_failure or post_run_failure or monitor_start_failure:
         raw_path = store.write_raw_run(
             results_dir, row["run_id"],
             _build_raw(result=result, output_file_record=output_file_record,
-                       setup=setup_steps, teardown=teardown_steps, post_run=post_run_steps),
+                       setup=setup_steps, teardown=teardown_steps, post_run=post_run_steps,
+                       monitor_start=monitor_start_records, monitor_stop=monitor_stop_records),
         )
         row["raw_output_path"] = str(raw_path.relative_to(results_dir))
 
@@ -643,6 +713,8 @@ def _build_raw(
     setup: list[dict[str, Any]],
     teardown: list[dict[str, Any]],
     post_run: list[dict[str, Any]],
+    monitor_start: list[dict[str, Any]] | None = None,
+    monitor_stop: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     raw: dict[str, Any] = {
         "stdout": result.stdout if result is not None else "",
@@ -652,6 +724,10 @@ def _build_raw(
         raw["output_file"] = output_file_record
     if setup:
         raw["setup"] = setup
+    if monitor_start:
+        raw["monitor_start"] = monitor_start
+    if monitor_stop:
+        raw["monitor_stop"] = monitor_stop
     if teardown:
         raw["teardown"] = teardown
     if post_run:

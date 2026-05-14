@@ -173,3 +173,32 @@ def test_env_probes_value_must_be_string(tmp_path):
     p.write_text("name: t\ncommand: x\nenv_probes:\n  key: 42\n")
     with pytest.raises(RunError, match=r"env_probes\[.key.\]"):
         tools.load_tool(p)
+
+
+def test_monitor_field_loaded(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nmonitor:\n  - 'python monitor.py'\n  - 'python metrics.py'\n")
+    spec = tools.load_tool(p)
+    assert spec.monitor == ["python monitor.py", "python metrics.py"]
+
+
+def test_monitor_default_empty(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\n")
+    spec = tools.load_tool(p)
+    assert spec.monitor == []
+
+
+def test_monitor_must_be_list(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nmonitor: 'python monitor.py'\n")
+    with pytest.raises(RunError, match="tool.monitor must be a list"):
+        tools.load_tool(p)
+
+
+def test_monitor_steps_must_be_strings(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nmonitor:\n  - 42\n")
+    with pytest.raises(RunError, match=r"tool.monitor\[0\] must be a string"):
+        tools.load_tool(p)
+

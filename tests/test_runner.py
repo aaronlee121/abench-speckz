@@ -1013,3 +1013,119 @@ combo_probes:
     assert runs[0]["combo_probes"] == {"failing": None, "missing": None}
     # Benchmark still ran despite probe failures
     assert runs[0]["exit_code"] == 0
+
+
+# ---------------------------------------------------------------------------
+# monitor
+# ---------------------------------------------------------------------------
+
+def test_monitor_starts_and_stops_around_benchmark(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+monitor:
+  - "python -c \\"import time; time.sleep(30)\\""
+"""
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results,
+        repeat=1, keep_raw=True,
+    )
+    assert summary["succeeded"] == 1
+
+    runs = store.read_runs(results)
+    raw = store.load_raw_run(results, runs[0]["run_id"])
+    assert "monitor_start" in raw
+    assert "monitor_stop" in raw
+    assert raw["monitor_start"][0]["pid"] is not None
+    assert raw["monitor_stop"][0]["exit_code"] is not None
+
+
+def test_monitor_does_not_abort_benchmark_on_start_failure(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+monitor:
+  - "nonexistent-monitor-command-xyz"
+"""
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    # Monitor failed to start but benchmark still ran.
+    assert summary["succeeded"] == 1
+
+    runs = store.read_runs(results)
+    assert runs[0]["exit_code"] == 0
+    # Failed start is recorded in raw output.
+    raw = store.load_raw_run(results, runs[0]["run_id"])
+    assert "monitor_start" in raw
+    assert raw["monitor_start"][0].get("error") is not None
+
+
+def test_monitor_interpolates_combo_vars(tmp_path):
+    marker = tmp_path / "marker.txt"
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+monitor:
+  - "python -c \\"open('{marker}', 'w').write('${{workload}}'); import time; time.sleep(30)\\""
+"""
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    assert summary["succeeded"] == 1
+    assert marker.read_text() == "read"
+
+
+def test_monitor_runs_concurrently_with_benchmark(tmp_path):
+    started_file = tmp_path / "monitor_started.txt"
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    # Monitor writes a file immediately, then sleeps.
+    # Benchmark is the fake_tool which runs after monitor has been started.
+    monitor_script = tmp_path / "mon.py"
+    monitor_script.write_text(
+        f"open(r'{started_file}', 'w').write('1')\n"
+        "import time; time.sleep(30)\n"
+    )
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+monitor:
+  - "python {monitor_script}"
+"""
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    assert summary["succeeded"] == 1
+    # Monitor wrote the started file, proving it ran while the benchmark was executing.
+    assert started_file.exists()
