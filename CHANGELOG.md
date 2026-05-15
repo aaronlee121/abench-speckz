@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-05-14
+
+### Changed
+
+- Internal reorganization: `runner.py` (770 lines) and `report.py` (678 lines) split into focused packages. The runner is now `runner/{_manifest, _probes, _phases, _monitors, _planning, _rep, _sweep}`; the report is `report/{_html, _charts, _runs, _plots, _render}`. Table/TSV/JSON output previously in `query.py` moved to a new top-level `render.py`. No CLI, YAML, or on-disk format changes; the public Python API (`runner.execute_sweep`, `report.generate_html`, `report.generate_plots_html`, etc.) is preserved via package `__init__` re-exports.
+- `runner.collect_probe_results` now also handles combo-scoped probes via an optional `vars_=` kwarg; the previously separate `collect_combo_probe_results` is gone.
+- `__version__` in `abench_speckz/__init__.py` had been stale at `0.1.0` since the initial release; it is now kept in sync with `pyproject.toml`.
+
 ## [0.4.2] - 2026-05-13
 
 ### Added

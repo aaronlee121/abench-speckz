@@ -87,15 +87,38 @@ abench-speckz rebuild-aggregates results/
 | [spec.py](src/abench_speckz/spec.py) | YAML spec loading |
 | [model.py](src/abench_speckz/model.py) | `Spec` and `Combo` data classes |
 | [runspec.py](src/abench_speckz/runspec.py) | `ToolSpec`, `RunRequest/Result`, `AggregateRow` |
-| [runner.py](src/abench_speckz/runner.py) | Benchmark sweep orchestration |
+| [runner/](src/abench_speckz/runner/) | Benchmark sweep orchestration (see submodules below) |
 | [executor.py](src/abench_speckz/executor.py) | Subprocess execution |
 | [extract.py](src/abench_speckz/extract.py) | Metric extraction from stdout |
 | [store.py](src/abench_speckz/store.py) | `runs.jsonl` / `aggregates.jsonl` persistence |
 | [query.py](src/abench_speckz/query.py) | DuckDB-backed stats queries |
+| [render.py](src/abench_speckz/render.py) | Table / TSV / JSON output for `stats` |
 | [tools.py](src/abench_speckz/tools.py) | Tool YAML loading (`ToolSpec`) |
 | [plots.py](src/abench_speckz/plots.py) | `PlotSpec` parsing and validation |
-| [report.py](src/abench_speckz/report.py) | Chart.js HTML report rendering |
+| [report/](src/abench_speckz/report/) | Chart.js HTML report rendering (see submodules below) |
 | [prettynames.py](src/abench_speckz/prettynames.py) | Metric display-name resolution |
+
+### `runner/` submodules
+
+| Submodule | Responsibility |
+|-----------|---------------|
+| [_manifest.py](src/abench_speckz/runner/_manifest.py) | Load `manifest.json` and env-files; capture host/git metadata |
+| [_probes.py](src/abench_speckz/runner/_probes.py) | `config_hash`; run env- and combo-scoped probes |
+| [_phases.py](src/abench_speckz/runner/_phases.py) | `run_phase`: sequential shell steps with structured per-step records |
+| [_monitors.py](src/abench_speckz/runner/_monitors.py) | Launch / terminate background side-car processes |
+| [_planning.py](src/abench_speckz/runner/_planning.py) | Filter manifest entries, expand into reps, validate per_sweep config |
+| [_rep.py](src/abench_speckz/runner/_rep.py) | Execute one rep end-to-end; build the `runs.jsonl` row |
+| [_sweep.py](src/abench_speckz/runner/_sweep.py) | Top-level `execute_sweep` orchestrator |
+
+### `report/` submodules
+
+| Submodule | Responsibility |
+|-----------|---------------|
+| [_html.py](src/abench_speckz/report/_html.py) | HTML shell, CSS, and table/legend/markdown helpers |
+| [_charts.py](src/abench_speckz/report/_charts.py) | Chart.js config builders (bar / line / scatter / stacked-bar) |
+| [_runs.py](src/abench_speckz/report/_runs.py) | Discover and render per-run HTML reports under `raw/` |
+| [_plots.py](src/abench_speckz/report/_plots.py) | Per-plot artifact assembly (data + chart + table) |
+| [_render.py](src/abench_speckz/report/_render.py) | Top-level `generate_html` / `generate_plots_html` |
 
 ## Adding a New Test
 
