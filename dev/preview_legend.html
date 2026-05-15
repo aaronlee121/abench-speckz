@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Legend table – header rotation preview</title>
+<style>
+  body { font-family: system-ui, sans-serif; padding: 2rem; background: #f9f9f9; }
+  h2 { color: #333; margin-bottom: 0.25rem; }
+  p.sub { color: #666; font-size: 0.9rem; margin-top: 0; margin-bottom: 1.5rem; }
+
+  .legend-wrap { display: inline-block; margin-bottom: 2.5rem; }
+  table { border-collapse: collapse; font-size: 0.85rem; }
+  th, td { border: 1px solid #ddd; padding: 0.35rem 0.6rem; }
+  thead tr { background: #f0f0f0; }
+  tbody tr:nth-child(even) { background: #fafafa; }
+
+  /* ── CURRENT: horizontal headers ── */
+  .current th { text-align: left; white-space: nowrap; }
+
+  /* ── PROPOSED: vertical headers, straight borders ── */
+  .rotated th.rotated-header {
+    white-space: nowrap;
+    vertical-align: bottom;
+    padding-bottom: 6px;
+    min-width: 32px;
+  }
+  .rotated th.rotated-header span {
+    writing-mode: vertical-rl;
+    transform: rotate(190deg);
+    display: inline-block;
+  }
+  .rotated td { min-width: 60px; text-align: center; }
+  .rotated td:first-child { border-right: none; }
+
+  /* ── PROPOSED: vertical headers, slanted borders + parallelogram shading ──
+   *
+   * --slant-px is the horizontal offset (top vs bottom) of each slanted border.
+   * It should equal header_height × tan(10°). 25px suits ~142px header height.
+   * Adjust this one variable to tune both the border angle and the clip shapes.
+   */
+  .rotated-slant { --slant-px: 30px; }
+
+  .rotated-slant table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .rotated-slant td {
+    border: 1px solid #ddd;
+    border-left: none;
+    min-width: 60px;
+    text-align: center;
+    padding: 0.35rem 0.6rem;
+  }
+  .rotated-slant td:first-child { border-left: 1px solid #ddd; }
+  .rotated-slant tbody tr:nth-child(even) { background: #fafafa; }
+
+  /* Header cells: strip straight vertical borders; background handled by .cell-bg */
+  .rotated-slant thead th {
+    border: 1px solid #ddd;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    background: transparent;
+    padding: 0.35rem 0.6rem 6px;
+    white-space: nowrap;
+    vertical-align: bottom;
+    text-align: center;
+    min-width: 32px;
+    position: relative;
+    overflow: visible;
+  }
+
+  /*
+   * Parallelogram background per column.
+   * The div is wider than the cell (+ --slant-px) so the shape can extend
+   * into the next column's space at the top, matching the slanted border lean.
+   * clip-path cuts it into the parallelogram: top edge is offset right by
+   * --slant-px relative to the bottom edge.
+   */
+  .rotated-slant thead th .cell-bg {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    width: calc(100% + var(--slant-px));
+    border-top: 1px solid #bbb;
+    clip-path: polygon(
+      var(--slant-px) 0%,
+      100% 0%,
+      calc(100% - var(--slant-px)) 100%,
+      0% 100%
+    );
+    z-index: 0;
+  }
+  .rotated-slant thead th:nth-child(odd)  .cell-bg { background: #eef1f6; }
+  .rotated-slant thead th:nth-child(even) .cell-bg { background: #dde8f4; }
+
+  /* Content above background */
+  .rotated-slant thead th span { position: relative; z-index: 2; }
+
+  /* Slanted left border on every header cell except the first, anchored at the bottom */
+  .rotated-slant thead th:first-child::before { display: none; }
+  .rotated-slant thead th::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 1px;
+    background: #bbb;
+    transform: rotate(10deg);
+    transform-origin: bottom center;
+    z-index: 1;
+  }
+  /* Slanted right outer border on the last header cell */
+  .rotated-slant thead th:last-child::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 1px;
+    background: #bbb;
+    transform: rotate(10deg);
+    transform-origin: bottom center;
+    z-index: 1;
+  }
+
+  .rotated-slant th.rotated-header span {
+    writing-mode: vertical-rl;
+    transform: rotate(190deg);
+    display: inline-block;
+  }
+</style>
+</head>
+<body>
+
+<h2>Current — horizontal headers</h2>
+<p class="sub">Long variable names push the table wide.</p>
+<div class="legend-wrap">
+  <table class="current">
+    <thead><tr>
+      <th></th>
+      <th>concurrency_level</th>
+      <th>connection_pool_size</th>
+      <th>request_timeout_ms</th>
+      <th>backend_region</th>
+    </tr></thead>
+    <tbody>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#4e79a7;vertical-align:middle"></span></td><td>4</td><td>10</td><td>500</td><td>us-east-1</td></tr>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#f28e2b;vertical-align:middle"></span></td><td>8</td><td>20</td><td>500</td><td>us-east-1</td></tr>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#e15759;vertical-align:middle"></span></td><td>16</td><td>20</td><td>1000</td><td>eu-west-1</td></tr>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#76b7b2;vertical-align:middle"></span></td><td>32</td><td>50</td><td>1000</td><td>eu-west-1</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2>Proposed — vertical headers, straight borders</h2>
+<p class="sub">Header height auto-sizes; dividers remain vertical.</p>
+<div class="legend-wrap">
+  <table class="rotated">
+    <thead><tr>
+      <th></th>
+      <th class="rotated-header"><span>concurrency_level</span></th>
+      <th class="rotated-header"><span>connection_pool_size</span></th>
+      <th class="rotated-header"><span>request_timeout_ms</span></th>
+      <th class="rotated-header"><span>backend_region</span></th>
+    </tr></thead>
+    <tbody>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#4e79a7;vertical-align:middle"></span></td><td>4</td><td>10</td><td>500</td><td>us-east-1</td></tr>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#f28e2b;vertical-align:middle"></span></td><td>8</td><td>20</td><td>500</td><td>us-east-1</td></tr>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#e15759;vertical-align:middle"></span></td><td>16</td><td>20</td><td>1000</td><td>eu-west-1</td></tr>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#76b7b2;vertical-align:middle"></span></td><td>32</td><td>50</td><td>1000</td><td>eu-west-1</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2>Proposed — vertical headers, slanted borders + parallelogram shading</h2>
+<p class="sub">Each column's background is clipped to a parallelogram aligned with the slanted borders.</p>
+<div class="legend-wrap">
+  <div class="rotated-slant">
+  <table>
+    <thead><tr>
+      <th></th>
+      <th class="rotated-header"><div class="cell-bg"></div><span>concurrency_level</span></th>
+      <th class="rotated-header"><div class="cell-bg"></div><span>connection_pool_size</span></th>
+      <th class="rotated-header"><div class="cell-bg"></div><span>request_timeout_ms</span></th>
+      <th class="rotated-header"><div class="cell-bg"></div><span>backend_region</span></th>
+    </tr></thead>
+    <tbody>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#4e79a7;vertical-align:middle"></span></td><td>4</td><td>10</td><td>500</td><td>us-east-1</td></tr>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#f28e2b;vertical-align:middle"></span></td><td>8</td><td>20</td><td>500</td><td>us-east-1</td></tr>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#e15759;vertical-align:middle"></span></td><td>16</td><td>20</td><td>1000</td><td>eu-west-1</td></tr>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#76b7b2;vertical-align:middle"></span></td><td>32</td><td>50</td><td>1000</td><td>eu-west-1</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<h2>Stress test — short column names</h2>
+<p class="sub">Header is shorter, so the actual slant offset is smaller than --slant-px: the borders and shading diverge.</p>
+<div class="legend-wrap">
+  <div class="rotated-slant" id="short-test">
+  <table>
+    <thead><tr>
+      <th></th>
+      <th class="rotated-header"><div class="cell-bg"></div><span>rps</span></th>
+      <th class="rotated-header"><div class="cell-bg"></div><span>p50</span></th>
+      <th class="rotated-header"><div class="cell-bg"></div><span>p95</span></th>
+      <th class="rotated-header"><div class="cell-bg"></div><span>mode</span></th>
+    </tr></thead>
+    <tbody>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#4e79a7;vertical-align:middle"></span></td><td>4</td><td>10</td><td>500</td><td>sync</td></tr>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#f28e2b;vertical-align:middle"></span></td><td>8</td><td>20</td><td>500</td><td>async</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<h2>Stress test — very long column names</h2>
+<p class="sub">Header is taller, so the actual slant offset is larger than --slant-px: the borders and shading diverge the other way.</p>
+<div class="legend-wrap">
+  <div class="rotated-slant" id="long-test">
+  <table>
+    <thead><tr>
+      <th></th>
+      <th class="rotated-header"><div class="cell-bg"></div><span>maximum_concurrent_connections_allowed</span></th>
+      <th class="rotated-header"><div class="cell-bg"></div><span>request_processing_timeout_milliseconds</span></th>
+      <th class="rotated-header"><div class="cell-bg"></div><span>connection_pool_idle_eviction_interval</span></th>
+    </tr></thead>
+    <tbody>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#4e79a7;vertical-align:middle"></span></td><td>128</td><td>5000</td><td>30000</td></tr>
+      <tr><td><span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:#f28e2b;vertical-align:middle"></span></td><td>256</td><td>10000</td><td>60000</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<script>
+  var TAN10 = Math.tan(10 * Math.PI / 180);
+  var SIN10 = Math.sin(10 * Math.PI / 180);
+
+  function syncSlant() {
+    document.querySelectorAll('.rotated-slant').forEach(function (wrap) {
+      var thead = wrap.querySelector('thead');
+      if (!thead) return;
+
+      // Reset margins first so thead height measurement is clean
+      thead.querySelectorAll('th.rotated-header span').forEach(function (s) {
+        s.style.marginLeft = '';
+      });
+
+      // --slant-px = thead_height * tan(10°) keeps borders + clip-path aligned
+      var slantPx = Math.round(thead.getBoundingClientRect().height * TAN10);
+      wrap.style.setProperty('--slant-px', slantPx + 'px');
+
+      /*
+       * Horizontal centering fix:
+       * With text-align:center, the span's layout box is centered but after
+       * rotate(190deg) the text bottom (reading start) lands at
+       *   cell_center - textLen * sin(10°) / 2
+       * which drifts left for longer text.
+       *
+       * Adding margin-left = textLen * sin(10°) shifts the layout center to
+       *   cell_center + textLen * sin(10°) / 2
+       * so after rotation the text bottom lands exactly at cell_center.
+       *
+       * offsetHeight gives the pre-transform logical height, which equals the
+       * text length for writing-mode: vertical-rl.
+       */
+      thead.querySelectorAll('th.rotated-header span').forEach(function (span) {
+        var textLen = span.offsetHeight;
+        span.style.marginLeft = Math.round(textLen * SIN10) + 'px';
+      });
+    });
+  }
+
+  window.addEventListener('load', syncSlant);
+  window.addEventListener('resize', syncSlant);
+</script>
+</body>
+</html>
