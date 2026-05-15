@@ -57,6 +57,20 @@ Profiles overlay the base spec (variables, static, when, exclude are merged); `d
 
 **Plot fields:** Each entry in `plots` has: `id` (unique string), `type` (`bar`, `stacked-bar`, `line`, `scatter`), `x` (variable name for the x-axis, or a metric name for `scatter`), `y` (metric name or list of metric names; `scatter` requires exactly one, `stacked-bar` requires at least two), `title` (optional display title), `group_by` (optional variable name or list of variable names — see below).
 
+**Report layout fields (optional, top-level alongside `plots`):**
+- `report_title` — string used as the HTML `<title>` and H1.
+- `report_description` — Markdown rendered as a `.report-intro` block under the H1 (only when `sections` is present).
+- `sections` — list of editorial sections. When present, plots are no longer rendered automatically; instead each section's `blocks` reference plots by id. Plots not referenced by any block are silently omitted (lets you keep a plot library and use a subset).
+
+Each section entry has:
+- `title` (required) — H2 heading.
+- `description` (optional) — Markdown rendered above the section's blocks.
+- `blocks` (optional list) — interleaved content. Each block has exactly one of:
+  - `text: <markdown>` — Markdown rendered to HTML.
+  - `plot_id: <id>` — references an entry in top-level `plots`. The same id may appear in multiple blocks; each occurrence renders an independent canvas.
+  - `html: <raw html>` — inlined verbatim.
+  - `include_html: <path>` — file path resolved relative to the plots YAML (or relative to each tool YAML when sections are discovered from `tools/`); contents inlined verbatim. Missing file is a parse error.
+
 **`group_by` in plots:** Splits chart data into multiple series. Accepts a single variable name (`group_by: workload`) or a list (`group_by: [workload, backend]`); multiple keys are joined with ` / ` in the legend label.
 
 - `bar` / `stacked-bar` / `line`: without `group_by`, each `y` metric is a single series across x-axis values. With `group_by`, each unique combination of variable values produces a separate series per metric.

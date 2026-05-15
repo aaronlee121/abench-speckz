@@ -483,3 +483,154 @@ def test_link_mode_no_embedded_content(tmp_path):
     assert f'href="raw/{_RUN_ID}_flamegraph.html"' in html
     assert "FLAME_CONTENT" not in html
     assert "loadRunReport" not in html
+
+
+# ---------------------------------------------------------------------------
+# Sections / blocks / report_description (editorial layout)
+# ---------------------------------------------------------------------------
+
+def test_report_section_title_and_markdown_description(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+        "sections:\n"
+        "  - title: My Throughput Section\n"
+        "    description: How **RPS** scales.\n"
+        "    blocks:\n      - plot_id: p1\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "My Throughput Section" in html
+    assert "<strong>RPS</strong>" in html
+    assert "chart-p1" in html
+
+
+def test_report_text_block_rendered_as_markdown(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+        "sections:\n"
+        "  - title: S\n"
+        "    blocks:\n"
+        "      - text: A *note* before the chart.\n"
+        "      - plot_id: p1\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "<em>note</em>" in html
+
+
+def test_report_inline_html_block(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+        "sections:\n"
+        "  - title: S\n"
+        "    blocks:\n"
+        "      - html: \"<div class='cb' id='inline-marker'>RAW_HTML</div>\"\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "RAW_HTML" in html
+    assert "id='inline-marker'" in html
+
+
+def test_report_include_html_block(tmp_path):
+    _seed(tmp_path)
+    sidecar = tmp_path / "note.html"
+    sidecar.write_text("<p id='from-file'>SIDECAR_CONTENT</p>")
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+        "sections:\n"
+        "  - title: S\n"
+        "    blocks:\n"
+        "      - include_html: note.html\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "SIDECAR_CONTENT" in html
+    assert "from-file" in html
+
+
+def test_report_top_level_description(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "report_title: My Suite\n"
+        "report_description: |\n  An **intro** block.\n"
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+        "sections:\n"
+        "  - title: S\n"
+        "    blocks:\n      - plot_id: p1\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert 'class="report-intro"' in html
+    assert "<strong>intro</strong>" in html
+    # intro should appear before the first section's <h2>
+    assert html.index('class="report-intro"') < html.index("<h2>S</h2>")
+
+
+def test_report_unreferenced_plot_omitted(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "plots:\n"
+        "  - id: used\n    type: bar\n    x: workload\n    y: rps\n"
+        "  - id: unused\n    type: line\n    x: workload\n    y: rps\n"
+        "sections:\n"
+        "  - title: S\n"
+        "    blocks:\n      - plot_id: used\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "chart-used" in html
+    assert "chart-unused" not in html
+
+
+def test_report_plot_referenced_twice_renders_twice(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+        "sections:\n"
+        "  - title: A\n"
+        "    blocks:\n      - plot_id: p1\n"
+        "  - title: B\n"
+        "    blocks:\n      - plot_id: p1\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    # Both occurrences should have distinct canvas ids
+    assert 'id="chart-p1-0"' in html
+    assert 'id="chart-p1-1"' in html
+
+
+def test_report_back_compat_no_sections(tmp_path):
+    """When sections key is absent, each plot still renders as its own section."""
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "plots:\n"
+        "  - id: a\n    type: bar\n    x: workload\n    y: rps\n"
+        "  - id: b\n    type: line\n    x: workload\n    y: rps\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "chart-a" in html
+    assert "chart-b" in html
+    # Type meta shown next to each plot in back-compat layout
+    assert "type: bar" in html
+    assert "type: line" in html

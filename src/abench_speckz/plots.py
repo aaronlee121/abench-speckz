@@ -1,5 +1,5 @@
 """PlotSpec dataclass and validators for declarative chart definitions."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +8,7 @@ import yaml
 from abench_speckz.model import RunError
 
 ALLOWED_TYPES = {"bar", "stacked-bar", "line", "scatter"}
+BLOCK_KINDS = ("text", "plot_id", "html", "include_html")
 
 
 @dataclass
@@ -18,6 +19,27 @@ class PlotSpec:
     y: list[str]
     title: str | None = None
     group_by: list[str] | None = None
+
+
+@dataclass
+class Block:
+    kind: str   # one of BLOCK_KINDS
+    value: str  # markdown source (text), plot id (plot_id), or final HTML (html/include_html)
+
+
+@dataclass
+class Section:
+    title: str
+    description: str | None = None   # markdown source
+    blocks: list[Block] = field(default_factory=list)
+
+
+@dataclass
+class PlotsDoc:
+    plots: list[PlotSpec] = field(default_factory=list)
+    sections: list[Section] = field(default_factory=list)
+    report_title: str | None = None
+    report_description: str | None = None
 
 
 def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
@@ -106,33 +128,179 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
     return out
 
 
-def load_plots_file(path: Path) -> tuple[list[PlotSpec], str | None]:
+def parse_sections(
+    raw: Any,
+    *,
+    source: str,
+    plot_ids: set[str],
+    base_dir: Path,
+) -> list[Section]:
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise RunError(f"{source}: sections must be a list")
+
+    out: list[Section] = []
+    for i, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise RunError(f"{source}: sections[{i}] must be a mapping")
+
+        title = item.get("title")
+        if not isinstance(title, str) or not title:
+            raise RunError(f"{source}: sections[{i}].title is required (string)")
+
+        description = item.get("description")
+        if description is not None and not isinstance(description, str):
+            raise RunError(f"{source}: section {title!r}: description must be a string")
+
+        blocks_raw = item.get("blocks")
+        if blocks_raw is None:
+            blocks: list[Block] = []
+        elif not isinstance(blocks_raw, list):
+            raise RunError(f"{source}: section {title!r}: blocks must be a list")
+        else:
+            blocks = [
+                _parse_block(b, j, source=source, section_title=title,
+                             plot_ids=plot_ids, base_dir=base_dir)
+                for j, b in enumerate(blocks_raw)
+            ]
+
+        unknown = set(item) - {"title", "description", "blocks"}
+        if unknown:
+            raise RunError(
+                f"{source}: section {title!r}: unknown fields {sorted(unknown)}"
+            )
+
+        out.append(Section(title=title, description=description, blocks=blocks))
+    return out
+
+
+def _parse_block(
+    item: Any,
+    index: int,
+    *,
+    source: str,
+    section_title: str,
+    plot_ids: set[str],
+    base_dir: Path,
+) -> Block:
+    where = f"section {section_title!r} blocks[{index}]"
+    if not isinstance(item, dict):
+        raise RunError(f"{source}: {where} must be a mapping")
+
+    present = [k for k in BLOCK_KINDS if k in item]
+    if not present:
+        raise RunError(
+            f"{source}: {where} must have exactly one of {list(BLOCK_KINDS)}"
+        )
+    if len(present) > 1:
+        raise RunError(
+            f"{source}: {where} has multiple kinds {present}; pick exactly one"
+        )
+
+    unknown = set(item) - set(BLOCK_KINDS)
+    if unknown:
+        raise RunError(f"{source}: {where} unknown fields {sorted(unknown)}")
+
+    kind = present[0]
+    value = item[kind]
+    if not isinstance(value, str) or not value:
+        raise RunError(f"{source}: {where} {kind!r} must be a non-empty string")
+
+    if kind == "plot_id":
+        if value not in plot_ids:
+            raise RunError(
+                f"{source}: {where} plot_id {value!r} not found in top-level plots"
+            )
+        return Block(kind=kind, value=value)
+
+    if kind == "include_html":
+        path = (base_dir / value).resolve()
+        if not path.exists():
+            raise RunError(f"{source}: {where} include_html: file not found: {path}")
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError as e:
+            raise RunError(f"{source}: {where} include_html: cannot read {path}: {e}") from e
+        return Block(kind=kind, value=content)
+
+    return Block(kind=kind, value=value)
+
+
+def load_plots_file(path: Path) -> PlotsDoc:
     if not path.exists():
         raise RunError(f"{path}: plots file not found")
     raw = yaml.safe_load(path.read_text())
-    report_title: str | None = None
-    if isinstance(raw, dict):
-        report_title = raw.get("report_title") or None
-        raw = raw.get("plots", raw)
-    return parse_plots(raw, source=str(path)), report_title
+    return _build_doc(raw, source=str(path), base_dir=path.parent)
 
 
-def discover_from_tool_snapshots(results_dir: Path) -> tuple[list[PlotSpec], str | None]:
+def _build_doc(raw: Any, *, source: str, base_dir: Path) -> PlotsDoc:
+    if raw is None:
+        return PlotsDoc()
+    if isinstance(raw, list):
+        return PlotsDoc(plots=parse_plots(raw, source=source))
+    if not isinstance(raw, dict):
+        raise RunError(f"{source}: top-level must be a list or mapping")
+
+    report_title = raw.get("report_title") or None
+    report_description = raw.get("report_description") or None
+    if report_title is not None and not isinstance(report_title, str):
+        raise RunError(f"{source}: report_title must be a string")
+    if report_description is not None and not isinstance(report_description, str):
+        raise RunError(f"{source}: report_description must be a string")
+
+    plots_specs = parse_plots(raw.get("plots"), source=source)
+    plot_ids = {p.id for p in plots_specs}
+    sections = parse_sections(
+        raw.get("sections"), source=source, plot_ids=plot_ids, base_dir=base_dir,
+    )
+
+    return PlotsDoc(
+        plots=plots_specs,
+        sections=sections,
+        report_title=report_title,
+        report_description=report_description,
+    )
+
+
+def discover_from_tool_snapshots(results_dir: Path) -> PlotsDoc:
     tools_dir = results_dir / "tools"
     if not tools_dir.is_dir():
-        return [], None
-    out: list[PlotSpec] = []
+        return PlotsDoc()
+
+    merged_plots: list[PlotSpec] = []
     seen_ids: set[str] = set()
+    merged_sections: list[Section] = []
     report_title: str | None = None
+    report_description: str | None = None
+
     for tool_yaml in sorted(tools_dir.glob("*.yaml")):
         raw = yaml.safe_load(tool_yaml.read_text())
         if not isinstance(raw, dict):
             continue
         if report_title is None:
             report_title = raw.get("report_title") or None
+        if report_description is None:
+            report_description = raw.get("report_description") or None
+
         for spec in parse_plots(raw.get("plots"), source=str(tool_yaml)):
             if spec.id in seen_ids:
                 continue
             seen_ids.add(spec.id)
-            out.append(spec)
-    return out, report_title
+            merged_plots.append(spec)
+
+        merged_sections.extend(
+            parse_sections(
+                raw.get("sections"),
+                source=str(tool_yaml),
+                plot_ids=seen_ids,
+                base_dir=tool_yaml.parent,
+            )
+        )
+
+    return PlotsDoc(
+        plots=merged_plots,
+        sections=merged_sections,
+        report_title=report_title,
+        report_description=report_description,
+    )

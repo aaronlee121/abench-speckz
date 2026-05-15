@@ -112,26 +112,28 @@ def test_parse_rejects_unknown_field():
 def test_load_plots_file_with_top_level_key(tmp_path):
     p = tmp_path / "plots.yaml"
     p.write_text("plots:\n  - id: p1\n    type: bar\n    x: w\n    y: rps\n")
-    specs, title = plots.load_plots_file(p)
-    assert len(specs) == 1
-    assert specs[0].id == "p1"
-    assert title is None
+    doc = plots.load_plots_file(p)
+    assert len(doc.plots) == 1
+    assert doc.plots[0].id == "p1"
+    assert doc.report_title is None
+    assert doc.sections == []
 
 
 def test_load_plots_file_report_title(tmp_path):
     p = tmp_path / "plots.yaml"
     p.write_text("report_title: My Benchmark\nplots:\n  - id: p1\n    type: bar\n    x: w\n    y: rps\n")
-    specs, title = plots.load_plots_file(p)
-    assert specs[0].id == "p1"
-    assert title == "My Benchmark"
+    doc = plots.load_plots_file(p)
+    assert doc.plots[0].id == "p1"
+    assert doc.report_title == "My Benchmark"
 
 
 def test_load_plots_file_top_level_list(tmp_path):
     p = tmp_path / "plots.yaml"
     p.write_text("- id: p1\n  type: bar\n  x: w\n  y: rps\n")
-    specs, title = plots.load_plots_file(p)
-    assert specs[0].id == "p1"
-    assert title is None
+    doc = plots.load_plots_file(p)
+    assert doc.plots[0].id == "p1"
+    assert doc.report_title is None
+    assert doc.sections == []
 
 
 def test_load_plots_file_missing(tmp_path):
@@ -148,11 +150,11 @@ def test_discover_from_tool_snapshots(tmp_path):
     (tools_dir / "b.yaml").write_text(
         "name: b\ncommand: x\nplots:\n  - id: p2\n    type: line\n    x: c\n    y: lat\n"
     )
-    specs, title = plots.discover_from_tool_snapshots(tmp_path)
-    ids = [s.id for s in specs]
+    doc = plots.discover_from_tool_snapshots(tmp_path)
+    ids = [s.id for s in doc.plots]
     assert "p1" in ids
     assert "p2" in ids
-    assert title is None
+    assert doc.report_title is None
 
 
 def test_discover_from_tool_snapshots_report_title(tmp_path):
@@ -162,14 +164,15 @@ def test_discover_from_tool_snapshots_report_title(tmp_path):
         "name: a\ncommand: x\nreport_title: My Suite\n"
         "plots:\n  - id: p1\n    type: bar\n    x: w\n    y: rps\n"
     )
-    specs, title = plots.discover_from_tool_snapshots(tmp_path)
-    assert title == "My Suite"
+    doc = plots.discover_from_tool_snapshots(tmp_path)
+    assert doc.report_title == "My Suite"
 
 
 def test_discover_from_tool_snapshots_no_dir(tmp_path):
-    specs, title = plots.discover_from_tool_snapshots(tmp_path)
-    assert specs == []
-    assert title is None
+    doc = plots.discover_from_tool_snapshots(tmp_path)
+    assert doc.plots == []
+    assert doc.sections == []
+    assert doc.report_title is None
 
 
 def test_discover_dedupes_by_id(tmp_path):
@@ -181,8 +184,8 @@ def test_discover_dedupes_by_id(tmp_path):
     (tools_dir / "b.yaml").write_text(
         "name: b\ncommand: x\nplots:\n  - id: shared\n    type: line\n    x: c\n    y: lat\n"
     )
-    specs, _ = plots.discover_from_tool_snapshots(tmp_path)
-    assert len([s for s in specs if s.id == "shared"]) == 1
+    doc = plots.discover_from_tool_snapshots(tmp_path)
+    assert len([s for s in doc.plots if s.id == "shared"]) == 1
 
 
 def test_parse_group_by_negation_single_string():
@@ -204,3 +207,164 @@ def test_parse_group_by_bare_bang_rejected():
             "group_by": ["!"]}]
     with pytest.raises(RunError, match="must be followed by"):
         plots.parse_plots(raw, source="<t>")
+
+
+# --- sections / blocks / report_description -----------------------------------
+
+def _basic_plots_yaml() -> str:
+    return (
+        "plots:\n"
+        "  - id: p1\n    type: bar\n    x: w\n    y: rps\n"
+        "  - id: p2\n    type: line\n    x: c\n    y: lat\n"
+    )
+
+
+def test_parse_section_basic(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        _basic_plots_yaml()
+        + "sections:\n"
+        "  - title: Throughput\n"
+        "    description: How **RPS** scales with concurrency.\n"
+        "    blocks:\n"
+        "      - plot_id: p1\n"
+    )
+    doc = plots.load_plots_file(p)
+    assert len(doc.sections) == 1
+    s = doc.sections[0]
+    assert s.title == "Throughput"
+    assert "RPS" in s.description
+    assert len(s.blocks) == 1
+    assert s.blocks[0].kind == "plot_id"
+    assert s.blocks[0].value == "p1"
+
+
+def test_parse_section_block_kinds_roundtrip(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        _basic_plots_yaml()
+        + "sections:\n"
+        "  - title: Mix\n"
+        "    blocks:\n"
+        "      - text: Hello *world*\n"
+        "      - plot_id: p1\n"
+        "      - html: \"<div class='cb'>raw</div>\"\n"
+    )
+    doc = plots.load_plots_file(p)
+    kinds = [b.kind for b in doc.sections[0].blocks]
+    assert kinds == ["text", "plot_id", "html"]
+    assert doc.sections[0].blocks[0].value == "Hello *world*"
+    assert doc.sections[0].blocks[2].value == "<div class='cb'>raw</div>"
+
+
+def test_parse_section_include_html(tmp_path):
+    sidecar = tmp_path / "note.html"
+    sidecar.write_text("<p>included content</p>")
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        _basic_plots_yaml()
+        + "sections:\n"
+        "  - title: S\n"
+        "    blocks:\n"
+        "      - include_html: note.html\n"
+    )
+    doc = plots.load_plots_file(p)
+    block = doc.sections[0].blocks[0]
+    assert block.kind == "include_html"
+    assert block.value == "<p>included content</p>"
+
+
+def test_parse_section_include_html_missing(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        _basic_plots_yaml()
+        + "sections:\n"
+        "  - title: S\n"
+        "    blocks:\n"
+        "      - include_html: missing.html\n"
+    )
+    with pytest.raises(RunError, match="include_html: file not found"):
+        plots.load_plots_file(p)
+
+
+def test_parse_section_unknown_plot_id(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        _basic_plots_yaml()
+        + "sections:\n"
+        "  - title: S\n"
+        "    blocks:\n"
+        "      - plot_id: nope\n"
+    )
+    with pytest.raises(RunError, match="not found in top-level plots"):
+        plots.load_plots_file(p)
+
+
+def test_parse_section_block_multiple_kinds(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        _basic_plots_yaml()
+        + "sections:\n"
+        "  - title: S\n"
+        "    blocks:\n"
+        "      - {text: t, html: <p>}\n"
+    )
+    with pytest.raises(RunError, match="multiple kinds"):
+        plots.load_plots_file(p)
+
+
+def test_parse_section_block_no_kinds(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        _basic_plots_yaml()
+        + "sections:\n"
+        "  - title: S\n"
+        "    blocks:\n"
+        "      - {color: red}\n"
+    )
+    with pytest.raises(RunError, match="exactly one"):
+        plots.load_plots_file(p)
+
+
+def test_parse_section_unknown_field(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        _basic_plots_yaml()
+        + "sections:\n"
+        "  - title: S\n"
+        "    blocks: []\n"
+        "    color: red\n"
+    )
+    with pytest.raises(RunError, match="unknown fields"):
+        plots.load_plots_file(p)
+
+
+def test_parse_section_missing_title(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        _basic_plots_yaml()
+        + "sections:\n"
+        "  - blocks: []\n"
+    )
+    with pytest.raises(RunError, match=r"sections\[0\]\.title is required"):
+        plots.load_plots_file(p)
+
+
+def test_parse_report_description(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        "report_title: T\n"
+        "report_description: |\n  Hello **world**\n"
+        + _basic_plots_yaml()
+    )
+    doc = plots.load_plots_file(p)
+    assert doc.report_description.strip().endswith("**world**")
+
+
+def test_load_plots_file_back_compat(tmp_path):
+    """Existing YAML with no sections still loads with empty sections list."""
+    p = tmp_path / "plots.yaml"
+    p.write_text(_basic_plots_yaml())
+    doc = plots.load_plots_file(p)
+    assert doc.sections == []
+    assert len(doc.plots) == 2

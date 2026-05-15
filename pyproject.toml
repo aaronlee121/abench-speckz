@@ -31,6 +31,7 @@ dependencies = [
     "PyYAML>=6.0",
     "jsonpath-ng>=1.6",
     "duckdb>=0.10",
+    "markdown>=3.5",
 ]
 
 [project.optional-dependencies]

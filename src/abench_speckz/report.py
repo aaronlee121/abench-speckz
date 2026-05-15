@@ -74,6 +74,10 @@ def _html_shell(sections: list[str], scripts: list[str], title: str = "abench_sp
     summary:hover {{ color: #111; }}
     iframe.run-rpt {{ width: 100%; border: none; min-height: 400px; }}
     .run-group-heading {{ font-size: 1rem; margin: 1rem 0 0.25rem; color: #333; }}
+    .report-intro {{ margin: 0 0 2rem; color: #333; }}
+    .report-intro p:first-child {{ margin-top: 0; }}
+    .section-description {{ color: #444; margin-bottom: 1rem; }}
+    .section-description p:first-child {{ margin-top: 0; }}
     .rotated-slant {{ --slant-px: 25px; }}
     .rotated-slant table {{ border-collapse: separate; border-spacing: 0; }}
     .rotated-slant td {{ border: 1px solid #ddd; border-left: none; min-width: 60px; padding: 3px 8px; text-align: center; }}
@@ -399,12 +403,89 @@ def _resolve_group_by(group_by: list[str], all_vars: list[str]) -> list[str]:
     return positives + expanded
 
 
+def _render_markdown(src: str) -> str:
+    import markdown
+    return markdown.markdown(src, extensions=["extra", "sane_lists"])
+
+
+def _build_plot_artifacts(plot, all_vars, results_dir, pretty_map):
+    """Compute everything needed to render a plot, independent of where it lands in the page."""
+    from abench_speckz import query
+
+    gb_keys = _resolve_group_by(list(plot.group_by or []), all_vars)
+
+    if plot.type == "scatter":
+        group_by = gb_keys
+        metrics = [plot.x] + plot.y
+    else:
+        group_by = [plot.x] + gb_keys
+        metrics = plot.y
+
+    rows = query.compute_rows(results_dir, group_by=group_by, metrics=metrics)
+    static_vars, varying_keys = _split_group_by_vars(rows, gb_keys)
+    multi_metric = len(plot.y) > 1
+
+    if plot.type == "scatter":
+        chart_config, series_meta = _build_scatter_config(
+            plot, rows, pretty_map, group_by=gb_keys, varying_keys=varying_keys,
+        )
+    elif plot.type in ("bar", "stacked-bar"):
+        chart_config, series_meta = _build_bar_or_line_config(
+            plot, rows, pretty_map,
+            chart_type="bar",
+            stacked=(plot.type == "stacked-bar"),
+            group_by=gb_keys,
+            varying_keys=varying_keys,
+        )
+    elif plot.type == "line":
+        chart_config, series_meta = _build_bar_or_line_config(
+            plot, rows, pretty_map, chart_type="line", stacked=False,
+            group_by=gb_keys,
+            varying_keys=varying_keys,
+        )
+    else:
+        return None
+
+    if varying_keys:
+        chart_config["options"]["plugins"]["legend"] = {"display": False}
+
+    fixed_html = _fixed_vars_html(static_vars, pretty_map)
+    legend_html = _legend_table_html(series_meta, varying_keys, pretty_map, multi_metric)
+    table_headers = list(group_by) + ["metric"] + list(_STAT_COLS) if rows else []
+    table_html_inner = _table_html(rows, table_headers)
+
+    return {
+        "plot": plot,
+        "fixed_html": fixed_html,
+        "legend_html": legend_html,
+        "chart_config": chart_config,
+        "table_html_inner": table_html_inner,
+        "title": plot.title or plot.id,
+    }
+
+
+def _render_plot_block(art: dict, occurrence: int) -> tuple[str, str]:
+    """Return (inner_html, init_script) for one occurrence of a plot."""
+    canvas_id = f"chart-{_safe_id(art['plot'].id)}-{occurrence}"
+    chart_inner = (
+        f"{art['legend_html']}"
+        f'<div class="chart-wrap"><canvas id="{canvas_id}"></canvas></div>'
+    )
+    chart_html = _collapsible("Chart", chart_inner, open=True)
+    table_html = _collapsible("Data", art["table_html_inner"])
+    inner = f"{art['fixed_html']}\n    {chart_html}\n    {table_html}"
+    script = (
+        f"\n  new Chart(document.getElementById('{canvas_id}'), "
+        f"{json.dumps(art['chart_config'])});"
+    )
+    return inner, script
+
+
 def generate_plots_html(
     results_dir: Path,
-    plot_specs: list,
+    doc,
     output_path: Path,
     pretty_map: dict,
-    report_title: str | None = None,
     *,
     run_reports_mode: str = "embedded",
 ) -> None:
@@ -414,67 +495,57 @@ def generate_plots_html(
     sections: list[str] = []
     scripts: list[str] = []
 
-    for plot in plot_specs:
-        gb_keys = _resolve_group_by(list(plot.group_by or []), all_vars)
+    artifacts_by_id: dict[str, dict] = {}
+    for plot in doc.plots:
+        art = _build_plot_artifacts(plot, all_vars, results_dir, pretty_map)
+        if art is not None:
+            artifacts_by_id[plot.id] = art
 
-        if plot.type == "scatter":
-            group_by = gb_keys
-            metrics = [plot.x] + plot.y
-        else:
-            group_by = [plot.x] + gb_keys
-            metrics = plot.y
-
-        rows = query.compute_rows(results_dir, group_by=group_by, metrics=metrics)
-        static_vars, varying_keys = _split_group_by_vars(rows, gb_keys)
-        multi_metric = len(plot.y) > 1
-
-        if plot.type == "scatter":
-            chart_config, series_meta = _build_scatter_config(
-                plot, rows, pretty_map, group_by=gb_keys, varying_keys=varying_keys,
+    if doc.sections:
+        if doc.report_description:
+            sections.append(
+                f'\n  <div class="report-intro">{_render_markdown(doc.report_description)}</div>'
             )
-        elif plot.type in ("bar", "stacked-bar"):
-            chart_config, series_meta = _build_bar_or_line_config(
-                plot, rows, pretty_map,
-                chart_type="bar",
-                stacked=(plot.type == "stacked-bar"),
-                group_by=gb_keys,
-                varying_keys=varying_keys,
+
+        plot_occurrences: dict[str, int] = {}
+        for sec in doc.sections:
+            body = ""
+            if sec.description:
+                body += (
+                    f'<div class="section-description">'
+                    f'{_render_markdown(sec.description)}</div>\n    '
+                )
+            for block in sec.blocks:
+                if block.kind == "text":
+                    body += _render_markdown(block.value) + "\n    "
+                elif block.kind in ("html", "include_html"):
+                    body += block.value + "\n    "
+                elif block.kind == "plot_id":
+                    art = artifacts_by_id.get(block.value)
+                    if art is None:
+                        body += f'<p class="meta">(plot {block.value!r} unavailable)</p>\n    '
+                        continue
+                    occ = plot_occurrences.get(block.value, 0)
+                    inner, script = _render_plot_block(art, occ)
+                    plot_occurrences[block.value] = occ + 1
+                    body += inner + "\n    "
+                    scripts.append(script)
+            sections.append(
+                f'\n  <section>\n    <h2>{sec.title}</h2>\n    {body}\n  </section>'
             )
-        elif plot.type == "line":
-            chart_config, series_meta = _build_bar_or_line_config(
-                plot, rows, pretty_map, chart_type="line", stacked=False,
-                group_by=gb_keys,
-                varying_keys=varying_keys,
-            )
-        else:
-            continue
-
-        use_table_legend = bool(varying_keys)
-        if use_table_legend:
-            chart_config["options"]["plugins"]["legend"] = {"display": False}
-
-        fixed_html = _fixed_vars_html(static_vars, pretty_map)
-        legend_html = _legend_table_html(series_meta, varying_keys, pretty_map, multi_metric)
-
-        safe = _safe_id(plot.id)
-        title = plot.title or plot.id
-        table_headers = list(group_by) + ["metric"] + list(_STAT_COLS) if rows else []
-        chart_inner = f"{legend_html}<div class=\"chart-wrap\"><canvas id=\"chart-{safe}\"></canvas></div>"
-        chart_html = _collapsible("Chart", chart_inner, open=True)
-        table_html = _collapsible("Data", _table_html(rows, table_headers))
-        sections.append(f"""
+    else:
+        for plot in doc.plots:
+            art = artifacts_by_id.get(plot.id)
+            if art is None:
+                continue
+            inner, script = _render_plot_block(art, 0)
+            scripts.append(script)
+            sections.append(f"""
   <section>
-    <h2>{title}</h2>
+    <h2>{art['title']}</h2>
     <p class="meta">type: {plot.type}</p>
-    {fixed_html}
-    {chart_html}
-    {table_html}
+    {inner}
   </section>""")
-
-        scripts.append(
-            f"\n  new Chart(document.getElementById('chart-{safe}'), "
-            f"{json.dumps(chart_config)});"
-        )
 
     if run_reports_mode != "none":
         run_reports = _discover_run_reports(results_dir)
@@ -485,7 +556,7 @@ def generate_plots_html(
                 sections.append(rpt_html)
                 scripts.append(rpt_js)
 
-    title = report_title or "abench_speckz report"
+    title = doc.report_title or "abench_speckz report"
     output_path.write_text(_html_shell(sections, scripts, title=title))
 
 
