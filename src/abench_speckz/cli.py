@@ -1,4 +1,5 @@
 """Argparse entry point for ``abench-speckz gen | run | stats | rebuild-aggregates``."""
+
 import argparse
 import sys
 from pathlib import Path
@@ -16,7 +17,9 @@ def main(argv: list[str] | None = None) -> int:
     gen.add_argument("--out", type=Path, default=Path("out"), help="output directory (default: out)")
     gen.add_argument("--profile", type=str, default=None)
     gen.add_argument("--tag", action="append", default=[], help="only emit combos with this tag (repeatable)")
-    gen.add_argument("--exclude-tag", action="append", default=[], help="skip combos with this tag (repeatable)")
+    gen.add_argument(
+        "--exclude-tag", action="append", default=[], help="skip combos with this tag (repeatable)"
+    )
     mode = gen.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", help="print summary table; do not write files")
     mode.add_argument("--list", action="store_true", help="print TSV; do not write files")
@@ -44,18 +47,31 @@ def main(argv: list[str] | None = None) -> int:
     stats.add_argument("--format", choices=["table", "json", "tsv"], default="table")
     stats.add_argument("--from-raw", action="store_true")
     stats.add_argument("--pretty", action="store_true")
-    stats.add_argument("--report", type=Path, default=None, metavar="PATH",
-                       help="write an HTML report with charts to PATH")
-    stats.add_argument("--plots", type=Path, default=None, metavar="PATH",
-                       help="YAML file with plot definitions (overrides tool YAML plots)")
+    stats.add_argument(
+        "--report", type=Path, default=None, metavar="PATH", help="write an HTML report with charts to PATH"
+    )
+    stats.add_argument(
+        "--plots",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="YAML file with plot definitions (overrides tool YAML plots)",
+    )
     rpt_mode = stats.add_mutually_exclusive_group()
-    rpt_mode.add_argument("--link-run-reports", action="store_true", default=False,
-                          help="Link to per-run HTML files instead of embedding them inline")
-    rpt_mode.add_argument("--no-run-reports", action="store_true", default=False,
-                          help="Omit per-run reports section; generate summary report only")
+    rpt_mode.add_argument(
+        "--link-run-reports",
+        action="store_true",
+        default=False,
+        help="Link to per-run HTML files instead of embedding them inline",
+    )
+    rpt_mode.add_argument(
+        "--no-run-reports",
+        action="store_true",
+        default=False,
+        help="Omit per-run reports section; generate summary report only",
+    )
 
-    rebuild = sub.add_parser("rebuild-aggregates",
-                             help="regenerate aggregates.jsonl from runs.jsonl")
+    rebuild = sub.add_parser("rebuild-aggregates", help="regenerate aggregates.jsonl from runs.jsonl")
     rebuild.add_argument("results_dir", type=Path)
 
     args = parser.parse_args(argv)
@@ -164,8 +180,7 @@ def _print_table(combos: list[Combo]) -> None:
         return
     headers = list(combos[0].varying_keys) + ["tags"]
     rows = [
-        [str(c.vars.get(k, "")) for k in combos[0].varying_keys] + [",".join(sorted(c.tags))]
-        for c in combos
+        [str(c.vars.get(k, "")) for k in combos[0].varying_keys] + [",".join(sorted(c.tags))] for c in combos
     ]
     widths = [max(len(h), *(len(r[i]) for r in rows)) for i, h in enumerate(headers)]
     fmt = "  ".join(f"{{:<{w}}}" for w in widths)

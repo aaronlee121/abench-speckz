@@ -47,21 +47,24 @@ def test_env_var_resolved():
 
 def test_env_var_missing_raises():
     from abench_speckz.model import SpecError
+
     with pytest.raises(SpecError, match="unknown env var"):
         interpolate.resolve({"A": "${env:MISSING}"}, env={})
 
 
 def test_env_var_with_none_env_raises():
     from abench_speckz.model import SpecError
+
     with pytest.raises(SpecError, match="unknown env var"):
         interpolate.resolve({"A": "${env:FOO}"})
 
 
 def test_depth_exceeded_raises():
     # 20 hops via A0 → A1 → … → A19 → unresolved exceeds _MAX_DEPTH=16
-    chain = {f"A{i}": f"${{A{i+1}}}" for i in range(19)}
+    chain = {f"A{i}": f"${{A{i + 1}}}" for i in range(19)}
     chain["A19"] = "${MISSING}"
     from abench_speckz.model import SpecError
+
     with pytest.raises(SpecError):
         interpolate.resolve(chain)
 

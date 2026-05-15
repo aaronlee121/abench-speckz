@@ -9,9 +9,7 @@ def _tool(capture=None, parser=None, output_format="json"):
 
 
 def test_single_match():
-    out, fail = extract.apply(
-        _tool({"x": "$.a"}), json.dumps({"a": 1.5})
-    )
+    out, fail = extract.apply(_tool({"x": "$.a"}), json.dumps({"a": 1.5}))
     assert fail is None
     assert out == {"x": 1.5}
 
@@ -84,6 +82,7 @@ def test_plugin_raises(tmp_path, monkeypatch):
 
 
 # JSONL tests
+
 
 def _jsonl(*rows):
     return "\n".join(json.dumps(r) for r in rows)

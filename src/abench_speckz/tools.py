@@ -1,4 +1,5 @@
 """Parse a tool YAML into a ToolSpec and resolve the tool's reported version."""
+
 import shlex
 import subprocess
 from pathlib import Path
@@ -9,11 +10,28 @@ from abench_speckz.model import RunError
 from abench_speckz.runspec import ToolSpec
 
 _FIELDS = {
-    "name", "command", "timeout_seconds", "version_command",
-    "capture", "parser", "output_file", "output_format", "pretty_names", "units", "higher_is_better",
-    "plots", "env_probes", "combo_probes",
-    "setup", "teardown", "post_run", "monitor", "setup_timeout_seconds",
-    "setup_per_sweep", "teardown_per_sweep", "per_sweep_var",
+    "name",
+    "command",
+    "timeout_seconds",
+    "version_command",
+    "capture",
+    "parser",
+    "output_file",
+    "output_format",
+    "pretty_names",
+    "units",
+    "higher_is_better",
+    "plots",
+    "env_probes",
+    "combo_probes",
+    "setup",
+    "teardown",
+    "post_run",
+    "monitor",
+    "setup_timeout_seconds",
+    "setup_per_sweep",
+    "teardown_per_sweep",
+    "per_sweep_var",
 }
 
 

@@ -23,16 +23,16 @@ def test_parse_y_as_list():
 
 
 def test_parse_with_group_by_string():
-    raw = [{"id": "p1", "type": "line", "x": "concurrency", "y": "rps",
-            "group_by": "backend", "title": "RPS"}]
+    raw = [
+        {"id": "p1", "type": "line", "x": "concurrency", "y": "rps", "group_by": "backend", "title": "RPS"}
+    ]
     specs = plots.parse_plots(raw, source="<t>")
     assert specs[0].group_by == ["backend"]
     assert specs[0].title == "RPS"
 
 
 def test_parse_with_group_by_list():
-    raw = [{"id": "p1", "type": "line", "x": "concurrency", "y": "rps",
-            "group_by": ["workload", "backend"]}]
+    raw = [{"id": "p1", "type": "line", "x": "concurrency", "y": "rps", "group_by": ["workload", "backend"]}]
     specs = plots.parse_plots(raw, source="<t>")
     assert specs[0].group_by == ["workload", "backend"]
 
@@ -189,27 +189,27 @@ def test_discover_dedupes_by_id(tmp_path):
 
 
 def test_parse_group_by_negation_single_string():
-    raw = [{"id": "p1", "type": "line", "x": "concurrency", "y": "rps",
-            "group_by": "!concurrency"}]
+    raw = [{"id": "p1", "type": "line", "x": "concurrency", "y": "rps", "group_by": "!concurrency"}]
     specs = plots.parse_plots(raw, source="<t>")
     assert specs[0].group_by == ["!concurrency"]
 
 
 def test_parse_group_by_negation_in_list():
-    raw = [{"id": "p1", "type": "line", "x": "concurrency", "y": "rps",
-            "group_by": ["!concurrency", "workload"]}]
+    raw = [
+        {"id": "p1", "type": "line", "x": "concurrency", "y": "rps", "group_by": ["!concurrency", "workload"]}
+    ]
     specs = plots.parse_plots(raw, source="<t>")
     assert specs[0].group_by == ["!concurrency", "workload"]
 
 
 def test_parse_group_by_bare_bang_rejected():
-    raw = [{"id": "p1", "type": "line", "x": "c", "y": "rps",
-            "group_by": ["!"]}]
+    raw = [{"id": "p1", "type": "line", "x": "c", "y": "rps", "group_by": ["!"]}]
     with pytest.raises(RunError, match="must be followed by"):
         plots.parse_plots(raw, source="<t>")
 
 
 # --- sections / blocks / report_description -----------------------------------
+
 
 def _basic_plots_yaml() -> str:
     return (
@@ -222,8 +222,7 @@ def _basic_plots_yaml() -> str:
 def test_parse_section_basic(tmp_path):
     p = tmp_path / "plots.yaml"
     p.write_text(
-        _basic_plots_yaml()
-        + "sections:\n"
+        _basic_plots_yaml() + "sections:\n"
         "  - title: Throughput\n"
         "    description: How **RPS** scales with concurrency.\n"
         "    blocks:\n"
@@ -242,8 +241,7 @@ def test_parse_section_basic(tmp_path):
 def test_parse_section_block_kinds_roundtrip(tmp_path):
     p = tmp_path / "plots.yaml"
     p.write_text(
-        _basic_plots_yaml()
-        + "sections:\n"
+        _basic_plots_yaml() + "sections:\n"
         "  - title: Mix\n"
         "    blocks:\n"
         "      - text: Hello *world*\n"
@@ -262,11 +260,7 @@ def test_parse_section_include_html(tmp_path):
     sidecar.write_text("<p>included content</p>")
     p = tmp_path / "plots.yaml"
     p.write_text(
-        _basic_plots_yaml()
-        + "sections:\n"
-        "  - title: S\n"
-        "    blocks:\n"
-        "      - include_html: note.html\n"
+        _basic_plots_yaml() + "sections:\n  - title: S\n    blocks:\n      - include_html: note.html\n"
     )
     doc = plots.load_plots_file(p)
     block = doc.sections[0].blocks[0]
@@ -277,11 +271,7 @@ def test_parse_section_include_html(tmp_path):
 def test_parse_section_include_html_missing(tmp_path):
     p = tmp_path / "plots.yaml"
     p.write_text(
-        _basic_plots_yaml()
-        + "sections:\n"
-        "  - title: S\n"
-        "    blocks:\n"
-        "      - include_html: missing.html\n"
+        _basic_plots_yaml() + "sections:\n  - title: S\n    blocks:\n      - include_html: missing.html\n"
     )
     with pytest.raises(RunError, match="include_html: file not found"):
         plots.load_plots_file(p)
@@ -289,74 +279,42 @@ def test_parse_section_include_html_missing(tmp_path):
 
 def test_parse_section_unknown_plot_id(tmp_path):
     p = tmp_path / "plots.yaml"
-    p.write_text(
-        _basic_plots_yaml()
-        + "sections:\n"
-        "  - title: S\n"
-        "    blocks:\n"
-        "      - plot_id: nope\n"
-    )
+    p.write_text(_basic_plots_yaml() + "sections:\n  - title: S\n    blocks:\n      - plot_id: nope\n")
     with pytest.raises(RunError, match="not found in top-level plots"):
         plots.load_plots_file(p)
 
 
 def test_parse_section_block_multiple_kinds(tmp_path):
     p = tmp_path / "plots.yaml"
-    p.write_text(
-        _basic_plots_yaml()
-        + "sections:\n"
-        "  - title: S\n"
-        "    blocks:\n"
-        "      - {text: t, html: <p>}\n"
-    )
+    p.write_text(_basic_plots_yaml() + "sections:\n  - title: S\n    blocks:\n      - {text: t, html: <p>}\n")
     with pytest.raises(RunError, match="multiple kinds"):
         plots.load_plots_file(p)
 
 
 def test_parse_section_block_no_kinds(tmp_path):
     p = tmp_path / "plots.yaml"
-    p.write_text(
-        _basic_plots_yaml()
-        + "sections:\n"
-        "  - title: S\n"
-        "    blocks:\n"
-        "      - {color: red}\n"
-    )
+    p.write_text(_basic_plots_yaml() + "sections:\n  - title: S\n    blocks:\n      - {color: red}\n")
     with pytest.raises(RunError, match="exactly one"):
         plots.load_plots_file(p)
 
 
 def test_parse_section_unknown_field(tmp_path):
     p = tmp_path / "plots.yaml"
-    p.write_text(
-        _basic_plots_yaml()
-        + "sections:\n"
-        "  - title: S\n"
-        "    blocks: []\n"
-        "    color: red\n"
-    )
+    p.write_text(_basic_plots_yaml() + "sections:\n  - title: S\n    blocks: []\n    color: red\n")
     with pytest.raises(RunError, match="unknown fields"):
         plots.load_plots_file(p)
 
 
 def test_parse_section_missing_title(tmp_path):
     p = tmp_path / "plots.yaml"
-    p.write_text(
-        _basic_plots_yaml()
-        + "sections:\n"
-        "  - blocks: []\n"
-    )
+    p.write_text(_basic_plots_yaml() + "sections:\n  - blocks: []\n")
     with pytest.raises(RunError, match=r"sections\[0\]\.title is required"):
         plots.load_plots_file(p)
 
 
 def test_parse_report_description(tmp_path):
     p = tmp_path / "plots.yaml"
-    p.write_text(
-        "report_title: T\n"
-        "report_description: |\n  Hello **world**\n"
-        + _basic_plots_yaml()
-    )
+    p.write_text("report_title: T\nreport_description: |\n  Hello **world**\n" + _basic_plots_yaml())
     doc = plots.load_plots_file(p)
     assert doc.report_description.strip().endswith("**world**")
 

@@ -58,4 +58,5 @@ def test_merge_overrides_scalar_with_non_dict():
 
 def test_load_missing_returns_empty():
     from pathlib import Path
+
     assert prettynames.load(Path("/nonexistent/path/pn.json")) == {}

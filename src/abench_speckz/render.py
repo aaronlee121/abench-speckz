@@ -1,4 +1,5 @@
 """Render aggregate rows as table / TSV / JSON text — used by ``abench-speckz stats``."""
+
 import json
 from typing import Any
 
@@ -25,10 +26,7 @@ def render(rows: list[dict[str, Any]], fmt: str, out, *, pretty_map: dict) -> No
     label = (lambda h: prettynames.resolve(pretty_map, h)) if pretty_map else (lambda h: h)
     pretty_headers = [label(h) for h in headers]
     rendered = [[_fmt(r[h]) for h in headers] for r in rows]
-    widths = [
-        max(len(h), *(len(row[i]) for row in rendered))
-        for i, h in enumerate(pretty_headers)
-    ]
+    widths = [max(len(h), *(len(row[i]) for row in rendered)) for i, h in enumerate(pretty_headers)]
     fmt_line = "  ".join(f"{{:<{w}}}" for w in widths)
     out.write(fmt_line.format(*pretty_headers) + "\n")
     out.write(fmt_line.format(*("-" * w for w in widths)) + "\n")

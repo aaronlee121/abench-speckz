@@ -1,4 +1,5 @@
 """Build Chart.js config objects for bar / line / scatter / stacked-bar plots."""
+
 from typing import Any
 
 from abench_speckz.report._html import color, resolve_metric, try_numeric_sort
@@ -27,7 +28,7 @@ def build_bar_or_line_config(
     series_meta: list[dict] = []
     for i, (metric, gb_tuple) in enumerate(series_keys):
         c = color(i)
-        vals = dict(zip(group_by, gb_tuple)) if group_by else {}
+        vals = dict(zip(group_by, gb_tuple, strict=True)) if group_by else {}
         varying_parts = [str(vals[k]) for k in label_keys if k in vals]
         label_parts = [resolve_metric(pretty_map, metric)]
         if varying_parts:
@@ -36,8 +37,11 @@ def build_bar_or_line_config(
 
         data = [indexed.get((x, metric, gb_tuple)) for x in x_values]
         ds: dict[str, Any] = {
-            "label": label, "data": data,
-            "backgroundColor": c, "borderColor": c, "borderWidth": 1,
+            "label": label,
+            "data": data,
+            "backgroundColor": c,
+            "borderColor": c,
+            "borderWidth": 1,
         }
         if chart_type == "line":
             ds["fill"] = False
@@ -84,7 +88,7 @@ def build_scatter_config(
     group_vals: dict[tuple, dict[str, str]] = {}
     for r in rows:
         gb_tuple = tuple(str(r.get(k, "")) for k in group_by) if group_by else ("all",)
-        vals = dict(zip(group_by, gb_tuple)) if group_by else {}
+        vals = dict(zip(group_by, gb_tuple, strict=True)) if group_by else {}
         groups.setdefault(gb_tuple, {})[str(r.get("metric"))] = r.get("mean")
         group_vals[gb_tuple] = vals
 
@@ -100,11 +104,15 @@ def build_scatter_config(
         vals = group_vals.get(gb_tuple, {})
         varying_parts = [str(vals[k]) for k in label_keys if k in vals]
         label = " / ".join(varying_parts) if varying_parts else "all"
-        datasets.append({
-            "label": label,
-            "data": [{"x": x_val, "y": y_val}],
-            "backgroundColor": c, "borderColor": c, "pointRadius": 6,
-        })
+        datasets.append(
+            {
+                "label": label,
+                "data": [{"x": x_val, "y": y_val}],
+                "backgroundColor": c,
+                "borderColor": c,
+                "pointRadius": 6,
+            }
+        )
         series_meta.append({"metric": y_metric, "vals": vals, "color": c})
 
     config = {
@@ -123,7 +131,9 @@ def build_scatter_config(
 
 
 def _index_series(
-    rows: list[dict], x_key: str, group_by: list[str],
+    rows: list[dict],
+    x_key: str,
+    group_by: list[str],
 ) -> tuple[dict[tuple, float | None], list[tuple]]:
     """Build (x, metric, gb_tuple) → mean lookup and ordered list of (metric, gb_tuple) keys."""
     indexed: dict[tuple, float | None] = {}

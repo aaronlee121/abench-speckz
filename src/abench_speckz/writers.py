@@ -1,4 +1,5 @@
 """Serialize combos to per-combo env-files and a directory-wide ``manifest.json``."""
+
 import json
 from pathlib import Path
 

@@ -1,4 +1,5 @@
 """Parse ``K=V`` filter expressions and combine them with tag include/exclude sets."""
+
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -19,9 +20,7 @@ def check_ident(name: str, *, context: str) -> str:
     generation.
     """
     if not _IDENT_RE.fullmatch(name):
-        raise RunError(
-            f"invalid {context}: {name!r} (must match [A-Za-z_][A-Za-z0-9_]*)"
-        )
+        raise RunError(f"invalid {context}: {name!r} (must match [A-Za-z_][A-Za-z0-9_]*)")
     return name
 
 

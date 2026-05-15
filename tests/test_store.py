@@ -1,4 +1,3 @@
-
 from abench_speckz import store
 from abench_speckz.runspec import AggregateRow
 
@@ -27,9 +26,19 @@ def test_read_runs_for_hash(tmp_path):
 def test_aggregates_atomic_write(tmp_path):
     store.init_results_dir(tmp_path)
     row = AggregateRow(
-        config_hash="h", metric="rps", n=2, n_failed=0,
-        mean=100.0, stddev=10.0, p50=100.0, p95=110.0, p99=110.0,
-        ci95_low=85.0, ci95_high=115.0, vars={"a": "1"}, tags=["bench"],
+        config_hash="h",
+        metric="rps",
+        n=2,
+        n_failed=0,
+        mean=100.0,
+        stddev=10.0,
+        p50=100.0,
+        p95=110.0,
+        p99=110.0,
+        ci95_low=85.0,
+        ci95_high=115.0,
+        vars={"a": "1"},
+        tags=["bench"],
     )
     store.write_aggregates_atomic(tmp_path, {"h": [row]})
     table = store.load_aggregates(tmp_path)
@@ -40,14 +49,28 @@ def test_aggregates_atomic_write(tmp_path):
 
 def test_update_aggregates_for_hash(tmp_path):
     store.init_results_dir(tmp_path)
-    store.append_run(tmp_path, {
-        "run_id": "1", "config_hash": "h", "vars": {"a": "1"},
-        "tags": [], "exit_code": 0, "results": {"rps": 100},
-    })
-    store.append_run(tmp_path, {
-        "run_id": "2", "config_hash": "h", "vars": {"a": "1"},
-        "tags": [], "exit_code": 0, "results": {"rps": 110},
-    })
+    store.append_run(
+        tmp_path,
+        {
+            "run_id": "1",
+            "config_hash": "h",
+            "vars": {"a": "1"},
+            "tags": [],
+            "exit_code": 0,
+            "results": {"rps": 100},
+        },
+    )
+    store.append_run(
+        tmp_path,
+        {
+            "run_id": "2",
+            "config_hash": "h",
+            "vars": {"a": "1"},
+            "tags": [],
+            "exit_code": 0,
+            "results": {"rps": 110},
+        },
+    )
     store.update_aggregates_for_hash(tmp_path, "h")
     table = store.load_aggregates(tmp_path)
     assert table["h"][0].n == 2
@@ -57,10 +80,17 @@ def test_update_aggregates_for_hash(tmp_path):
 def test_rebuild_aggregates(tmp_path):
     store.init_results_dir(tmp_path)
     for i in range(3):
-        store.append_run(tmp_path, {
-            "run_id": f"r{i}", "config_hash": "h", "vars": {"a": "1"},
-            "tags": [], "exit_code": 0, "results": {"rps": 100 + i * 10},
-        })
+        store.append_run(
+            tmp_path,
+            {
+                "run_id": f"r{i}",
+                "config_hash": "h",
+                "vars": {"a": "1"},
+                "tags": [],
+                "exit_code": 0,
+                "results": {"rps": 100 + i * 10},
+            },
+        )
     n = store.rebuild_aggregates(tmp_path)
     assert n == 1
     table = store.load_aggregates(tmp_path)
@@ -130,7 +160,8 @@ def test_raw_output_file_content_spilled(tmp_path):
 def test_raw_step_stdout_spilled(tmp_path):
     store.init_results_dir(tmp_path)
     raw = {
-        "stdout": _SMALL, "stderr": _SMALL,
+        "stdout": _SMALL,
+        "stderr": _SMALL,
         "setup": [{"command": "echo hi", "exit_code": 0, "stdout": _LARGE, "stderr": ""}],
     }
     store.write_raw_run(tmp_path, "run-5", raw)

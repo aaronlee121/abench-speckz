@@ -1,4 +1,5 @@
 """Read/write the ``results/`` directory: runs.jsonl, aggregates.jsonl, snapshots, raw stdout."""
+
 import dataclasses
 import fcntl
 import json
@@ -121,9 +122,7 @@ def _maybe_spill(content: str, sidecar_path: Path, results_dir: Path) -> "str | 
     return {"$ref": str(sidecar_path.relative_to(results_dir))}
 
 
-def _spill_phases(
-    doc: dict[str, Any], base_name: str, raw_dir: Path, results_dir: Path
-) -> dict[str, Any]:
+def _spill_phases(doc: dict[str, Any], base_name: str, raw_dir: Path, results_dir: Path) -> dict[str, Any]:
     """Spill stdout/stderr in setup/teardown/post_run step lists. Returns a new dict."""
     doc = dict(doc)
     for phase in ("setup", "teardown", "post_run"):
@@ -178,9 +177,7 @@ def write_raw_run(results_dir: Path, run_id: str, raw: dict[str, Any]) -> Path:
         if isinstance(doc.get(field), str):
             doc[field] = _maybe_spill(doc[field], raw_dir / f"{run_id}.{field}", results_dir)
 
-    if isinstance(doc.get("output_file"), dict) and isinstance(
-        doc["output_file"].get("content"), str
-    ):
+    if isinstance(doc.get("output_file"), dict) and isinstance(doc["output_file"].get("content"), str):
         doc["output_file"] = dict(doc["output_file"])
         doc["output_file"]["content"] = _maybe_spill(
             doc["output_file"]["content"],
@@ -224,6 +221,7 @@ def snapshot_manifest(results_dir: Path, manifest_path: Path) -> Path:
     target = results_dir / "manifest.snapshot.json"
     if target.exists():
         from datetime import datetime, timezone
+
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         target = results_dir / f"manifest.snapshot.{ts}.json"
     shutil.copyfile(manifest_path, target)

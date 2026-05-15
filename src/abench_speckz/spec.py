@@ -1,4 +1,5 @@
 """Load a spec YAML and overlay an optional profile onto the base spec."""
+
 from pathlib import Path
 from typing import Any
 

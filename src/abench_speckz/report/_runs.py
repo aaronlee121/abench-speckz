@@ -1,4 +1,5 @@
 """Discover per-run HTML reports under raw/ and render the per-run report section."""
+
 import json
 from pathlib import Path
 
@@ -27,7 +28,8 @@ def runs_section(
 ) -> tuple[str, str]:
     """Return ``(section_html, script_js)``. Both empty when nothing to show."""
     eligible = [
-        r for r in runs
+        r
+        for r in runs
         if r.get("run_id") in run_reports
         and r.get("exit_code") == 0
         and "warmup" not in (r.get("tags") or [])
@@ -51,13 +53,13 @@ def runs_section(
 
         for run in group_runs:
             body_html += _render_run_details(
-                run=run, reports=run_reports[run["run_id"]],
-                embed=embed, js_data_lines=js_data_lines,
+                run=run,
+                reports=run_reports[run["run_id"]],
+                embed=embed,
+                js_data_lines=js_data_lines,
             )
 
-    section_html = (
-        f'\n  <section>\n    <h2>Per-run reports</h2>\n    {body_html}\n  </section>'
-    )
+    section_html = f"\n  <section>\n    <h2>Per-run reports</h2>\n    {body_html}\n  </section>"
     script_js = _build_loader_script(js_data_lines) if embed and js_data_lines else ""
     return section_html, script_js
 
@@ -92,33 +94,23 @@ def _render_run_details(
                 f'  _runReports["{run_id}/{name}"] = `{escape_for_js_template_literal(content)}`;'
             )
             inner_html += (
-                f'<details><summary>{name}</summary>'
+                f"<details><summary>{name}</summary>"
                 f'<iframe id="{iframe_id}" class="run-rpt"'
                 f' sandbox="allow-scripts allow-same-origin"></iframe>'
-                f'</details>\n'
+                f"</details>\n"
             )
         else:
             href = f"raw/{run_id}_{name}.html"
             inner_html += (
-                f'<details><summary>{name}</summary>'
-                f'<a href="{href}" target="_blank">{href}</a>'
-                f'</details>\n'
+                f'<details><summary>{name}</summary><a href="{href}" target="_blank">{href}</a></details>\n'
             )
 
     summary = f"Run {short_id}… ({started_at})" if started_at else f"Run {short_id}…"
     if embed:
-        toggle_attr = (
-            f' ontoggle="loadRunReport(this,'
-            f'{json.dumps(run_id)},{json.dumps(names)})"'
-        )
+        toggle_attr = f' ontoggle="loadRunReport(this,{json.dumps(run_id)},{json.dumps(names)})"'
     else:
         toggle_attr = ""
-    return (
-        f'<details{toggle_attr}>'
-        f'<summary>{summary}</summary>'
-        f'{inner_html}'
-        f'</details>\n'
-    )
+    return f"<details{toggle_attr}><summary>{summary}</summary>{inner_html}</details>\n"
 
 
 def _build_loader_script(js_data_lines: list[str]) -> str:

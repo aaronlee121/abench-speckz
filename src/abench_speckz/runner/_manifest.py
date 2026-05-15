@@ -1,4 +1,5 @@
 """Read manifest.json and combo env-files; capture host/git metadata at sweep start."""
+
 import json
 import os
 import platform
@@ -45,7 +46,10 @@ def collect_env_metadata() -> dict[str, Any]:
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=2, check=False,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
         )
         if result.returncode == 0:
             info["git_sha"] = result.stdout.strip()

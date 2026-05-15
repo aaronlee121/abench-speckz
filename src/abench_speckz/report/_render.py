@@ -1,4 +1,5 @@
 """Top-level report entry points: render aggregate rows or a PlotsDoc to a self-contained HTML file."""
+
 import json
 from pathlib import Path
 from typing import Any
@@ -35,13 +36,18 @@ def generate_html(
 
     for metric, metric_rows in _group_rows_by_metric(rows).items():
         section, script = _render_metric_section(
-            metric, metric_rows, group_by, pretty_map,
+            metric,
+            metric_rows,
+            group_by,
+            pretty_map,
         )
         sections.append(section)
         chart_scripts.append(script)
 
     _append_run_reports_section(
-        sections, chart_scripts, results_dir=results_dir,
+        sections,
+        chart_scripts,
+        results_dir=results_dir,
         run_reports_mode=run_reports_mode,
     )
 
@@ -75,7 +81,10 @@ def generate_plots_html(
         _render_plots_only(doc, artifacts_by_id, sections, scripts)
 
     _append_run_reports_section(
-        sections, scripts, results_dir=results_dir, run_reports_mode=run_reports_mode,
+        sections,
+        scripts,
+        results_dir=results_dir,
+        run_reports_mode=run_reports_mode,
     )
 
     title = doc.report_title or "abench_speckz report"
@@ -103,14 +112,17 @@ def _render_metric_section(
     label_keys = varying_keys if varying_keys else group_by
     labels = (
         [" / ".join(str(r.get(g, "")) for g in label_keys) for r in metric_rows]
-        if label_keys else ["all"] * len(metric_rows)
+        if label_keys
+        else ["all"] * len(metric_rows)
     )
 
     datasets = [
         {
             "label": stat_key,
             "data": [r.get(stat_key) for r in metric_rows],
-            "backgroundColor": c, "borderColor": c, "borderWidth": 1,
+            "backgroundColor": c,
+            "borderColor": c,
+            "borderWidth": 1,
         }
         for stat_key, c in zip(["mean", "p50", "p95", "p99"], COLORS, strict=False)
     ]
@@ -150,18 +162,13 @@ def _render_metric_section(
 def _render_sectioned(doc, artifacts_by_id, sections, scripts) -> None:
     """Editorial-section layout: blocks reference plots by id; text/html blocks interleave."""
     if doc.report_description:
-        sections.append(
-            f'\n  <div class="report-intro">{render_markdown(doc.report_description)}</div>'
-        )
+        sections.append(f'\n  <div class="report-intro">{render_markdown(doc.report_description)}</div>')
 
     plot_occurrences: dict[str, int] = {}
     for sec in doc.sections:
         body = ""
         if sec.description:
-            body += (
-                f'<div class="section-description">'
-                f'{render_markdown(sec.description)}</div>\n    '
-            )
+            body += f'<div class="section-description">{render_markdown(sec.description)}</div>\n    '
         for block in sec.blocks:
             if block.kind == "text":
                 body += render_markdown(block.value) + "\n    "
@@ -177,9 +184,7 @@ def _render_sectioned(doc, artifacts_by_id, sections, scripts) -> None:
                 plot_occurrences[block.value] = occ + 1
                 body += inner + "\n    "
                 scripts.append(script)
-        sections.append(
-            f'\n  <section>\n    <h2>{sec.title}</h2>\n    {body}\n  </section>'
-        )
+        sections.append(f"\n  <section>\n    <h2>{sec.title}</h2>\n    {body}\n  </section>")
 
 
 def _render_plots_only(doc, artifacts_by_id, sections, scripts) -> None:

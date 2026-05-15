@@ -1,4 +1,5 @@
 """HTML shell + small formatting/escaping helpers shared across the report package."""
+
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -81,25 +82,25 @@ def html_shell(sections: list[str], scripts: list[str], title: str = "abench_spe
     body_sections = "".join(sections)
     chart_inits = "".join(scripts)
     return (
-        f'<!DOCTYPE html>\n'
+        f"<!DOCTYPE html>\n"
         f'<html lang="en">\n'
-        f'<head>\n'
+        f"<head>\n"
         f'  <meta charset="utf-8">\n'
         f'  <meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        f'  <title>{title}</title>\n'
+        f"  <title>{title}</title>\n"
         f'  <script src="{CHART_JS_CDN}"></script>\n'
-        f'  <style>{_CSS}  </style>\n'
-        f'</head>\n'
-        f'<body>\n'
-        f'  <h1>{title}</h1>\n'
+        f"  <style>{_CSS}  </style>\n"
+        f"</head>\n"
+        f"<body>\n"
+        f"  <h1>{title}</h1>\n"
         f'  <p class="meta">Generated: {timestamp}</p>\n'
-        f'{body_sections}\n'
-        f'  <script>\n'
-        f'{chart_inits}\n'
-        f'  </script>\n'
-        f'  <script>{_SLANT_SYNC_JS}  </script>\n'
-        f'</body>\n'
-        f'</html>'
+        f"{body_sections}\n"
+        f"  <script>\n"
+        f"{chart_inits}\n"
+        f"  </script>\n"
+        f"  <script>{_SLANT_SYNC_JS}  </script>\n"
+        f"</body>\n"
+        f"</html>"
     )
 
 
@@ -143,8 +144,7 @@ def table_html(rows: list[dict], headers: list[str]) -> str:
         return '<p class="meta">(no data)</p>'
     header_cells = "".join(f"<th>{h}</th>" for h in headers)
     body_rows = "".join(
-        "<tr>" + "".join(f"<td>{fmt_value(r.get(h))}</td>" for h in headers) + "</tr>"
-        for r in rows
+        "<tr>" + "".join(f"<td>{fmt_value(r.get(h))}</td>" for h in headers) + "</tr>" for r in rows
     )
     return (
         f'<div class="table-wrap"><table>'
@@ -159,7 +159,8 @@ def escape_for_js_template_literal(s: str) -> str:
 
 
 def split_group_by_vars(
-    rows: list[dict], group_by: list[str],
+    rows: list[dict],
+    group_by: list[str],
 ) -> tuple[dict[str, str], list[str]]:
     """Partition ``group_by`` keys into static (one unique value) and varying (multiple values).
 
@@ -181,8 +182,7 @@ def fixed_vars_html(static_vars: dict[str, str], pretty_map: dict) -> str:
     if not static_vars:
         return ""
     parts = ", ".join(
-        f"<b>{resolve_metric(pretty_map, k)}</b>&nbsp;=&nbsp;{v}"
-        for k, v in static_vars.items()
+        f"<b>{resolve_metric(pretty_map, k)}</b>&nbsp;=&nbsp;{v}" for k, v in static_vars.items()
     )
     return f'<p class="fixed-vars">Fixed: {parts}</p>'
 
@@ -216,9 +216,9 @@ def legend_table_html(
         body_rows += f"<tr>{cells}</tr>"
     return (
         f'<div class="legend-wrap table-wrap rotated-slant">'
-        f'<table><thead><tr>{header_cells}</tr></thead>'
-        f'<tbody>{body_rows}</tbody>'
-        f'</table></div>'
+        f"<table><thead><tr>{header_cells}</tr></thead>"
+        f"<tbody>{body_rows}</tbody>"
+        f"</table></div>"
     )
 
 
@@ -234,4 +234,5 @@ def resolve_group_by(group_by: list[str], all_vars: list[str]) -> list[str]:
 
 def render_markdown(src: str) -> str:
     import markdown
+
     return markdown.markdown(src, extensions=["extra", "sane_lists"])

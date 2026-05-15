@@ -1,4 +1,5 @@
 """Top-level orchestrator for ``abench-speckz run``: plan, execute, persist, summarize."""
+
 import os
 import sys
 import time
@@ -20,7 +21,7 @@ from abench_speckz.runner._planning import (
     validate_per_sweep,
 )
 from abench_speckz.runner._probes import collect_probe_results, config_hash
-from abench_speckz.runner._rep import build_raw, execute_one_rep, make_row
+from abench_speckz.runner._rep import execute_one_rep, make_row
 from abench_speckz.runspec import ToolSpec
 
 
@@ -57,7 +58,12 @@ def execute_sweep(
     tool = tools.load_tool(tool_path)
 
     work = plan_sweep(
-        manifest_entries, repeat, warmup, where, require_tags, exclude_tags,
+        manifest_entries,
+        repeat,
+        warmup,
+        where,
+        require_tags,
+        exclude_tags,
         per_sweep_var=tool.per_sweep_var,
     )
     if not work:
@@ -76,16 +82,26 @@ def execute_sweep(
         tool_version = tools.resolve_tool_version(tool)
         skip_counts = existing_counts(results_dir) if skip_existing else Counter()
         return _run_groups(
-            groups=groups, tool=tool, tool_version=tool_version,
-            manifest_dir=manifest_dir, results_dir=results_dir,
-            executor=executor, keep_raw=keep_raw,
-            skip_existing=skip_existing, skip_counts=skip_counts,
-            repeat=repeat, total=len(work), progress_stream=progress_stream,
+            groups=groups,
+            tool=tool,
+            tool_version=tool_version,
+            manifest_dir=manifest_dir,
+            results_dir=results_dir,
+            executor=executor,
+            keep_raw=keep_raw,
+            skip_existing=skip_existing,
+            skip_counts=skip_counts,
+            repeat=repeat,
+            total=len(work),
+            progress_stream=progress_stream,
         )
 
 
 def _init_sweep(
-    results_dir: Path, manifest_path: Path, tool_path: Path, tool: ToolSpec,
+    results_dir: Path,
+    manifest_path: Path,
+    tool_path: Path,
+    tool: ToolSpec,
 ) -> None:
     """Prepare the results dir: init layout, snapshot inputs, capture env + pretty names."""
     store.init_results_dir(results_dir)
@@ -127,10 +143,7 @@ def _run_groups(
     combo_probe_cache: dict[str, dict[str, Any]] = {}
 
     for group_key, items in groups:
-        group_slug = (
-            slug_mod.slug(group_key)
-            if (tool.per_sweep_var and group_key is not None) else None
-        )
+        group_slug = slug_mod.slug(group_key) if (tool.per_sweep_var and group_key is not None) else None
         first_env_file = manifest_dir / items[0][0]["filename"]
         phase_vars: dict[str, Any] = {
             **({tool.per_sweep_var: group_key} if tool.per_sweep_var else {}),
@@ -139,47 +152,63 @@ def _run_groups(
         }
 
         runnable_idx = [
-            j for j, (entry, _r, is_warmup) in enumerate(items)
-            if not (
-                skip_existing and not is_warmup
-                and skip_counts[config_hash(entry["vars"])] >= repeat
-            )
+            j
+            for j, (entry, _r, is_warmup) in enumerate(items)
+            if not (skip_existing and not is_warmup and skip_counts[config_hash(entry["vars"])] >= repeat)
         ]
         if not runnable_idx:
             for entry, _r, _is_warmup in items:
                 sweep_idx += 1
                 counts["skipped"] += 1
-                _progress(progress_stream, sweep_idx, total, t_sweep,
-                          "skip", config_hash(entry["vars"]))
+                _progress(progress_stream, sweep_idx, total, t_sweep, "skip", config_hash(entry["vars"]))
             continue
 
         sweep_setup_failure, sweep_setup_records = (
-            run_phase("per_sweep_setup", tool.setup_per_sweep, phase_vars,
-                      base_env, tool.setup_timeout_seconds)
-            if tool.setup_per_sweep else (None, [])
+            run_phase(
+                "per_sweep_setup", tool.setup_per_sweep, phase_vars, base_env, tool.setup_timeout_seconds
+            )
+            if tool.setup_per_sweep
+            else (None, [])
         )
 
+        sweep_teardown_failure: str | None = None
+        sweep_teardown_records: list[dict[str, Any]] = []
         if sweep_setup_failure:
             sweep_teardown_failure, sweep_teardown_records = (
-                run_phase("per_sweep_teardown", tool.teardown_per_sweep, phase_vars,
-                          base_env, tool.setup_timeout_seconds)
-                if tool.teardown_per_sweep else (None, [])
+                run_phase(
+                    "per_sweep_teardown",
+                    tool.teardown_per_sweep,
+                    phase_vars,
+                    base_env,
+                    tool.setup_timeout_seconds,
+                )
+                if tool.teardown_per_sweep
+                else (None, [])
             )
             sweep_idx = _record_sweep_setup_failures(
-                items=items, results_dir=results_dir, tool=tool, tool_version=tool_version,
+                items=items,
+                results_dir=results_dir,
+                tool=tool,
+                tool_version=tool_version,
                 sweep_setup_failure=sweep_setup_failure,
-                skip_existing=skip_existing, skip_counts=skip_counts, repeat=repeat,
-                counts=counts, sweep_idx=sweep_idx, total=total,
-                t_sweep=t_sweep, progress_stream=progress_stream,
+                skip_existing=skip_existing,
+                skip_counts=skip_counts,
+                repeat=repeat,
+                counts=counts,
+                sweep_idx=sweep_idx,
+                total=total,
+                t_sweep=t_sweep,
+                progress_stream=progress_stream,
             )
             _maybe_write_sweep_raw(
-                results_dir, group_slug, sweep_setup_records, sweep_teardown_records,
+                results_dir,
+                group_slug,
+                sweep_setup_records,
+                sweep_teardown_records,
                 force=True,
             )
             continue
 
-        sweep_teardown_failure: str | None = None
-        sweep_teardown_records: list[dict[str, Any]] = []
         last_runnable = runnable_idx[-1]
         try:
             for j, (entry, _r, is_warmup) in enumerate(items):
@@ -191,17 +220,25 @@ def _run_groups(
                     continue
 
                 _maybe_collect_combo_probes(
-                    tool=tool, entry=entry, ch=ch,
-                    manifest_dir=manifest_dir, results_dir=results_dir,
-                    probed_hashes=probed_hashes, cache=combo_probe_cache,
+                    tool=tool,
+                    entry=entry,
+                    ch=ch,
+                    manifest_dir=manifest_dir,
+                    results_dir=results_dir,
+                    probed_hashes=probed_hashes,
+                    cache=combo_probe_cache,
                 )
 
                 try:
                     row = execute_one_rep(
-                        entry=entry, is_warmup=is_warmup, tool=tool,
+                        entry=entry,
+                        is_warmup=is_warmup,
+                        tool=tool,
                         tool_version=tool_version,
-                        manifest_dir=manifest_dir, results_dir=results_dir,
-                        executor=executor, keep_raw=keep_raw,
+                        manifest_dir=manifest_dir,
+                        results_dir=results_dir,
+                        executor=executor,
+                        keep_raw=keep_raw,
                         probe_results=combo_probe_cache.get(ch, {}),
                     )
                 except KeyboardInterrupt:
@@ -210,14 +247,16 @@ def _run_groups(
 
                 if j == last_runnable and tool.teardown_per_sweep:
                     sweep_teardown_failure, sweep_teardown_records = run_phase(
-                        "per_sweep_teardown", tool.teardown_per_sweep, phase_vars,
-                        base_env, tool.setup_timeout_seconds,
+                        "per_sweep_teardown",
+                        tool.teardown_per_sweep,
+                        phase_vars,
+                        base_env,
+                        tool.setup_timeout_seconds,
                     )
                     if sweep_teardown_failure:
                         prior = row.get("failure_reason")
                         row["failure_reason"] = (
-                            f"{prior}; {sweep_teardown_failure}" if prior
-                            else sweep_teardown_failure
+                            f"{prior}; {sweep_teardown_failure}" if prior else sweep_teardown_failure
                         )
 
                 store.append_run(results_dir, row)
@@ -230,12 +269,20 @@ def _run_groups(
                     _progress(progress_stream, sweep_idx, total, t_sweep, "ok", ch)
         except KeyboardInterrupt:
             if tool.teardown_per_sweep:
-                run_phase("per_sweep_teardown", tool.teardown_per_sweep, phase_vars,
-                          base_env, tool.setup_timeout_seconds)
+                run_phase(
+                    "per_sweep_teardown",
+                    tool.teardown_per_sweep,
+                    phase_vars,
+                    base_env,
+                    tool.setup_timeout_seconds,
+                )
             raise
 
         _maybe_write_sweep_raw(
-            results_dir, group_slug, sweep_setup_records, sweep_teardown_records,
+            results_dir,
+            group_slug,
+            sweep_setup_records,
+            sweep_teardown_records,
             force=bool(sweep_teardown_failure or keep_raw),
         )
 
@@ -263,12 +310,15 @@ def _maybe_collect_combo_probes(
     env_file = manifest_dir / entry["filename"]
     probe_vars = {**entry["vars"], "_envfile": str(env_file.resolve())}
     probe_env = (
-        {**os.environ, **load_envfile(env_file)} if env_file.exists()
+        {**os.environ, **load_envfile(env_file)}
+        if env_file.exists()
         else {**os.environ, **{k: str(v) for k, v in entry["vars"].items()}}
     )
     cache[ch] = collect_probe_results(
-        tool.combo_probes, tool.setup_timeout_seconds,
-        vars_=probe_vars, env=probe_env,
+        tool.combo_probes,
+        tool.setup_timeout_seconds,
+        vars_=probe_vars,
+        env=probe_env,
     )
     store.update_combo_probes(results_dir, ch, cache[ch])
     probed_hashes.add(ch)
@@ -302,10 +352,17 @@ def _record_sweep_setup_failures(
         if is_warmup:
             tags.append("warmup")
         row = make_row(
-            run_id=str(uuid.uuid4()), entry=entry, ch=ch, tags=tags,
-            tool=tool, tool_version=tool_version,
-            command="<not-run>", result=None, parsed={},
-            failure_reason=sweep_setup_failure, probe_results={},
+            run_id=str(uuid.uuid4()),
+            entry=entry,
+            ch=ch,
+            tags=tags,
+            tool=tool,
+            tool_version=tool_version,
+            command="<not-run>",
+            result=None,
+            parsed={},
+            failure_reason=sweep_setup_failure,
+            probe_results={},
         )
         store.append_run(results_dir, row)
         store.update_aggregates_for_hash(results_dir, ch)
@@ -334,7 +391,10 @@ def _maybe_write_sweep_raw(
 
 
 def _dry_run_preview(
-    groups: list[WorkGroup], tool: ToolSpec, stream, manifest_dir: Path,
+    groups: list[WorkGroup],
+    tool: ToolSpec,
+    stream,
+    manifest_dir: Path,
 ) -> None:
     for group_key, items in groups:
         first_env_file = manifest_dir / items[0][0]["filename"]
@@ -362,7 +422,8 @@ def _progress(stream, idx: int, total: int, t_start: float, status: str, ch: str
     eta = (elapsed / idx) * (total - idx) if idx > 0 else 0
     print(
         f"[{idx:>4}/{total}] {status:<4} {ch}  elapsed={elapsed:5.1f}s eta={eta:5.1f}s",
-        file=stream, flush=True,
+        file=stream,
+        flush=True,
     )
 
 

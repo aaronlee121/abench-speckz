@@ -76,10 +76,7 @@ def test_underscore_static_rejected(tmp_path):
 
 def test_underscore_when_set_rejected(tmp_path):
     p = tmp_path / "spec.yaml"
-    p.write_text(
-        "variables:\n  x: [1]\n"
-        "when:\n  - if: {x: 1}\n    set: {_synthetic: val}\n"
-    )
+    p.write_text("variables:\n  x: [1]\nwhen:\n  - if: {x: 1}\n    set: {_synthetic: val}\n")
     with pytest.raises(SpecError, match="reserved"):
         spec.load(p)
 
@@ -87,9 +84,7 @@ def test_underscore_when_set_rejected(tmp_path):
 def test_underscore_in_profile_variable_rejected(tmp_path):
     p = tmp_path / "spec.yaml"
     p.write_text(
-        "variables:\n  x: [1]\n"
-        "profiles:\n  p:\n    variables:\n      _bad: [1]\n"
-        "default_profile: p\n"
+        "variables:\n  x: [1]\nprofiles:\n  p:\n    variables:\n      _bad: [1]\ndefault_profile: p\n"
     )
     with pytest.raises(SpecError, match="reserved"):
         spec.load(p)

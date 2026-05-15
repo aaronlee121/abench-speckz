@@ -1,4 +1,5 @@
 """Build the per-plot artifacts that section rendering and legacy generate_html consume."""
+
 import json
 from pathlib import Path
 
@@ -37,18 +38,31 @@ def build_plot_artifacts(plot, all_vars: list[str], results_dir: Path, pretty_ma
 
     if plot.type == "scatter":
         chart_config, series_meta = build_scatter_config(
-            plot, rows, pretty_map, group_by=gb_keys, varying_keys=varying_keys,
+            plot,
+            rows,
+            pretty_map,
+            group_by=gb_keys,
+            varying_keys=varying_keys,
         )
     elif plot.type in ("bar", "stacked-bar"):
         chart_config, series_meta = build_bar_or_line_config(
-            plot, rows, pretty_map,
-            chart_type="bar", stacked=(plot.type == "stacked-bar"),
-            group_by=gb_keys, varying_keys=varying_keys,
+            plot,
+            rows,
+            pretty_map,
+            chart_type="bar",
+            stacked=(plot.type == "stacked-bar"),
+            group_by=gb_keys,
+            varying_keys=varying_keys,
         )
     elif plot.type == "line":
         chart_config, series_meta = build_bar_or_line_config(
-            plot, rows, pretty_map, chart_type="line", stacked=False,
-            group_by=gb_keys, varying_keys=varying_keys,
+            plot,
+            rows,
+            pretty_map,
+            chart_type="line",
+            stacked=False,
+            group_by=gb_keys,
+            varying_keys=varying_keys,
         )
     else:
         return None
@@ -69,15 +83,9 @@ def build_plot_artifacts(plot, all_vars: list[str], results_dir: Path, pretty_ma
 def render_plot_block(art: dict, occurrence: int) -> tuple[str, str]:
     """Return (inner_html, init_script) for one occurrence of a plot."""
     canvas_id = f"chart-{safe_id(art['plot'].id)}-{occurrence}"
-    chart_inner = (
-        f"{art['legend_html']}"
-        f'<div class="chart-wrap"><canvas id="{canvas_id}"></canvas></div>'
-    )
+    chart_inner = f'{art["legend_html"]}<div class="chart-wrap"><canvas id="{canvas_id}"></canvas></div>'
     chart_html = collapsible("Chart", chart_inner, open=True)
     data_html = collapsible("Data", art["table_html_inner"])
     inner = f"{art['fixed_html']}\n    {chart_html}\n    {data_html}"
-    script = (
-        f"\n  new Chart(document.getElementById('{canvas_id}'), "
-        f"{json.dumps(art['chart_config'])});"
-    )
+    script = f"\n  new Chart(document.getElementById('{canvas_id}'), {json.dumps(art['chart_config'])});"
     return inner, script

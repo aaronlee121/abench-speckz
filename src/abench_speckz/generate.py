@@ -1,4 +1,5 @@
 """Combo pipeline: expand variables, apply when/exclude rules, dedupe, interpolate, tag-filter."""
+
 from collections.abc import Iterable
 from itertools import product
 from typing import Any

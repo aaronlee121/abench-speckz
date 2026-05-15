@@ -1,4 +1,5 @@
 """PlotSpec dataclass and validators for declarative chart definitions."""
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -23,14 +24,14 @@ class PlotSpec:
 
 @dataclass
 class Block:
-    kind: str   # one of BLOCK_KINDS
+    kind: str  # one of BLOCK_KINDS
     value: str  # markdown source (text), plot id (plot_id), or final HTML (html/include_html)
 
 
 @dataclass
 class Section:
     title: str
-    description: str | None = None   # markdown source
+    description: str | None = None  # markdown source
     blocks: list[Block] = field(default_factory=list)
 
 
@@ -64,8 +65,7 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
         ptype = item.get("type")
         if ptype not in ALLOWED_TYPES:
             raise RunError(
-                f"{source}: plot {plot_id!r}: type must be one of "
-                f"{sorted(ALLOWED_TYPES)}, got {ptype!r}"
+                f"{source}: plot {plot_id!r}: type must be one of {sorted(ALLOWED_TYPES)}, got {ptype!r}"
             )
 
         x = item.get("x")
@@ -80,20 +80,14 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
         elif isinstance(y_raw, list) and all(isinstance(m, str) and m for m in y_raw):
             y = list(y_raw)
         else:
-            raise RunError(
-                f"{source}: plot {plot_id!r}: y must be a string or list of strings"
-            )
+            raise RunError(f"{source}: plot {plot_id!r}: y must be a string or list of strings")
         if not y:
             raise RunError(f"{source}: plot {plot_id!r}: y must not be empty")
 
         if ptype == "scatter" and len(y) != 1:
-            raise RunError(
-                f"{source}: plot {plot_id!r}: scatter requires exactly one y metric"
-            )
+            raise RunError(f"{source}: plot {plot_id!r}: scatter requires exactly one y metric")
         if ptype == "stacked-bar" and len(y) < 2:
-            raise RunError(
-                f"{source}: plot {plot_id!r}: stacked-bar requires at least two y metrics"
-            )
+            raise RunError(f"{source}: plot {plot_id!r}: stacked-bar requires at least two y metrics")
 
         title = item.get("title")
         if title is not None and not isinstance(title, str):
@@ -115,14 +109,14 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
                 if not isinstance(k, str) or not k:
                     raise RunError(f"{source}: plot {plot_id!r}: group_by[{j}] must be a non-empty string")
                 if k.startswith("!") and not k[1:]:
-                    raise RunError(f"{source}: plot {plot_id!r}: group_by[{j}] '!' must be followed by a variable name")
+                    raise RunError(
+                        f"{source}: plot {plot_id!r}: group_by[{j}] '!' must be followed by a variable name"
+                    )
             group_by = list(entries)
 
         unknown = set(item) - {"id", "type", "x", "y", "title", "group_by"}
         if unknown:
-            raise RunError(
-                f"{source}: plot {plot_id!r}: unknown fields {sorted(unknown)}"
-            )
+            raise RunError(f"{source}: plot {plot_id!r}: unknown fields {sorted(unknown)}")
 
         out.append(PlotSpec(id=plot_id, type=ptype, x=x, y=y, title=title, group_by=group_by))
     return out
@@ -160,16 +154,13 @@ def parse_sections(
             raise RunError(f"{source}: section {title!r}: blocks must be a list")
         else:
             blocks = [
-                _parse_block(b, j, source=source, section_title=title,
-                             plot_ids=plot_ids, base_dir=base_dir)
+                _parse_block(b, j, source=source, section_title=title, plot_ids=plot_ids, base_dir=base_dir)
                 for j, b in enumerate(blocks_raw)
             ]
 
         unknown = set(item) - {"title", "description", "blocks"}
         if unknown:
-            raise RunError(
-                f"{source}: section {title!r}: unknown fields {sorted(unknown)}"
-            )
+            raise RunError(f"{source}: section {title!r}: unknown fields {sorted(unknown)}")
 
         out.append(Section(title=title, description=description, blocks=blocks))
     return out
@@ -190,13 +181,9 @@ def _parse_block(
 
     present = [k for k in BLOCK_KINDS if k in item]
     if not present:
-        raise RunError(
-            f"{source}: {where} must have exactly one of {list(BLOCK_KINDS)}"
-        )
+        raise RunError(f"{source}: {where} must have exactly one of {list(BLOCK_KINDS)}")
     if len(present) > 1:
-        raise RunError(
-            f"{source}: {where} has multiple kinds {present}; pick exactly one"
-        )
+        raise RunError(f"{source}: {where} has multiple kinds {present}; pick exactly one")
 
     unknown = set(item) - set(BLOCK_KINDS)
     if unknown:
@@ -209,9 +196,7 @@ def _parse_block(
 
     if kind == "plot_id":
         if value not in plot_ids:
-            raise RunError(
-                f"{source}: {where} plot_id {value!r} not found in top-level plots"
-            )
+            raise RunError(f"{source}: {where} plot_id {value!r} not found in top-level plots")
         return Block(kind=kind, value=value)
 
     if kind == "include_html":
@@ -252,7 +237,10 @@ def _build_doc(raw: Any, *, source: str, base_dir: Path) -> PlotsDoc:
     plots_specs = parse_plots(raw.get("plots"), source=source)
     plot_ids = {p.id for p in plots_specs}
     sections = parse_sections(
-        raw.get("sections"), source=source, plot_ids=plot_ids, base_dir=base_dir,
+        raw.get("sections"),
+        source=source,
+        plot_ids=plot_ids,
+        base_dir=base_dir,
     )
 
     return PlotsDoc(

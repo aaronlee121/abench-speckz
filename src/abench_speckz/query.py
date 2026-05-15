@@ -1,4 +1,5 @@
 """DuckDB-backed queries over aggregates.jsonl (fast path) or runs.jsonl (when grouping)."""
+
 import json
 import sys
 from pathlib import Path
@@ -6,8 +7,10 @@ from typing import Any
 
 import duckdb
 
-from abench_speckz import aggregate, prettynames, render as _render_mod
+from abench_speckz import aggregate, prettynames
+from abench_speckz import render as _render_mod
 from abench_speckz.filters import check_ident, parse_kv
+
 # Re-exports kept for backwards compatibility with tests that import the
 # private helpers from this module. New code should use ``render`` directly.
 from abench_speckz.render import _fmt, _json_default  # noqa: F401
@@ -101,18 +104,18 @@ def stats(
     if report is not None:
         from abench_speckz import plots as _plots
         from abench_speckz import report as _report
+
         pm = prettynames.load(results_dir / "pretty_names.json")
         if plots is not None:
             doc = _plots.load_plots_file(plots)
         else:
             doc = _plots.discover_from_tool_snapshots(results_dir)
         if doc.plots or doc.sections:
-            _report.generate_plots_html(results_dir, doc, report, pm,
-                                        run_reports_mode=run_reports_mode)
+            _report.generate_plots_html(results_dir, doc, report, pm, run_reports_mode=run_reports_mode)
         else:
-            _report.generate_html(rows, report, group_by, pm,
-                                  results_dir=results_dir,
-                                  run_reports_mode=run_reports_mode)
+            _report.generate_html(
+                rows, report, group_by, pm, results_dir=results_dir, run_reports_mode=run_reports_mode
+            )
         print(f"report written to {report}", file=out)
 
 
@@ -145,9 +148,7 @@ def _from_aggregates(
         )
     else:
         cols = ", ".join(_AGGREGATE_COLUMNS)
-        sql = (
-            f"SELECT metric, {cols} FROM {src} WHERE {where_clause} ORDER BY metric"
-        )
+        sql = f"SELECT metric, {cols} FROM {src} WHERE {where_clause} ORDER BY metric"
 
     res = con.execute(sql, params).fetchall()
     headers = [d[0] for d in con.description]
@@ -172,7 +173,10 @@ def _from_raw(
     src = f"read_json_auto('{path}', format='newline_delimited')"
 
     where_clause, params = _build_where(
-        where_exprs, require_tags, exclude_tags, metrics=[],
+        where_exprs,
+        require_tags,
+        exclude_tags,
+        metrics=[],
         extra_clauses=("exit_code = 0", "results IS NOT NULL", "NOT list_contains(tags, 'warmup')"),
     )
     rows_sql = f"SELECT * FROM {src} WHERE {where_clause}"
@@ -181,10 +185,7 @@ def _from_raw(
     runs = [dict(zip(headers, r, strict=True)) for r in raw_rows]
 
     n_failed_by_key: dict[tuple, int] = defaultdict(int)
-    failed_sql = (
-        f"SELECT vars, tags FROM {src} WHERE exit_code <> 0 "
-        f"AND NOT list_contains(tags, 'warmup')"
-    )
+    failed_sql = f"SELECT vars, tags FROM {src} WHERE exit_code <> 0 AND NOT list_contains(tags, 'warmup')"
     for r in con.execute(failed_sql).fetchall():
         d = dict(zip([h[0] for h in con.description], r, strict=True))
         key = tuple((d.get("vars") or {}).get(g, "") for g in group_by)
@@ -251,5 +252,3 @@ def _build_where(
         clauses.append(f"metric IN ({placeholders})")
         params.extend(metrics)
     return " AND ".join(clauses), params
-
-

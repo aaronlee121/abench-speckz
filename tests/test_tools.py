@@ -79,10 +79,7 @@ def test_resolve_tool_version(fixtures_dir):
 
 def test_plots_field_accepted(tmp_path):
     p = tmp_path / "t.yaml"
-    p.write_text(
-        "name: t\ncommand: x\n"
-        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
-    )
+    p.write_text("name: t\ncommand: x\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n")
     spec = tools.load_tool(p)
     assert len(spec.plots) == 1
     assert spec.plots[0]["id"] == "p1"
@@ -146,10 +143,7 @@ def test_setup_timeout_must_be_positive_int(tmp_path):
 
 def test_env_probes_loaded(tmp_path):
     p = tmp_path / "t.yaml"
-    p.write_text(
-        "name: t\ncommand: x\n"
-        "env_probes:\n  kernel: 'uname -r'\n  py: 'python --version'\n"
-    )
+    p.write_text("name: t\ncommand: x\nenv_probes:\n  kernel: 'uname -r'\n  py: 'python --version'\n")
     spec = tools.load_tool(p)
     assert spec.env_probes == {"kernel": "uname -r", "py": "python --version"}
 
@@ -250,10 +244,7 @@ def test_capture_must_be_mapping(tmp_path):
 
 def test_combo_probes_loaded(tmp_path):
     p = tmp_path / "t.yaml"
-    p.write_text(
-        "name: t\ncommand: x\n"
-        "combo_probes:\n  shape: 'redis-cli config get maxmemory'\n"
-    )
+    p.write_text("name: t\ncommand: x\ncombo_probes:\n  shape: 'redis-cli config get maxmemory'\n")
     spec = tools.load_tool(p)
     assert spec.combo_probes == {"shape": "redis-cli config get maxmemory"}
 
@@ -324,10 +315,7 @@ def test_resolve_tool_version_none_when_no_command(tmp_path):
 
 def test_resolve_tool_version_command_not_found(tmp_path):
     p = tmp_path / "t.yaml"
-    p.write_text(
-        "name: t\ncommand: x\nversion_command: 'definitely-not-a-real-binary-xyz --version'\n"
-    )
+    p.write_text("name: t\ncommand: x\nversion_command: 'definitely-not-a-real-binary-xyz --version'\n")
     spec = tools.load_tool(p)
     v = tools.resolve_tool_version(spec)
     assert v is not None and "FileNotFoundError" in v
-

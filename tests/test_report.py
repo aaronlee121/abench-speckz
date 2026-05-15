@@ -6,16 +6,23 @@ from abench_speckz import query, store
 def _seed(results_dir):
     store.init_results_dir(results_dir)
     combos = [
-        ("h1", {"workload": "read",  "backend": "postgres"}, {"rps": 1000.0, "p95_latency_ms": 50.0}),
-        ("h2", {"workload": "write", "backend": "postgres"}, {"rps":  800.0, "p95_latency_ms": 80.0}),
+        ("h1", {"workload": "read", "backend": "postgres"}, {"rps": 1000.0, "p95_latency_ms": 50.0}),
+        ("h2", {"workload": "write", "backend": "postgres"}, {"rps": 800.0, "p95_latency_ms": 80.0}),
     ]
     for hash_, vars_, results in combos:
         for i in range(5):
-            store.append_run(results_dir, {
-                "run_id": f"{hash_}-{i}", "config_hash": hash_,
-                "vars": vars_, "tags": ["bench"], "exit_code": 0,
-                "results": results, "failure_reason": None,
-            })
+            store.append_run(
+                results_dir,
+                {
+                    "run_id": f"{hash_}-{i}",
+                    "config_hash": hash_,
+                    "vars": vars_,
+                    "tags": ["bench"],
+                    "exit_code": 0,
+                    "results": results,
+                    "failure_reason": None,
+                },
+            )
         store.update_aggregates_for_hash(results_dir, hash_)
 
 
@@ -74,6 +81,7 @@ def test_report_stdout_confirms_path(tmp_path):
 def test_report_pretty_names(tmp_path):
     _seed(tmp_path)
     from abench_speckz import prettynames
+
     prettynames.write(
         tmp_path / "pretty_names.json",
         {"my-tool": {"rps": "Requests/sec", "p95_latency_ms": "P95 Latency (ms)"}},
@@ -92,8 +100,7 @@ def _write_plots(path, plots_yaml):
 def test_plots_replace_default_when_specified(tmp_path):
     _seed(tmp_path)
     plots_path = tmp_path / "plots.yaml"
-    _write_plots(plots_path,
-                 "- id: p1\n  type: bar\n  x: workload\n  y: rps\n")
+    _write_plots(plots_path, "- id: p1\n  type: bar\n  x: workload\n  y: rps\n")
     report_path = tmp_path / "r.html"
     query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
     html = report_path.read_text()
@@ -106,13 +113,12 @@ def test_plots_replace_default_when_specified(tmp_path):
 def test_bar_plot(tmp_path):
     _seed(tmp_path)
     plots_path = tmp_path / "plots.yaml"
-    _write_plots(plots_path,
-                 "- id: rps_bar\n  type: bar\n  x: workload\n  y: rps\n")
+    _write_plots(plots_path, "- id: rps_bar\n  type: bar\n  x: workload\n  y: rps\n")
     report_path = tmp_path / "r.html"
     query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
     html = report_path.read_text()
     assert "chart-rps_bar" in html
-    assert "\"type\": \"bar\"" in html
+    assert '"type": "bar"' in html
     assert "read" in html and "write" in html
     # mean value 1000 from the seed
     assert "1000" in html
@@ -121,39 +127,38 @@ def test_bar_plot(tmp_path):
 def test_line_plot(tmp_path):
     _seed(tmp_path)
     plots_path = tmp_path / "plots.yaml"
-    _write_plots(plots_path,
-                 "- id: rps_line\n  type: line\n  x: workload\n  y: rps\n")
+    _write_plots(plots_path, "- id: rps_line\n  type: line\n  x: workload\n  y: rps\n")
     report_path = tmp_path / "r.html"
     query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
     html = report_path.read_text()
     assert "chart-rps_line" in html
-    assert "\"type\": \"line\"" in html
+    assert '"type": "line"' in html
 
 
 def test_stacked_bar_plot(tmp_path):
     _seed(tmp_path)
     plots_path = tmp_path / "plots.yaml"
-    _write_plots(plots_path,
-                 "- id: stack\n  type: stacked-bar\n  x: workload\n  y: [rps, p95_latency_ms]\n")
+    _write_plots(plots_path, "- id: stack\n  type: stacked-bar\n  x: workload\n  y: [rps, p95_latency_ms]\n")
     report_path = tmp_path / "r.html"
     query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
     html = report_path.read_text()
     assert "chart-stack" in html
-    assert "\"stacked\": true" in html
+    assert '"stacked": true' in html
 
 
 def test_scatter_plot(tmp_path):
     _seed(tmp_path)
     plots_path = tmp_path / "plots.yaml"
-    _write_plots(plots_path,
-                 "- id: scat\n  type: scatter\n  x: rps\n  y: p95_latency_ms\n  group_by: workload\n")
+    _write_plots(
+        plots_path, "- id: scat\n  type: scatter\n  x: rps\n  y: p95_latency_ms\n  group_by: workload\n"
+    )
     report_path = tmp_path / "r.html"
     query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
     html = report_path.read_text()
     assert "chart-scat" in html
-    assert "\"type\": \"scatter\"" in html
+    assert '"type": "scatter"' in html
     # Each scatter point is {"x": ..., "y": ...} — search for the structure
-    assert "\"x\":" in html and "\"y\":" in html
+    assert '"x":' in html and '"y":' in html
 
 
 def test_plots_discovered_from_tool_snapshot(tmp_path):
@@ -161,8 +166,7 @@ def test_plots_discovered_from_tool_snapshot(tmp_path):
     tools_dir = tmp_path / "tools"
     tools_dir.mkdir(exist_ok=True)
     (tools_dir / "mytool.yaml").write_text(
-        "name: mytool\ncommand: x\n"
-        "plots:\n  - id: discovered\n    type: bar\n    x: workload\n    y: rps\n"
+        "name: mytool\ncommand: x\nplots:\n  - id: discovered\n    type: bar\n    x: workload\n    y: rps\n"
     )
     report_path = tmp_path / "r.html"
     # No --plots, no --group-by — should auto-discover and use plot-driven rendering
@@ -184,29 +188,37 @@ def test_default_report_when_no_plots(tmp_path):
 
 def test_resolve_group_by_no_negation():
     from abench_speckz.report import _resolve_group_by
-    assert _resolve_group_by(["workload", "backend"], ["workload", "backend", "concurrency"]) == ["workload", "backend"]
+
+    assert _resolve_group_by(["workload", "backend"], ["workload", "backend", "concurrency"]) == [
+        "workload",
+        "backend",
+    ]
 
 
 def test_resolve_group_by_negation_excludes_var():
     from abench_speckz.report import _resolve_group_by
+
     result = _resolve_group_by(["!concurrency"], ["workload", "backend", "concurrency"])
     assert result == ["workload", "backend"]
 
 
 def test_resolve_group_by_negation_mixed():
     from abench_speckz.report import _resolve_group_by
+
     result = _resolve_group_by(["workload", "!concurrency"], ["workload", "backend", "concurrency"])
     assert result == ["workload", "backend"]
 
 
 def test_resolve_group_by_negation_unknown_var_ignored():
     from abench_speckz.report import _resolve_group_by
+
     result = _resolve_group_by(["!nonexistent"], ["workload", "backend"])
     assert result == ["workload", "backend"]
 
 
 def test_resolve_group_by_empty_all_vars():
     from abench_speckz.report import _resolve_group_by
+
     assert _resolve_group_by(["!concurrency"], []) == []
 
 
@@ -214,8 +226,10 @@ def test_resolve_group_by_empty_all_vars():
 # _split_group_by_vars
 # ---------------------------------------------------------------------------
 
+
 def test_split_group_by_all_varying(tmp_path):
     from abench_speckz.report import _split_group_by_vars
+
     rows = [{"workload": "read", "backend": "postgres"}, {"workload": "write", "backend": "mysql"}]
     static, varying = _split_group_by_vars(rows, ["workload", "backend"])
     assert static == {}
@@ -224,6 +238,7 @@ def test_split_group_by_all_varying(tmp_path):
 
 def test_split_group_by_one_static(tmp_path):
     from abench_speckz.report import _split_group_by_vars
+
     rows = [{"workload": "read", "region": "us-east-1"}, {"workload": "write", "region": "us-east-1"}]
     static, varying = _split_group_by_vars(rows, ["workload", "region"])
     assert static == {"region": "us-east-1"}
@@ -232,6 +247,7 @@ def test_split_group_by_one_static(tmp_path):
 
 def test_split_group_by_empty_rows():
     from abench_speckz.report import _split_group_by_vars
+
     static, varying = _split_group_by_vars([], ["workload", "backend"])
     assert static == {}
     assert varying == ["workload", "backend"]
@@ -241,31 +257,36 @@ def test_split_group_by_empty_rows():
 # Table legend and fixed-vars rendering
 # ---------------------------------------------------------------------------
 
+
 def _seed_three_vars(results_dir):
     """Seed with workload×backend×region where region is always us-east-1."""
     store.init_results_dir(results_dir)
     combos = [
-        ("h1", {"workload": "read",  "backend": "postgres", "region": "us-east-1"}, {"rps": 1000.0}),
-        ("h2", {"workload": "write", "backend": "postgres", "region": "us-east-1"}, {"rps":  800.0}),
-        ("h3", {"workload": "read",  "backend": "mysql",    "region": "us-east-1"}, {"rps":  900.0}),
+        ("h1", {"workload": "read", "backend": "postgres", "region": "us-east-1"}, {"rps": 1000.0}),
+        ("h2", {"workload": "write", "backend": "postgres", "region": "us-east-1"}, {"rps": 800.0}),
+        ("h3", {"workload": "read", "backend": "mysql", "region": "us-east-1"}, {"rps": 900.0}),
     ]
     for hash_, vars_, results in combos:
         for i in range(3):
-            store.append_run(results_dir, {
-                "run_id": f"{hash_}-{i}", "config_hash": hash_,
-                "vars": vars_, "tags": ["bench"], "exit_code": 0,
-                "results": results, "failure_reason": None,
-            })
+            store.append_run(
+                results_dir,
+                {
+                    "run_id": f"{hash_}-{i}",
+                    "config_hash": hash_,
+                    "vars": vars_,
+                    "tags": ["bench"],
+                    "exit_code": 0,
+                    "results": results,
+                    "failure_reason": None,
+                },
+            )
         store.update_aggregates_for_hash(results_dir, hash_)
 
 
 def test_fixed_vars_shown_for_constant_group_by(tmp_path):
     _seed_three_vars(tmp_path)
     plots_path = tmp_path / "plots.yaml"
-    plots_path.write_text(
-        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n"
-        "  group_by: [backend, region]\n"
-    )
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  group_by: [backend, region]\n")
     report_path = tmp_path / "r.html"
     query.stats(tmp_path, report=report_path, plots=plots_path, out=__import__("io").StringIO())
     html = report_path.read_text()
@@ -279,10 +300,7 @@ def test_fixed_vars_shown_for_constant_group_by(tmp_path):
 def test_legend_table_rendered_for_varying_keys(tmp_path):
     _seed_three_vars(tmp_path)
     plots_path = tmp_path / "plots.yaml"
-    plots_path.write_text(
-        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n"
-        "  group_by: [backend, region]\n"
-    )
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  group_by: [backend, region]\n")
     report_path = tmp_path / "r.html"
     query.stats(tmp_path, report=report_path, plots=plots_path, out=__import__("io").StringIO())
     html = report_path.read_text()
@@ -308,10 +326,7 @@ def test_chartjs_legend_kept_for_no_group_by(tmp_path):
 def test_short_labels_exclude_static_vars(tmp_path):
     _seed_three_vars(tmp_path)
     plots_path = tmp_path / "plots.yaml"
-    plots_path.write_text(
-        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n"
-        "  group_by: [backend, region]\n"
-    )
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  group_by: [backend, region]\n")
     report_path = tmp_path / "r.html"
     query.stats(tmp_path, report=report_path, plots=plots_path, out=__import__("io").StringIO())
     html = report_path.read_text()
@@ -332,21 +347,25 @@ _RUN_ID2 = "abcdef12-abcd-abcd-abcd-abcdef123456"
 def _seed_with_run(results_dir, run_id=_RUN_ID, exit_code=0, tags=None):
     """Seed one run row (no aggregates needed for per-run tests)."""
     store.init_results_dir(results_dir)
-    store.append_run(results_dir, {
-        "run_id": run_id,
-        "config_hash": "h1",
-        "vars": {"workload": "read"},
-        "tags": tags or ["bench"],
-        "exit_code": exit_code,
-        "results": {"rps": 1000.0},
-        "started_at": "2026-05-14T10:00:00Z",
-        "failure_reason": None,
-    })
+    store.append_run(
+        results_dir,
+        {
+            "run_id": run_id,
+            "config_hash": "h1",
+            "vars": {"workload": "read"},
+            "tags": tags or ["bench"],
+            "exit_code": exit_code,
+            "results": {"rps": 1000.0},
+            "started_at": "2026-05-14T10:00:00Z",
+            "failure_reason": None,
+        },
+    )
     store.update_aggregates_for_hash(results_dir, "h1")
 
 
 def test_discover_run_reports_finds_html_files(tmp_path):
     from abench_speckz.report import _discover_run_reports
+
     store.init_results_dir(tmp_path)
     html_path = tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html"
     html_path.write_text("<html><body>flame</body></html>")
@@ -357,6 +376,7 @@ def test_discover_run_reports_finds_html_files(tmp_path):
 
 def test_discover_run_reports_ignores_non_html(tmp_path):
     from abench_speckz.report import _discover_run_reports
+
     store.init_results_dir(tmp_path)
     # .json file — should be ignored
     (tmp_path / "raw" / f"{_RUN_ID}_data.json").write_text("{}")
@@ -368,11 +388,20 @@ def test_discover_run_reports_ignores_non_html(tmp_path):
 
 def test_runs_section_embedded_contains_content(tmp_path):
     from abench_speckz.report import _discover_run_reports, _runs_section
+
     store.init_results_dir(tmp_path)
     html_path = tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html"
     html_path.write_text("<html><body>my-flame-content</body></html>")
-    runs = [{"run_id": _RUN_ID, "config_hash": "h1", "vars": {"workload": "read"},
-             "tags": ["bench"], "exit_code": 0, "started_at": "2026-05-14T10:00Z"}]
+    runs = [
+        {
+            "run_id": _RUN_ID,
+            "config_hash": "h1",
+            "vars": {"workload": "read"},
+            "tags": ["bench"],
+            "exit_code": 0,
+            "started_at": "2026-05-14T10:00Z",
+        }
+    ]
     run_reports = _discover_run_reports(tmp_path)
     section_html, script_js = _runs_section(run_reports, runs, embed=True)
     assert "my-flame-content" in script_js
@@ -380,10 +409,19 @@ def test_runs_section_embedded_contains_content(tmp_path):
 
 def test_runs_section_embedded_lazy_js_present(tmp_path):
     from abench_speckz.report import _discover_run_reports, _runs_section
+
     store.init_results_dir(tmp_path)
     (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html/>")
-    runs = [{"run_id": _RUN_ID, "config_hash": "h1", "vars": {"workload": "read"},
-             "tags": ["bench"], "exit_code": 0, "started_at": "2026-05-14T10:00Z"}]
+    runs = [
+        {
+            "run_id": _RUN_ID,
+            "config_hash": "h1",
+            "vars": {"workload": "read"},
+            "tags": ["bench"],
+            "exit_code": 0,
+            "started_at": "2026-05-14T10:00Z",
+        }
+    ]
     run_reports = _discover_run_reports(tmp_path)
     section_html, script_js = _runs_section(run_reports, runs, embed=True)
     assert "loadRunReport" in script_js
@@ -392,10 +430,19 @@ def test_runs_section_embedded_lazy_js_present(tmp_path):
 
 def test_runs_section_linked_contains_href(tmp_path):
     from abench_speckz.report import _discover_run_reports, _runs_section
+
     store.init_results_dir(tmp_path)
     (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html/>")
-    runs = [{"run_id": _RUN_ID, "config_hash": "h1", "vars": {"workload": "read"},
-             "tags": ["bench"], "exit_code": 0, "started_at": "2026-05-14T10:00Z"}]
+    runs = [
+        {
+            "run_id": _RUN_ID,
+            "config_hash": "h1",
+            "vars": {"workload": "read"},
+            "tags": ["bench"],
+            "exit_code": 0,
+            "started_at": "2026-05-14T10:00Z",
+        }
+    ]
     run_reports = _discover_run_reports(tmp_path)
     section_html, script_js = _runs_section(run_reports, runs, embed=False)
     assert f'href="raw/{_RUN_ID}_flamegraph.html"' in section_html
@@ -404,6 +451,7 @@ def test_runs_section_linked_contains_href(tmp_path):
 
 def test_runs_section_absent_when_no_reports(tmp_path):
     import io
+
     _seed_with_run(tmp_path)
     report_path = tmp_path / "report.html"
     query.stats(tmp_path, group_by=["workload"], report=report_path, out=io.StringIO())
@@ -413,10 +461,19 @@ def test_runs_section_absent_when_no_reports(tmp_path):
 
 def test_runs_section_filters_failed_runs(tmp_path):
     from abench_speckz.report import _discover_run_reports, _runs_section
+
     store.init_results_dir(tmp_path)
     (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html/>")
-    runs = [{"run_id": _RUN_ID, "config_hash": "h1", "vars": {"workload": "read"},
-             "tags": ["bench"], "exit_code": 1, "started_at": "2026-05-14T10:00Z"}]
+    runs = [
+        {
+            "run_id": _RUN_ID,
+            "config_hash": "h1",
+            "vars": {"workload": "read"},
+            "tags": ["bench"],
+            "exit_code": 1,
+            "started_at": "2026-05-14T10:00Z",
+        }
+    ]
     run_reports = _discover_run_reports(tmp_path)
     section_html, script_js = _runs_section(run_reports, runs, embed=True)
     assert section_html == ""
@@ -425,10 +482,19 @@ def test_runs_section_filters_failed_runs(tmp_path):
 
 def test_runs_section_filters_warmup_runs(tmp_path):
     from abench_speckz.report import _discover_run_reports, _runs_section
+
     store.init_results_dir(tmp_path)
     (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html/>")
-    runs = [{"run_id": _RUN_ID, "config_hash": "h1", "vars": {"workload": "read"},
-             "tags": ["warmup"], "exit_code": 0, "started_at": "2026-05-14T10:00Z"}]
+    runs = [
+        {
+            "run_id": _RUN_ID,
+            "config_hash": "h1",
+            "vars": {"workload": "read"},
+            "tags": ["warmup"],
+            "exit_code": 0,
+            "started_at": "2026-05-14T10:00Z",
+        }
+    ]
     run_reports = _discover_run_reports(tmp_path)
     section_html, script_js = _runs_section(run_reports, runs, embed=True)
     assert section_html == ""
@@ -437,11 +503,20 @@ def test_runs_section_filters_warmup_runs(tmp_path):
 
 def test_multiple_reports_per_run(tmp_path):
     from abench_speckz.report import _discover_run_reports, _runs_section
+
     store.init_results_dir(tmp_path)
     (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html>flame</html>")
     (tmp_path / "raw" / f"{_RUN_ID}_profile.html").write_text("<html>profile</html>")
-    runs = [{"run_id": _RUN_ID, "config_hash": "h1", "vars": {"workload": "read"},
-             "tags": ["bench"], "exit_code": 0, "started_at": "2026-05-14T10:00Z"}]
+    runs = [
+        {
+            "run_id": _RUN_ID,
+            "config_hash": "h1",
+            "vars": {"workload": "read"},
+            "tags": ["bench"],
+            "exit_code": 0,
+            "started_at": "2026-05-14T10:00Z",
+        }
+    ]
     run_reports = _discover_run_reports(tmp_path)
     section_html, script_js = _runs_section(run_reports, runs, embed=True)
     assert "<summary>flamegraph</summary>" in section_html
@@ -450,17 +525,20 @@ def test_multiple_reports_per_run(tmp_path):
 
 def test_no_run_reports_mode_skips_section(tmp_path):
     import io
+
     _seed_with_run(tmp_path)
     (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html/>")
     report_path = tmp_path / "report.html"
-    query.stats(tmp_path, group_by=["workload"], report=report_path,
-                run_reports_mode="none", out=io.StringIO())
+    query.stats(
+        tmp_path, group_by=["workload"], report=report_path, run_reports_mode="none", out=io.StringIO()
+    )
     html = report_path.read_text()
     assert "Per-run reports" not in html
 
 
 def test_run_reports_appear_in_full_report(tmp_path):
     import io
+
     _seed_with_run(tmp_path)
     (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html><body>flame</body></html>")
     report_path = tmp_path / "report.html"
@@ -473,11 +551,13 @@ def test_run_reports_appear_in_full_report(tmp_path):
 
 def test_link_mode_no_embedded_content(tmp_path):
     import io
+
     _seed_with_run(tmp_path)
     (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html><body>FLAME_CONTENT</body></html>")
     report_path = tmp_path / "report.html"
-    query.stats(tmp_path, group_by=["workload"], report=report_path,
-                run_reports_mode="linked", out=io.StringIO())
+    query.stats(
+        tmp_path, group_by=["workload"], report=report_path, run_reports_mode="linked", out=io.StringIO()
+    )
     html = report_path.read_text()
     assert "Per-run reports" in html
     assert f'href="raw/{_RUN_ID}_flamegraph.html"' in html
@@ -488,6 +568,7 @@ def test_link_mode_no_embedded_content(tmp_path):
 # ---------------------------------------------------------------------------
 # Sections / blocks / report_description (editorial layout)
 # ---------------------------------------------------------------------------
+
 
 def test_report_section_title_and_markdown_description(tmp_path):
     _seed(tmp_path)

@@ -13,6 +13,7 @@ Usage (via abench-speckz):
     abench-speckz run out/ --tool examples/sample.tool.yaml --repeat 5
     abench-speckz stats results/
 """
+
 import hashlib
 import json
 import math
@@ -62,20 +63,24 @@ def main() -> int:
     def pct(p: float) -> float:
         return round(latencies[int(n * p)], 2)
 
-    print(json.dumps({
-        "summary": {
-            "requestsPerSec": round(rps, 2),
-            "totalRequests": _REQUESTS * concurrency,
-            "elapsed_ms": round(elapsed_ms, 1),
-            "latencies": {
-                "mean": round(mean, 2),
-                "p50":  pct(0.50),
-                "p95":  pct(0.95),
-                "p99":  pct(0.99),
-            },
-        },
-        "config": {"concurrency": concurrency, "workload": workload},
-    }))
+    print(
+        json.dumps(
+            {
+                "summary": {
+                    "requestsPerSec": round(rps, 2),
+                    "totalRequests": _REQUESTS * concurrency,
+                    "elapsed_ms": round(elapsed_ms, 1),
+                    "latencies": {
+                        "mean": round(mean, 2),
+                        "p50": pct(0.50),
+                        "p95": pct(0.95),
+                        "p99": pct(0.99),
+                    },
+                },
+                "config": {"concurrency": concurrency, "workload": workload},
+            }
+        )
+    )
     return 0
 
 

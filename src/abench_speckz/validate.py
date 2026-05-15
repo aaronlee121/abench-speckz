@@ -1,4 +1,5 @@
 """Post-load spec checks: empty axes, mixed-type axes (warn), env-var key shape."""
+
 import re
 import warnings
 
@@ -27,9 +28,7 @@ def validate(spec: Spec) -> None:
             raise SpecError(f"{rule.source}.if: unknown axis keys {sorted(unknown)}")
         for k in rule.set_:
             if k in spec.static:
-                raise SpecError(
-                    f"{rule.source}.set: key {k!r} also appears in `static` — choose one"
-                )
+                raise SpecError(f"{rule.source}.set: key {k!r} also appears in `static` — choose one")
 
     for exc in spec.exclude:
         unknown = set(exc.match) - known_keys
@@ -42,6 +41,5 @@ def validate_env_keys(combos: list[Combo]) -> None:
         for k in combo.vars:
             if not _ENV_KEY.fullmatch(k):
                 raise SpecError(
-                    f"key {k!r} is not a valid env-var identifier "
-                    f"(must match [A-Za-z_][A-Za-z0-9_]*)"
+                    f"key {k!r} is not a valid env-var identifier (must match [A-Za-z_][A-Za-z0-9_]*)"
                 )

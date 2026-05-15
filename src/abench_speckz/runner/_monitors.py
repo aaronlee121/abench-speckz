@@ -1,4 +1,5 @@
 """Launch and terminate side-car monitor processes that run alongside the benchmark."""
+
 import shlex
 import subprocess
 from typing import Any
@@ -28,8 +29,11 @@ def run_monitors(
             continue
         try:
             proc = subprocess.Popen(
-                shlex.split(cmd), env=env,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                shlex.split(cmd),
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
             )
             procs.append(proc)
             records.append({"command": cmd, "pid": proc.pid})
@@ -51,10 +55,14 @@ def stop_monitors(procs: list[subprocess.Popen]) -> list[dict[str, Any]]:
             except subprocess.TimeoutExpired:
                 proc.kill()
                 stdout, stderr = proc.communicate()
-            records.append({
-                "pid": proc.pid, "exit_code": proc.returncode,
-                "stdout": stdout, "stderr": stderr,
-            })
+            records.append(
+                {
+                    "pid": proc.pid,
+                    "exit_code": proc.returncode,
+                    "stdout": stdout,
+                    "stderr": stderr,
+                }
+            )
         except Exception as e:
             records.append({"pid": proc.pid, "error": str(e)})
     return records

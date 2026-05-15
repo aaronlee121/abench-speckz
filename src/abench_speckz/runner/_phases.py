@@ -1,4 +1,5 @@
 """Run a list of shell-command steps (setup/teardown/post_run) with structured records."""
+
 import shlex
 import subprocess
 from typing import Any
@@ -37,18 +38,26 @@ def run_phase(
                 check=False,
             )
         except subprocess.TimeoutExpired as e:
-            records.append({
-                "command": cmd, "exit_code": -1,
-                "stdout": _to_str(e.stdout), "stderr": _to_str(e.stderr),
-            })
+            records.append(
+                {
+                    "command": cmd,
+                    "exit_code": -1,
+                    "stdout": _to_str(e.stdout),
+                    "stderr": _to_str(e.stderr),
+                }
+            )
             return f"{phase}[{i}]: timeout after {timeout_seconds}s: {cmd}", records
         except FileNotFoundError as e:
             records.append({"command": cmd, "exit_code": -1, "stdout": "", "stderr": str(e)})
             return f"{phase}[{i}]: command_not_found: {e}", records
-        records.append({
-            "command": cmd, "exit_code": result.returncode,
-            "stdout": result.stdout, "stderr": result.stderr,
-        })
+        records.append(
+            {
+                "command": cmd,
+                "exit_code": result.returncode,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+            }
+        )
         if result.returncode != 0:
             tail = (result.stderr or result.stdout or "").strip().splitlines()
             hint = tail[-1] if tail else ""

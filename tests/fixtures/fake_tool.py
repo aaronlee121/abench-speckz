@@ -4,6 +4,7 @@
 Modes (via --mode or env $MODE): succeed, fail, timeout, garbage.
 Output values are deterministic on env vars `concurrency` and `workload`.
 """
+
 import argparse
 import json
 import os
@@ -15,10 +16,8 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--version", action="store_true")
     p.add_argument("--mode", default=os.environ.get("MODE", "succeed"))
-    p.add_argument("--multi", action="store_true",
-                   help="emit a list of latencies under $.results[*].latency")
-    p.add_argument("--output-file", default=None,
-                   help="write JSON output to this file instead of stdout")
+    p.add_argument("--multi", action="store_true", help="emit a list of latencies under $.results[*].latency")
+    p.add_argument("--output-file", default=None, help="write JSON output to this file instead of stdout")
     a = p.parse_args()
 
     if a.version:
@@ -47,9 +46,7 @@ def main() -> int:
         },
     }
     if a.multi:
-        payload["results"] = [
-            {"latency": base_p50 + i} for i in range(3)
-        ]
+        payload["results"] = [{"latency": base_p50 + i} for i in range(3)]
     output = json.dumps(payload)
     if a.output_file:
         with open(a.output_file, "w") as f:

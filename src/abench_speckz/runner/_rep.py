@@ -1,4 +1,5 @@
 """Execute a single rep end-to-end and build the resulting ``runs.jsonl`` row."""
+
 import os
 import subprocess
 import uuid
@@ -45,37 +46,63 @@ def execute_one_rep(
         cmd = interpolate.resolve_string(tool.command, combo_vars, env=os.environ)
     except Exception as e:
         return make_row(
-            run_id=run_id, entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
-            command="<unresolved>", result=None, parsed={},
-            failure_reason=f"interpolation: {e}", probe_results=probe_results,
+            run_id=run_id,
+            entry=entry,
+            ch=ch,
+            tags=tags,
+            tool=tool,
+            tool_version=tool_version,
+            command="<unresolved>",
+            result=None,
+            parsed={},
+            failure_reason=f"interpolation: {e}",
+            probe_results=probe_results,
         )
 
     env = _build_env(entry, env_file)
     request = RunRequest(
-        config_hash=ch, vars={k: str(v) for k, v in entry["vars"].items()},
-        tags=tags, tool=tool.name, tool_version=tool_version,
-        command=cmd, env=env, timeout_seconds=tool.timeout_seconds,
+        config_hash=ch,
+        vars={k: str(v) for k, v in entry["vars"].items()},
+        tags=tags,
+        tool=tool.name,
+        tool_version=tool_version,
+        command=cmd,
+        env=env,
+        timeout_seconds=tool.timeout_seconds,
     )
 
     setup_failure, setup_steps = (
         run_phase("setup", tool.setup, combo_vars, env, tool.setup_timeout_seconds)
-        if tool.setup else (None, [])
+        if tool.setup
+        else (None, [])
     )
 
+    teardown_steps: list[dict[str, Any]] = []
     if setup_failure:
         _, teardown_steps = (
             run_phase("teardown", tool.teardown, combo_vars, env, tool.setup_timeout_seconds)
-            if tool.teardown else (None, [])
+            if tool.teardown
+            else (None, [])
         )
         row = make_row(
-            run_id=run_id, entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
-            command=cmd, result=None, parsed={}, failure_reason=setup_failure,
+            run_id=run_id,
+            entry=entry,
+            ch=ch,
+            tags=tags,
+            tool=tool,
+            tool_version=tool_version,
+            command=cmd,
+            result=None,
+            parsed={},
+            failure_reason=setup_failure,
             probe_results=probe_results,
         )
         raw_path = store.write_raw_run(
-            results_dir, row["run_id"],
-            build_raw(result=None, output_file_record=None,
-                      setup=setup_steps, teardown=teardown_steps, post_run=[]),
+            results_dir,
+            row["run_id"],
+            build_raw(
+                result=None, output_file_record=None, setup=setup_steps, teardown=teardown_steps, post_run=[]
+            ),
         )
         row["raw_output_path"] = str(raw_path.relative_to(results_dir))
         return row
@@ -88,7 +115,6 @@ def execute_one_rep(
 
     result = None
     teardown_failure: str | None = None
-    teardown_steps: list[dict[str, Any]] = []
     try:
         result = executor.execute(request)
     finally:
@@ -96,7 +122,11 @@ def execute_one_rep(
             monitor_stop_records = stop_monitors(monitor_procs)
         if tool.teardown:
             teardown_failure, teardown_steps = run_phase(
-                "teardown", tool.teardown, combo_vars, env, tool.setup_timeout_seconds,
+                "teardown",
+                tool.teardown,
+                combo_vars,
+                env,
+                tool.setup_timeout_seconds,
             )
 
     post_run_failure: str | None = None
@@ -110,34 +140,57 @@ def execute_one_rep(
             "_exit_code": str(result.exit_code),
         }
         post_run_failure, post_run_steps = run_phase(
-            "post_run", tool.post_run, post_run_vars, env, tool.setup_timeout_seconds,
+            "post_run",
+            tool.post_run,
+            post_run_vars,
+            env,
+            tool.setup_timeout_seconds,
         )
 
     parsed, extract_failure, output_file_record = _extract_metrics(
-        tool=tool, result=result, combo_vars=combo_vars,
+        tool=tool,
+        result=result,
+        combo_vars=combo_vars,
     )
 
     primary = (result.failure_reason if result else None) or extract_failure
     failure_reason = _join_failures(primary, teardown_failure, post_run_failure)
 
     row = make_row(
-        run_id=run_id, entry=entry, ch=ch, tags=tags, tool=tool, tool_version=tool_version,
-        command=cmd, result=result, parsed=parsed, failure_reason=failure_reason,
+        run_id=run_id,
+        entry=entry,
+        ch=ch,
+        tags=tags,
+        tool=tool,
+        tool_version=tool_version,
+        command=cmd,
+        result=result,
+        parsed=parsed,
+        failure_reason=failure_reason,
         probe_results=probe_results,
     )
 
     monitor_start_failure = any(r.get("error") for r in monitor_start_records)
     should_write_raw = (
-        keep_raw or extract_failure or result.exit_code != 0
-        or teardown_failure or post_run_failure or monitor_start_failure
+        keep_raw
+        or extract_failure
+        or result.exit_code != 0
+        or teardown_failure
+        or post_run_failure
+        or monitor_start_failure
     )
     if should_write_raw:
         raw_path = store.write_raw_run(
-            results_dir, row["run_id"],
+            results_dir,
+            row["run_id"],
             build_raw(
-                result=result, output_file_record=output_file_record,
-                setup=setup_steps, teardown=teardown_steps, post_run=post_run_steps,
-                monitor_start=monitor_start_records, monitor_stop=monitor_stop_records,
+                result=result,
+                output_file_record=output_file_record,
+                setup=setup_steps,
+                teardown=teardown_steps,
+                post_run=post_run_steps,
+                monitor_start=monitor_start_records,
+                monitor_stop=monitor_stop_records,
             ),
         )
         row["raw_output_path"] = str(raw_path.relative_to(results_dir))
@@ -217,7 +270,10 @@ def _build_env(entry: dict[str, Any], env_file: Path) -> dict[str, str]:
 
 
 def _extract_metrics(
-    *, tool: ToolSpec, result, combo_vars: dict[str, Any],
+    *,
+    tool: ToolSpec,
+    result,
+    combo_vars: dict[str, Any],
 ) -> tuple[dict[str, Any], str | None, dict[str, Any] | None]:
     """Resolve output_file (if any), then apply the tool's capture/parser rules."""
     if result is None or result.exit_code != 0:

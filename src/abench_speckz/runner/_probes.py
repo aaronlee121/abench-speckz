@@ -1,4 +1,5 @@
 """Hash combo vars and run env/combo probe commands."""
+
 import hashlib
 import json
 import shlex
@@ -33,14 +34,15 @@ def collect_probe_results(
     for key, template in probes.items():
         try:
             command = (
-                interpolate.resolve_string(template, vars_, env=env or {})
-                if vars_ is not None else template
+                interpolate.resolve_string(template, vars_, env=env or {}) if vars_ is not None else template
             )
             result = subprocess.run(
                 shlex.split(command),
                 env=env,
-                capture_output=True, text=True,
-                timeout=timeout_seconds, check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+                check=False,
             )
             results[key] = result.stdout.strip() if result.returncode == 0 else None
         except Exception:

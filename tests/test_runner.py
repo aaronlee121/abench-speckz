@@ -17,9 +17,7 @@ def _make_manifest(tmp_path: Path, combos):
     manifest = []
     for i, vars_ in enumerate(combos):
         fn = f"combo-{i}.env"
-        (out / fn).write_text(
-            "\n".join(f"{k}={v}" for k, v in vars_.items()) + "\n"
-        )
+        (out / fn).write_text("\n".join(f"{k}={v}" for k, v in vars_.items()) + "\n")
         manifest.append({"filename": fn, "vars": vars_, "tags": []})
     (out / "manifest.json").write_text(json.dumps(manifest))
     return out
@@ -43,10 +41,13 @@ capture:
 
 
 def test_full_sweep(tmp_path):
-    manifest_dir = _make_manifest(tmp_path, [
-        {"workload": "read", "concurrency": "1"},
-        {"workload": "write", "concurrency": "8"},
-    ])
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"workload": "read", "concurrency": "1"},
+            {"workload": "write", "concurrency": "8"},
+        ],
+    )
     tool = _tool_yaml(tmp_path)
     results = tmp_path / "results"
 
@@ -137,12 +138,18 @@ def test_skip_existing(tmp_path):
     results = tmp_path / "results"
 
     s1 = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool, results_dir=results, repeat=3,
+        manifest_path=manifest_dir,
+        tool_path=tool,
+        results_dir=results,
+        repeat=3,
     )
     assert s1["succeeded"] == 3
 
     s2 = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool, results_dir=results, repeat=3,
+        manifest_path=manifest_dir,
+        tool_path=tool,
+        results_dir=results,
+        repeat=3,
         skip_existing=True,
     )
     assert s2["skipped"] == 3
@@ -150,7 +157,10 @@ def test_skip_existing(tmp_path):
 
     # Asking for more reps than recorded should not skip
     s3 = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool, results_dir=results, repeat=5,
+        manifest_path=manifest_dir,
+        tool_path=tool,
+        results_dir=results,
+        repeat=5,
         skip_existing=True,
     )
     assert s3["skipped"] == 0
@@ -163,8 +173,11 @@ def test_dry_run_writes_nothing(tmp_path):
     results = tmp_path / "results"
 
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool, results_dir=results,
-        repeat=2, dry_run=True,
+        manifest_path=manifest_dir,
+        tool_path=tool,
+        results_dir=results,
+        repeat=2,
+        dry_run=True,
     )
     assert not (results / "runs.jsonl").exists()
 
@@ -256,7 +269,10 @@ capture:
     results = tmp_path / "results"
 
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=2,
     )
     assert summary["succeeded"] == 2
     lines = marker.read_text().splitlines()
@@ -284,7 +300,10 @@ capture:
     results = tmp_path / "results"
 
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     assert summary["failed"] == 1
     assert summary["succeeded"] == 0
@@ -312,7 +331,10 @@ capture:
     results = tmp_path / "results"
 
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     # Counted as failed because failure_reason is set, but the benchmark itself succeeded.
     assert summary["failed"] == 1
@@ -342,7 +364,10 @@ capture:
     results = tmp_path / "results"
 
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     assert summary["succeeded"] == 1
     assert marker.read_text().splitlines() == ["read"]
@@ -369,8 +394,11 @@ capture:
     results = tmp_path / "results"
 
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results,
-        repeat=1, keep_raw=True,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+        keep_raw=True,
     )
     assert summary["succeeded"] == 1
 
@@ -409,8 +437,11 @@ capture:
     results = tmp_path / "results"
 
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results,
-        repeat=1, keep_raw=True,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+        keep_raw=True,
     )
     assert summary["succeeded"] == 1
 
@@ -443,7 +474,10 @@ capture:
     results = tmp_path / "results"
 
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     run = store.read_runs(results)[0]
     assert run["raw_output_path"]  # written on failure regardless of keep_raw
@@ -481,8 +515,10 @@ capture:
 
 # ---------- per_sweep phase ----------
 
-def _per_sweep_tool_yaml(tmp_path: Path, *, per_sweep_var=None,
-                         setup_per_sweep=None, teardown_per_sweep=None) -> Path:
+
+def _per_sweep_tool_yaml(
+    tmp_path: Path, *, per_sweep_var=None, setup_per_sweep=None, teardown_per_sweep=None
+) -> Path:
     p = tmp_path / "tool.yaml"
     lines = [
         "name: faketool",
@@ -508,10 +544,13 @@ def _per_sweep_tool_yaml(tmp_path: Path, *, per_sweep_var=None,
 def test_per_sweep_mode_a_runs_once(tmp_path):
     phase = _phase_script(tmp_path)
     marker = tmp_path / "marker.txt"
-    manifest_dir = _make_manifest(tmp_path, [
-        {"workload": "read", "concurrency": "1"},
-        {"workload": "write", "concurrency": "8"},
-    ])
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"workload": "read", "concurrency": "1"},
+            {"workload": "write", "concurrency": "8"},
+        ],
+    )
     tool_path = _per_sweep_tool_yaml(
         tmp_path,
         setup_per_sweep=[f"python {phase} sweep-setup {marker}"],
@@ -520,7 +559,10 @@ def test_per_sweep_mode_a_runs_once(tmp_path):
     results = tmp_path / "results"
 
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=3,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=3,
     )
     assert summary["succeeded"] == 6
     # Setup fires once at start, teardown once at end, regardless of 6 reps.
@@ -530,21 +572,28 @@ def test_per_sweep_mode_a_runs_once(tmp_path):
 def test_per_sweep_mode_b_runs_once_per_var_value(tmp_path):
     phase = _phase_script(tmp_path)
     marker = tmp_path / "marker.txt"
-    manifest_dir = _make_manifest(tmp_path, [
-        {"workload": "write", "concurrency": "8"},
-        {"workload": "read", "concurrency": "1"},
-        {"workload": "read", "concurrency": "8"},
-        {"workload": "write", "concurrency": "1"},
-    ])
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"workload": "write", "concurrency": "8"},
+            {"workload": "read", "concurrency": "1"},
+            {"workload": "read", "concurrency": "8"},
+            {"workload": "write", "concurrency": "1"},
+        ],
+    )
     tool_path = _per_sweep_tool_yaml(
-        tmp_path, per_sweep_var="workload",
+        tmp_path,
+        per_sweep_var="workload",
         setup_per_sweep=[f"python {phase} setup-${{workload}} {marker}"],
         teardown_per_sweep=[f"python {phase} teardown-${{workload}} {marker}"],
     )
     results = tmp_path / "results"
 
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=2,
     )
     assert summary["succeeded"] == 8
 
@@ -567,7 +616,10 @@ def test_per_sweep_mode_a_rejects_combo_var_refs(tmp_path):
     results = tmp_path / "results"
     with pytest.raises(RunError) as ei:
         runner.execute_sweep(
-            manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+            manifest_path=manifest_dir,
+            tool_path=tool_path,
+            results_dir=results,
+            repeat=1,
         )
     assert "setup_per_sweep[0]" in str(ei.value)
     assert "${workload}" in str(ei.value)
@@ -577,13 +629,17 @@ def test_per_sweep_mode_a_rejects_combo_var_refs(tmp_path):
 def test_per_sweep_mode_b_rejects_other_combo_var_refs(tmp_path):
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
     tool_path = _per_sweep_tool_yaml(
-        tmp_path, per_sweep_var="workload",
+        tmp_path,
+        per_sweep_var="workload",
         setup_per_sweep=["echo ${concurrency}"],  # only ${workload} allowed in Mode B
     )
     results = tmp_path / "results"
     with pytest.raises(RunError) as ei:
         runner.execute_sweep(
-            manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+            manifest_path=manifest_dir,
+            tool_path=tool_path,
+            results_dir=results,
+            repeat=1,
         )
     assert "${concurrency}" in str(ei.value)
     assert "${workload}" in str(ei.value)  # the error names the allowed var
@@ -592,13 +648,17 @@ def test_per_sweep_mode_b_rejects_other_combo_var_refs(tmp_path):
 def test_per_sweep_var_missing_in_combos_errors(tmp_path):
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
     tool_path = _per_sweep_tool_yaml(
-        tmp_path, per_sweep_var="missing_var",
+        tmp_path,
+        per_sweep_var="missing_var",
         setup_per_sweep=["echo ${missing_var}"],
     )
     results = tmp_path / "results"
     with pytest.raises(RunError) as ei:
         runner.execute_sweep(
-            manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+            manifest_path=manifest_dir,
+            tool_path=tool_path,
+            results_dir=results,
+            repeat=1,
         )
     assert "per_sweep_var" in str(ei.value)
     assert "missing_var" in str(ei.value)
@@ -607,10 +667,13 @@ def test_per_sweep_var_missing_in_combos_errors(tmp_path):
 def test_per_sweep_setup_failure_records_failure_rows(tmp_path):
     phase = _phase_script(tmp_path)
     marker = tmp_path / "marker.txt"
-    manifest_dir = _make_manifest(tmp_path, [
-        {"workload": "read", "concurrency": "1"},
-        {"workload": "read", "concurrency": "8"},
-    ])
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"workload": "read", "concurrency": "1"},
+            {"workload": "read", "concurrency": "8"},
+        ],
+    )
     tool_path = _per_sweep_tool_yaml(
         tmp_path,
         setup_per_sweep=['python -c "import sys; sys.exit(5)"'],
@@ -619,7 +682,10 @@ def test_per_sweep_setup_failure_records_failure_rows(tmp_path):
     results = tmp_path / "results"
 
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=2,
     )
     # 2 combos × 2 reps = 4 failure rows
     assert summary["failed"] == 4
@@ -641,7 +707,10 @@ def test_per_sweep_teardown_failure_folds_into_last_rep(tmp_path):
     results = tmp_path / "results"
 
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=3,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=3,
     )
     runs = store.read_runs(results)
     # All 3 reps executed, but the last one inherits the teardown failure.
@@ -666,14 +735,20 @@ def test_per_sweep_skip_existing_skips_phases(tmp_path):
 
     # First run: phases fire normally.
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=2,
     )
     assert marker.read_text().splitlines() == ["sweep-setup", "sweep-teardown"]
 
     # Second run with skip-existing: all reps skipped → phases must NOT fire again.
     marker.write_text("")
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=2,
         skip_existing=True,
     )
     assert summary["skipped"] == 2
@@ -681,19 +756,26 @@ def test_per_sweep_skip_existing_skips_phases(tmp_path):
 
 
 def test_per_sweep_keep_raw_writes_per_group_files(tmp_path):
-    manifest_dir = _make_manifest(tmp_path, [
-        {"workload": "read", "concurrency": "1"},
-        {"workload": "write", "concurrency": "1"},
-    ])
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"workload": "read", "concurrency": "1"},
+            {"workload": "write", "concurrency": "1"},
+        ],
+    )
     tool_path = _per_sweep_tool_yaml(
-        tmp_path, per_sweep_var="workload",
+        tmp_path,
+        per_sweep_var="workload",
         setup_per_sweep=["echo hello-${workload}"],
     )
     results = tmp_path / "results"
 
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results,
-        repeat=1, keep_raw=True,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+        keep_raw=True,
     )
     assert summary["succeeded"] == 2
 
@@ -704,12 +786,16 @@ def test_per_sweep_keep_raw_writes_per_group_files(tmp_path):
 
 
 def test_per_sweep_dry_run_prints_preview(tmp_path):
-    manifest_dir = _make_manifest(tmp_path, [
-        {"workload": "read", "concurrency": "1"},
-        {"workload": "write", "concurrency": "1"},
-    ])
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"workload": "read", "concurrency": "1"},
+            {"workload": "write", "concurrency": "1"},
+        ],
+    )
     tool_path = _per_sweep_tool_yaml(
-        tmp_path, per_sweep_var="workload",
+        tmp_path,
+        per_sweep_var="workload",
         setup_per_sweep=["echo setup-${workload}"],
         teardown_per_sweep=["echo teardown-${workload}"],
     )
@@ -717,8 +803,12 @@ def test_per_sweep_dry_run_prints_preview(tmp_path):
     buf = io.StringIO()
 
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results,
-        repeat=1, dry_run=True, progress_stream=buf,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+        dry_run=True,
+        progress_stream=buf,
     )
     out = buf.getvalue()
     assert "[per_sweep setup 0, workload=read]: echo setup-read" in out
@@ -740,7 +830,10 @@ def test_per_sweep_run_id_interpolated_in_setup_and_teardown(tmp_path):
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     assert summary["succeeded"] == 1
     setup_id = setup_marker.read_text().strip()
@@ -763,7 +856,10 @@ def test_per_sweep_envfile_interpolated_in_setup_and_teardown(tmp_path):
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     assert summary["succeeded"] == 1
     envfile_path = setup_marker.read_text().strip()
@@ -780,7 +876,10 @@ def test_per_sweep_mode_a_allows_envfile_and_run_id(tmp_path):
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     assert summary["succeeded"] == 1
 
@@ -789,12 +888,16 @@ def test_per_sweep_mode_b_allows_envfile_and_run_id(tmp_path):
     """validate_per_sweep does not reject _envfile or _run_id in Mode B (per_sweep_var set)."""
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
     tool_path = _per_sweep_tool_yaml(
-        tmp_path, per_sweep_var="workload",
+        tmp_path,
+        per_sweep_var="workload",
         setup_per_sweep=["echo ${workload} ${_envfile} ${_run_id}"],
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     assert summary["succeeded"] == 1
 
@@ -802,6 +905,7 @@ def test_per_sweep_mode_b_allows_envfile_and_run_id(tmp_path):
 # ---------------------------------------------------------------------------
 # env_probes
 # ---------------------------------------------------------------------------
+
 
 def test_collect_probe_results_success():
     probes = {"py_version": "python --version", "echo_hi": "echo hi"}
@@ -811,7 +915,7 @@ def test_collect_probe_results_success():
 
 
 def test_collect_probe_results_nonzero_returns_none():
-    probes = {"bad": "python -c \"import sys; sys.exit(1)\""}
+    probes = {"bad": 'python -c "import sys; sys.exit(1)"'}
     results = runner.collect_probe_results(probes, timeout_seconds=10)
     assert results["bad"] is None
 
@@ -838,7 +942,10 @@ env_probes:
     )
     results = tmp_path / "results"
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     snapshot = json.loads((results / "env.snapshot.json").read_text())
     assert "probes" in snapshot
@@ -850,16 +957,19 @@ def test_env_probes_absent_when_not_configured(tmp_path):
     tool_path = _tool_yaml(tmp_path)
     results = tmp_path / "results"
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     snapshot = json.loads((results / "env.snapshot.json").read_text())
     assert "probes" not in snapshot
 
 
-
 # ---------------------------------------------------------------------------
 # _envfile synthetic variable
 # ---------------------------------------------------------------------------
+
 
 def test_envfile_variable_available_in_command(tmp_path):
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
@@ -879,7 +989,10 @@ setup:
     )
     results = tmp_path / "results"
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     written = out_file.read_text().strip()
     assert written.endswith(".env")
@@ -889,6 +1002,7 @@ setup:
 # ---------------------------------------------------------------------------
 # post_run phase
 # ---------------------------------------------------------------------------
+
 
 def test_post_run_receives_result_vars(tmp_path):
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
@@ -907,14 +1021,17 @@ post_run:
     )
     results = tmp_path / "results"
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     parts = sidecar.read_text().strip().split(",")
-    assert parts[0] == "0"          # _exit_code
-    assert len(parts[1]) == 36      # _run_id is a UUID
-    assert "T" in parts[2]          # _started_at is ISO timestamp
-    assert "T" in parts[3]          # _finished_at is ISO timestamp
-    assert parts[4].isdigit()       # _duration_ms
+    assert parts[0] == "0"  # _exit_code
+    assert len(parts[1]) == 36  # _run_id is a UUID
+    assert "T" in parts[2]  # _started_at is ISO timestamp
+    assert "T" in parts[3]  # _finished_at is ISO timestamp
+    assert parts[4].isdigit()  # _duration_ms
 
 
 def test_post_run_runs_on_benchmark_failure(tmp_path):
@@ -932,7 +1049,10 @@ post_run:
     )
     results = tmp_path / "results"
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     assert sidecar.read_text().strip() == "1"
 
@@ -954,7 +1074,10 @@ post_run:
     )
     results = tmp_path / "results"
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     runs = store.read_runs(results)
     assert len(runs) == 1
@@ -977,7 +1100,11 @@ post_run:
     )
     results = tmp_path / "results"
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1, keep_raw=True,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+        keep_raw=True,
     )
     runs = store.read_runs(results)
     raw = store.load_raw_run(results, runs[0]["run_id"])
@@ -989,6 +1116,7 @@ post_run:
 # ---------------------------------------------------------------------------
 # combo_probes
 # ---------------------------------------------------------------------------
+
 
 def test_combo_probes_results_in_runs_jsonl(tmp_path):
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
@@ -1006,7 +1134,10 @@ combo_probes:
     )
     results = tmp_path / "results"
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     runs = store.read_runs(results)
     assert runs[0]["combo_probes"] == {"workload_echo": "read"}
@@ -1028,7 +1159,10 @@ combo_probes:
     )
     results = tmp_path / "results"
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     probes = store.read_combo_probes(results)
     assert len(probes) == 2
@@ -1054,7 +1188,10 @@ combo_probes:
     )
     results = tmp_path / "results"
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=3,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=3,
     )
     # Probe ran once; all 3 reps share the same probe result
     assert counter_file.read_text() == "1"
@@ -1079,7 +1216,10 @@ combo_probes:
     )
     results = tmp_path / "results"
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     runs = store.read_runs(results)
     assert runs[0]["combo_probes"] == {"failing": None, "missing": None}
@@ -1090,6 +1230,7 @@ combo_probes:
 # ---------------------------------------------------------------------------
 # monitor
 # ---------------------------------------------------------------------------
+
 
 def test_monitor_starts_and_stops_around_benchmark(tmp_path):
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
@@ -1107,8 +1248,11 @@ monitor:
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results,
-        repeat=1, keep_raw=True,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+        keep_raw=True,
     )
     assert summary["succeeded"] == 1
 
@@ -1136,7 +1280,10 @@ monitor:
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     # Monitor failed to start but benchmark still ran.
     assert summary["succeeded"] == 1
@@ -1166,7 +1313,10 @@ monitor:
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     assert summary["succeeded"] == 1
     assert marker.read_text() == "read"
@@ -1178,10 +1328,7 @@ def test_monitor_runs_concurrently_with_benchmark(tmp_path):
     # Monitor writes a file immediately, then sleeps.
     # Benchmark is the fake_tool which runs after monitor has been started.
     monitor_script = tmp_path / "mon.py"
-    monitor_script.write_text(
-        f"open(r'{started_file}', 'w').write('1')\n"
-        "import time; time.sleep(30)\n"
-    )
+    monitor_script.write_text(f"open(r'{started_file}', 'w').write('1')\nimport time; time.sleep(30)\n")
     tool_path = tmp_path / "tool.yaml"
     tool_path.write_text(
         f"""
@@ -1196,7 +1343,10 @@ monitor:
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     assert summary["succeeded"] == 1
     # Monitor wrote the started file, proving it ran while the benchmark was executing.
@@ -1283,8 +1433,10 @@ monitor:
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path,
-        results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     # Benchmark still succeeds, but raw is forced because a monitor failed to start.
     assert summary["succeeded"] == 1
