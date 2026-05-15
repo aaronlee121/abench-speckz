@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from abench_speckz import prettynames
+from abench_speckz import prettynames, store
 
 _CHART_JS_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4"
 _COLORS = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7"]
@@ -72,6 +72,8 @@ def _html_shell(sections: list[str], scripts: list[str], title: str = "abench_sp
     details {{ margin-bottom: 0.5rem; }}
     summary {{ cursor: pointer; font-weight: 500; color: #444; padding: 0.2rem 0; user-select: none; }}
     summary:hover {{ color: #111; }}
+    iframe.run-rpt {{ width: 100%; border: none; min-height: 400px; }}
+    .run-group-heading {{ font-size: 1rem; margin: 1rem 0 0.25rem; color: #333; }}
   </style>
 </head>
 <body>
@@ -161,11 +163,128 @@ def _legend_table_html(
     )
 
 
+def _escape_for_js_template_literal(s: str) -> str:
+    return s.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+
+
+def _discover_run_reports(results_dir: Path) -> dict[str, list[tuple[str, Path]]]:
+    """Return {run_id: [(report_name, path)]} for raw/{run_id}_*.html files."""
+    raw_dir = results_dir / "raw"
+    out: dict[str, list[tuple[str, Path]]] = {}
+    if not raw_dir.is_dir():
+        return out
+    for p in sorted(raw_dir.glob("*.html")):
+        stem = p.stem  # e.g. "550e8400-e29b-41d4-a716-446655440000_flamegraph"
+        if len(stem) > 37 and stem[36] == "_":
+            run_id, report_name = stem[:36], stem[37:]
+            out.setdefault(run_id, []).append((report_name, p))
+    return out
+
+
+def _runs_section(
+    run_reports: dict[str, list[tuple[str, Path]]],
+    runs: list[dict],
+    *,
+    embed: bool,
+) -> tuple[str, str]:
+    """Return (section_html, script_js). Both empty strings when nothing to show."""
+    eligible = [
+        r for r in runs
+        if r.get("run_id") in run_reports
+        and r.get("exit_code") == 0
+        and "warmup" not in (r.get("tags") or [])
+    ]
+    if not eligible:
+        return "", ""
+
+    # Group by config_hash, preserving first-seen order
+    groups: dict[str, list[dict]] = {}
+    for run in eligible:
+        groups.setdefault(run.get("config_hash", ""), []).append(run)
+
+    # Sort groups by the vars of their first run for stable display order
+    sorted_groups = sorted(groups.values(), key=lambda rlist: sorted((rlist[0].get("vars") or {}).items()))
+
+    body_html = ""
+    js_data_lines: list[str] = []
+
+    for group_runs in sorted_groups:
+        vars_ = group_runs[0].get("vars") or {}
+        heading = ", ".join(f"{k}={v}" for k, v in sorted(vars_.items()))
+        body_html += f'<h3 class="run-group-heading">{heading}</h3>\n'
+
+        for run in group_runs:
+            run_id = run.get("run_id", "")
+            started_at = run.get("started_at", "")
+            short_id = run_id[:8] if run_id else "?"
+            names = [name for name, _ in run_reports[run_id]]
+
+            inner_html = ""
+            for name, path in run_reports[run_id]:
+                safe_iframe_id = "rpt-" + run_id.replace("-", "_") + "_" + _safe_id(name)
+                if embed:
+                    content = path.read_text(encoding="utf-8", errors="replace")
+                    escaped = _escape_for_js_template_literal(content)
+                    js_data_lines.append(
+                        f'  _runReports["{run_id}/{name}"] = `{escaped}`;'
+                    )
+                    inner_html += (
+                        f'<details><summary>{name}</summary>'
+                        f'<iframe id="{safe_iframe_id}" class="run-rpt"'
+                        f' sandbox="allow-scripts allow-same-origin"></iframe>'
+                        f'</details>\n'
+                    )
+                else:
+                    href = f"raw/{run_id}_{name}.html"
+                    inner_html += (
+                        f'<details><summary>{name}</summary>'
+                        f'<a href="{href}" target="_blank">{href}</a>'
+                        f'</details>\n'
+                    )
+
+            names_json = json.dumps(names)
+            summary = f"Run {short_id}… ({started_at})" if started_at else f"Run {short_id}…"
+            if embed:
+                toggle_attr = f' ontoggle="loadRunReport(this,{json.dumps(run_id)},{names_json})"'
+            else:
+                toggle_attr = ""
+            body_html += (
+                f'<details{toggle_attr}>'
+                f'<summary>{summary}</summary>'
+                f'{inner_html}'
+                f'</details>\n'
+            )
+
+    section_html = f'\n  <section>\n    <h2>Per-run reports</h2>\n    {body_html}\n  </section>'
+
+    if embed and js_data_lines:
+        script_js = (
+            "\n  const _runReports = {};\n"
+            + "\n".join(js_data_lines)
+            + """
+  function loadRunReport(el, runId, names) {
+    if (!el.open) return;
+    names.forEach(function(name) {
+      var iframe = document.getElementById('rpt-' + runId.replace(/-/g,'_') + '_' + name);
+      if (iframe && !iframe.srcdoc)
+        iframe.srcdoc = _runReports[runId + '/' + name] || '<p>Not available.</p>';
+    });
+  }"""
+        )
+    else:
+        script_js = ""
+
+    return section_html, script_js
+
+
 def generate_html(
     rows: list[dict[str, Any]],
     path: Path,
     group_by: list[str],
     pretty_map: dict,
+    *,
+    results_dir: Path | None = None,
+    run_reports_mode: str = "embedded",
 ) -> None:
     by_metric: dict[str, list[dict]] = {}
     for row in rows:
@@ -224,6 +343,15 @@ def generate_html(
     }}
   }});""")
 
+    if results_dir is not None and run_reports_mode != "none":
+        run_reports = _discover_run_reports(results_dir)
+        if run_reports:
+            runs = store.read_runs(results_dir)
+            rpt_html, rpt_js = _runs_section(run_reports, runs, embed=(run_reports_mode == "embedded"))
+            if rpt_html:
+                sections.append(rpt_html)
+                chart_scripts.append(rpt_js)
+
     path.write_text(_html_shell(sections, chart_scripts))
 
 
@@ -243,6 +371,8 @@ def generate_plots_html(
     output_path: Path,
     pretty_map: dict,
     report_title: str | None = None,
+    *,
+    run_reports_mode: str = "embedded",
 ) -> None:
     from abench_speckz import query
 
@@ -311,6 +441,15 @@ def generate_plots_html(
             f"\n  new Chart(document.getElementById('chart-{safe}'), "
             f"{json.dumps(chart_config)});"
         )
+
+    if run_reports_mode != "none":
+        run_reports = _discover_run_reports(results_dir)
+        if run_reports:
+            runs = store.read_runs(results_dir)
+            rpt_html, rpt_js = _runs_section(run_reports, runs, embed=(run_reports_mode == "embedded"))
+            if rpt_html:
+                sections.append(rpt_html)
+                scripts.append(rpt_js)
 
     title = report_title or "abench_speckz report"
     output_path.write_text(_html_shell(sections, scripts, title=title))

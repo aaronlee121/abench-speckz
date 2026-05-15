@@ -74,6 +74,7 @@ def stats(
     pretty: bool = False,
     report: Path | None = None,
     plots: Path | None = None,
+    run_reports_mode: str = "embedded",
     out=sys.stdout,
 ) -> None:
     group_by = group_by or []
@@ -103,9 +104,12 @@ def stats(
         else:
             specs, report_title = _plots.discover_from_tool_snapshots(results_dir)
         if specs:
-            _report.generate_plots_html(results_dir, specs, report, pm, report_title)
+            _report.generate_plots_html(results_dir, specs, report, pm, report_title,
+                                        run_reports_mode=run_reports_mode)
         else:
-            _report.generate_html(rows, report, group_by, pm)
+            _report.generate_html(rows, report, group_by, pm,
+                                  results_dir=results_dir,
+                                  run_reports_mode=run_reports_mode)
         print(f"report written to {report}", file=out)
 
 

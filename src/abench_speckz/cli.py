@@ -48,6 +48,11 @@ def main(argv: list[str] | None = None) -> int:
                        help="write an HTML report with charts to PATH")
     stats.add_argument("--plots", type=Path, default=None, metavar="PATH",
                        help="YAML file with plot definitions (overrides tool YAML plots)")
+    rpt_mode = stats.add_mutually_exclusive_group()
+    rpt_mode.add_argument("--link-run-reports", action="store_true", default=False,
+                          help="Link to per-run HTML files instead of embedding them inline")
+    rpt_mode.add_argument("--no-run-reports", action="store_true", default=False,
+                          help="Omit per-run reports section; generate summary report only")
 
     rebuild = sub.add_parser("rebuild-aggregates",
                              help="regenerate aggregates.jsonl from runs.jsonl")
@@ -124,6 +129,12 @@ def _run(args: argparse.Namespace) -> int:
 
 
 def _stats(args: argparse.Namespace) -> int:
+    if args.no_run_reports:
+        run_reports_mode = "none"
+    elif args.link_run_reports:
+        run_reports_mode = "linked"
+    else:
+        run_reports_mode = "embedded"
     query.stats(
         args.results_dir,
         group_by=args.group_by,
@@ -136,6 +147,7 @@ def _stats(args: argparse.Namespace) -> int:
         pretty=args.pretty,
         report=args.report,
         plots=args.plots,
+        run_reports_mode=run_reports_mode,
     )
     return 0
 

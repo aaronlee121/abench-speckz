@@ -319,3 +319,167 @@ def test_short_labels_exclude_static_vars(tmp_path):
     assert '"postgres"' in html or "postgres" in html
     # The label should NOT include "us-east-1 / postgres" style (region in label)
     assert "us-east-1 / postgres" not in html
+
+
+# ---------------------------------------------------------------------------
+# Per-run HTML reports
+# ---------------------------------------------------------------------------
+
+_RUN_ID = "12345678-1234-1234-1234-123456789abc"
+_RUN_ID2 = "abcdef12-abcd-abcd-abcd-abcdef123456"
+
+
+def _seed_with_run(results_dir, run_id=_RUN_ID, exit_code=0, tags=None):
+    """Seed one run row (no aggregates needed for per-run tests)."""
+    store.init_results_dir(results_dir)
+    store.append_run(results_dir, {
+        "run_id": run_id,
+        "config_hash": "h1",
+        "vars": {"workload": "read"},
+        "tags": tags or ["bench"],
+        "exit_code": exit_code,
+        "results": {"rps": 1000.0},
+        "started_at": "2026-05-14T10:00:00Z",
+        "failure_reason": None,
+    })
+    store.update_aggregates_for_hash(results_dir, "h1")
+
+
+def test_discover_run_reports_finds_html_files(tmp_path):
+    from abench_speckz.report import _discover_run_reports
+    store.init_results_dir(tmp_path)
+    html_path = tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html"
+    html_path.write_text("<html><body>flame</body></html>")
+    result = _discover_run_reports(tmp_path)
+    assert _RUN_ID in result
+    assert result[_RUN_ID] == [("flamegraph", html_path)]
+
+
+def test_discover_run_reports_ignores_non_html(tmp_path):
+    from abench_speckz.report import _discover_run_reports
+    store.init_results_dir(tmp_path)
+    # .json file — should be ignored
+    (tmp_path / "raw" / f"{_RUN_ID}_data.json").write_text("{}")
+    # bare UUID with no underscore-name — should be ignored
+    (tmp_path / "raw" / f"{_RUN_ID}.html").write_text("<html/>")
+    result = _discover_run_reports(tmp_path)
+    assert result == {}
+
+
+def test_runs_section_embedded_contains_content(tmp_path):
+    from abench_speckz.report import _discover_run_reports, _runs_section
+    store.init_results_dir(tmp_path)
+    html_path = tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html"
+    html_path.write_text("<html><body>my-flame-content</body></html>")
+    runs = [{"run_id": _RUN_ID, "config_hash": "h1", "vars": {"workload": "read"},
+             "tags": ["bench"], "exit_code": 0, "started_at": "2026-05-14T10:00Z"}]
+    run_reports = _discover_run_reports(tmp_path)
+    section_html, script_js = _runs_section(run_reports, runs, embed=True)
+    assert "my-flame-content" in script_js
+
+
+def test_runs_section_embedded_lazy_js_present(tmp_path):
+    from abench_speckz.report import _discover_run_reports, _runs_section
+    store.init_results_dir(tmp_path)
+    (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html/>")
+    runs = [{"run_id": _RUN_ID, "config_hash": "h1", "vars": {"workload": "read"},
+             "tags": ["bench"], "exit_code": 0, "started_at": "2026-05-14T10:00Z"}]
+    run_reports = _discover_run_reports(tmp_path)
+    section_html, script_js = _runs_section(run_reports, runs, embed=True)
+    assert "loadRunReport" in script_js
+    assert "_runReports" in script_js
+
+
+def test_runs_section_linked_contains_href(tmp_path):
+    from abench_speckz.report import _discover_run_reports, _runs_section
+    store.init_results_dir(tmp_path)
+    (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html/>")
+    runs = [{"run_id": _RUN_ID, "config_hash": "h1", "vars": {"workload": "read"},
+             "tags": ["bench"], "exit_code": 0, "started_at": "2026-05-14T10:00Z"}]
+    run_reports = _discover_run_reports(tmp_path)
+    section_html, script_js = _runs_section(run_reports, runs, embed=False)
+    assert f'href="raw/{_RUN_ID}_flamegraph.html"' in section_html
+    assert script_js == ""
+
+
+def test_runs_section_absent_when_no_reports(tmp_path):
+    import io
+    _seed_with_run(tmp_path)
+    report_path = tmp_path / "report.html"
+    query.stats(tmp_path, group_by=["workload"], report=report_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Per-run reports" not in html
+
+
+def test_runs_section_filters_failed_runs(tmp_path):
+    from abench_speckz.report import _discover_run_reports, _runs_section
+    store.init_results_dir(tmp_path)
+    (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html/>")
+    runs = [{"run_id": _RUN_ID, "config_hash": "h1", "vars": {"workload": "read"},
+             "tags": ["bench"], "exit_code": 1, "started_at": "2026-05-14T10:00Z"}]
+    run_reports = _discover_run_reports(tmp_path)
+    section_html, script_js = _runs_section(run_reports, runs, embed=True)
+    assert section_html == ""
+    assert script_js == ""
+
+
+def test_runs_section_filters_warmup_runs(tmp_path):
+    from abench_speckz.report import _discover_run_reports, _runs_section
+    store.init_results_dir(tmp_path)
+    (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html/>")
+    runs = [{"run_id": _RUN_ID, "config_hash": "h1", "vars": {"workload": "read"},
+             "tags": ["warmup"], "exit_code": 0, "started_at": "2026-05-14T10:00Z"}]
+    run_reports = _discover_run_reports(tmp_path)
+    section_html, script_js = _runs_section(run_reports, runs, embed=True)
+    assert section_html == ""
+    assert script_js == ""
+
+
+def test_multiple_reports_per_run(tmp_path):
+    from abench_speckz.report import _discover_run_reports, _runs_section
+    store.init_results_dir(tmp_path)
+    (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html>flame</html>")
+    (tmp_path / "raw" / f"{_RUN_ID}_profile.html").write_text("<html>profile</html>")
+    runs = [{"run_id": _RUN_ID, "config_hash": "h1", "vars": {"workload": "read"},
+             "tags": ["bench"], "exit_code": 0, "started_at": "2026-05-14T10:00Z"}]
+    run_reports = _discover_run_reports(tmp_path)
+    section_html, script_js = _runs_section(run_reports, runs, embed=True)
+    assert "<summary>flamegraph</summary>" in section_html
+    assert "<summary>profile</summary>" in section_html
+
+
+def test_no_run_reports_mode_skips_section(tmp_path):
+    import io
+    _seed_with_run(tmp_path)
+    (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html/>")
+    report_path = tmp_path / "report.html"
+    query.stats(tmp_path, group_by=["workload"], report=report_path,
+                run_reports_mode="none", out=io.StringIO())
+    html = report_path.read_text()
+    assert "Per-run reports" not in html
+
+
+def test_run_reports_appear_in_full_report(tmp_path):
+    import io
+    _seed_with_run(tmp_path)
+    (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html><body>flame</body></html>")
+    report_path = tmp_path / "report.html"
+    query.stats(tmp_path, group_by=["workload"], report=report_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Per-run reports" in html
+    assert "loadRunReport" in html
+    assert "flame" in html
+
+
+def test_link_mode_no_embedded_content(tmp_path):
+    import io
+    _seed_with_run(tmp_path)
+    (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html><body>FLAME_CONTENT</body></html>")
+    report_path = tmp_path / "report.html"
+    query.stats(tmp_path, group_by=["workload"], report=report_path,
+                run_reports_mode="linked", out=io.StringIO())
+    html = report_path.read_text()
+    assert "Per-run reports" in html
+    assert f'href="raw/{_RUN_ID}_flamegraph.html"' in html
+    assert "FLAME_CONTENT" not in html
+    assert "loadRunReport" not in html
