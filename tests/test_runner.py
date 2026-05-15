@@ -727,6 +727,78 @@ def test_per_sweep_dry_run_prints_preview(tmp_path):
     assert not (results / "runs.jsonl").exists()
 
 
+def test_per_sweep_run_id_interpolated_in_setup_and_teardown(tmp_path):
+    """_run_id resolves to a UUID-shaped string in setup_per_sweep and teardown_per_sweep."""
+    phase = _phase_script(tmp_path)
+    setup_marker = tmp_path / "setup_id.txt"
+    teardown_marker = tmp_path / "teardown_id.txt"
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = _per_sweep_tool_yaml(
+        tmp_path,
+        setup_per_sweep=[f"python {phase} ${{_run_id}} {setup_marker}"],
+        teardown_per_sweep=[f"python {phase} ${{_run_id}} {teardown_marker}"],
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    assert summary["succeeded"] == 1
+    setup_id = setup_marker.read_text().strip()
+    teardown_id = teardown_marker.read_text().strip()
+    # Both are UUID-shaped and identical (same per-group UUID)
+    assert len(setup_id) == 36
+    assert setup_id == teardown_id
+
+
+def test_per_sweep_envfile_interpolated_in_setup_and_teardown(tmp_path):
+    """_envfile resolves to an existing file path in setup_per_sweep and teardown_per_sweep."""
+    phase = _phase_script(tmp_path)
+    setup_marker = tmp_path / "setup_envfile.txt"
+    teardown_marker = tmp_path / "teardown_envfile.txt"
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = _per_sweep_tool_yaml(
+        tmp_path,
+        setup_per_sweep=[f"python {phase} ${{_envfile}} {setup_marker}"],
+        teardown_per_sweep=[f"python {phase} ${{_envfile}} {teardown_marker}"],
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    assert summary["succeeded"] == 1
+    envfile_path = setup_marker.read_text().strip()
+    assert envfile_path == teardown_marker.read_text().strip()
+    assert Path(envfile_path).exists()
+
+
+def test_per_sweep_mode_a_allows_envfile_and_run_id(tmp_path):
+    """validate_per_sweep does not reject _envfile or _run_id references."""
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = _per_sweep_tool_yaml(
+        tmp_path,
+        setup_per_sweep=["echo ${_envfile} ${_run_id}"],
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    assert summary["succeeded"] == 1
+
+
+def test_per_sweep_mode_b_allows_envfile_and_run_id(tmp_path):
+    """validate_per_sweep does not reject _envfile or _run_id in Mode B (per_sweep_var set)."""
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = _per_sweep_tool_yaml(
+        tmp_path, per_sweep_var="workload",
+        setup_per_sweep=["echo ${workload} ${_envfile} ${_run_id}"],
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    assert summary["succeeded"] == 1
+
+
 # ---------------------------------------------------------------------------
 # env_probes
 # ---------------------------------------------------------------------------

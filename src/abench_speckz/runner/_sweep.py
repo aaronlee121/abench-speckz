@@ -68,7 +68,7 @@ def execute_sweep(
     groups = group_work(work, tool.per_sweep_var)
 
     if dry_run:
-        _dry_run_preview(groups, tool, progress_stream)
+        _dry_run_preview(groups, tool, progress_stream, manifest_dir)
         return _empty_summary()
 
     with store.lock_results_dir(results_dir):
@@ -131,9 +131,12 @@ def _run_groups(
             slug_mod.slug(group_key)
             if (tool.per_sweep_var and group_key is not None) else None
         )
-        phase_vars: dict[str, Any] = (
-            {tool.per_sweep_var: group_key} if tool.per_sweep_var else {}
-        )
+        first_env_file = manifest_dir / items[0][0]["filename"]
+        phase_vars: dict[str, Any] = {
+            **({tool.per_sweep_var: group_key} if tool.per_sweep_var else {}),
+            "_run_id": str(uuid.uuid4()),
+            "_envfile": str(first_env_file.resolve()),
+        }
 
         runnable_idx = [
             j for j, (entry, _r, is_warmup) in enumerate(items)
@@ -330,11 +333,16 @@ def _maybe_write_sweep_raw(
         store.write_raw_sweep_phase(results_dir, group_slug, raw)
 
 
-def _dry_run_preview(groups: list[WorkGroup], tool: ToolSpec, stream) -> None:
+def _dry_run_preview(
+    groups: list[WorkGroup], tool: ToolSpec, stream, manifest_dir: Path,
+) -> None:
     for group_key, items in groups:
-        phase_vars: dict[str, Any] = (
-            {tool.per_sweep_var: group_key} if tool.per_sweep_var else {}
-        )
+        first_env_file = manifest_dir / items[0][0]["filename"]
+        phase_vars: dict[str, Any] = {
+            **({tool.per_sweep_var: group_key} if tool.per_sweep_var else {}),
+            "_run_id": str(uuid.uuid4()),
+            "_envfile": str(first_env_file.resolve()),
+        }
         label = f", {tool.per_sweep_var}={group_key}" if tool.per_sweep_var else ""
         for k, template in enumerate(tool.setup_per_sweep):
             cmd = interpolate.resolve_string(template, phase_vars, env=os.environ)

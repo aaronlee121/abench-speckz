@@ -132,8 +132,8 @@ results/
 `${var}` references other combo vars; `${env:VAR}` reads from the process environment. Resolved iteratively up to 16 times to support chained references. Use `$$` to escape a literal `$`.
 
 Built-in synthetic variables (injected per-rep, not user-definable):
-- `${_envfile}` — absolute path to the current combo's env file. Available in `command`, `setup`, `teardown`, `post_run`, and `output_file`.
-- `${_run_id}` — UUID for this rep (same value written to `runs.jsonl`). Available in `command`, `setup`, `teardown`, and `post_run`.
+- `${_envfile}` — absolute path to the current combo's env file. Available in `command`, `setup`, `teardown`, `post_run`, `output_file`, `setup_per_sweep`, and `teardown_per_sweep`. For per_sweep phases, resolves to the first entry's env file in the group.
+- `${_run_id}` — UUID for this rep (same value written to `runs.jsonl`). Available in `command`, `setup`, `teardown`, `post_run`, `setup_per_sweep`, and `teardown_per_sweep`. For per_sweep phases, a single UUID is generated per group and shared between `setup_per_sweep` and `teardown_per_sweep`.
 - `${_exit_code}`, `${_started_at}`, `${_finished_at}`, `${_duration_ms}` — benchmark result fields. Available in `post_run` only (result isn't known earlier).
 
 Variable names starting with `_` are reserved and rejected in spec YAML.

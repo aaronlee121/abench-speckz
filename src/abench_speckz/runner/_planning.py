@@ -67,12 +67,15 @@ def group_work(work: list[Work], per_sweep_var: str | None) -> list[WorkGroup]:
     return groups
 
 
+_SYNTHETIC_PER_SWEEP = frozenset({"_envfile", "_run_id"})
+
+
 def validate_per_sweep(tool: ToolSpec, selected_entries: list[dict[str, Any]]) -> None:
     """Reject configs that would error mid-sweep: per_sweep steps referencing
     disallowed combo vars, or a ``per_sweep_var`` missing from some combos."""
     if not (tool.setup_per_sweep or tool.teardown_per_sweep) and tool.per_sweep_var is None:
         return
-    allowed = {tool.per_sweep_var} if tool.per_sweep_var else set()
+    allowed = ({tool.per_sweep_var} if tool.per_sweep_var else set()) | _SYNTHETIC_PER_SWEEP
     for phase_name, steps in [
         ("setup_per_sweep", tool.setup_per_sweep),
         ("teardown_per_sweep", tool.teardown_per_sweep),
@@ -81,11 +84,16 @@ def validate_per_sweep(tool: ToolSpec, selected_entries: list[dict[str, Any]]) -
             for ref in interpolate.find_combo_var_refs(step):
                 if ref in allowed:
                     continue
-                suffix = (
-                    f"only ${{{tool.per_sweep_var}}} is allowed (set via per_sweep_var)"
-                    if tool.per_sweep_var
-                    else "per_sweep steps may only reference ${env:VAR}"
-                )
+                if tool.per_sweep_var:
+                    suffix = (
+                        f"only ${{{tool.per_sweep_var}}}, ${{_envfile}}, ${{_run_id}} "
+                        f"are allowed (set via per_sweep_var)"
+                    )
+                else:
+                    suffix = (
+                        "per_sweep steps may only reference "
+                        "${_envfile}, ${_run_id}, or ${env:VAR}"
+                    )
                 raise RunError(
                     f"tool.{phase_name}[{i}] references combo var ${{{ref}}}; {suffix}"
                 )
