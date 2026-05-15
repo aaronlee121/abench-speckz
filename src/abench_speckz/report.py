@@ -16,6 +16,11 @@ def _safe_id(s: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_]", "_", s)
 
 
+def _collapsible(label: str, content: str, *, open: bool = False) -> str:
+    open_attr = " open" if open else ""
+    return f"<details{open_attr}><summary>{label}</summary>{content}</details>"
+
+
 def _fmt(v: Any) -> str:
     if v is None:
         return ""
@@ -64,6 +69,9 @@ def _html_shell(sections: list[str], scripts: list[str]) -> str:
     .legend-wrap table {{ font-size: 0.8rem; }}
     .legend-wrap th, .legend-wrap td {{ padding: 3px 8px; }}
     .fixed-vars {{ color: #555; font-size: 0.85rem; margin: 0.25rem 0 0.5rem; }}
+    details {{ margin-bottom: 0.5rem; }}
+    summary {{ cursor: pointer; font-weight: 500; color: #444; padding: 0.2rem 0; user-select: none; }}
+    summary:hover {{ color: #111; }}
   </style>
 </head>
 <body>
@@ -192,12 +200,14 @@ def generate_html(
         ]
 
         all_headers = list(group_by) + list(_STAT_COLS)
+        chart_html = _collapsible("Chart", f'<div class="chart-wrap"><canvas id="chart-{safe}"></canvas></div>', open=True)
+        table_html = _collapsible("Data", _table_html(metric_rows, all_headers))
         sections.append(f"""
   <section>
     <h2>{display_name}</h2>
     {fixed_html}
-    <div class="chart-wrap"><canvas id="chart-{safe}"></canvas></div>
-    {_table_html(metric_rows, all_headers)}
+    {chart_html}
+    {table_html}
   </section>""")
 
         chart_scripts.append(f"""
@@ -284,14 +294,16 @@ def generate_plots_html(
         safe = _safe_id(plot.id)
         title = plot.title or plot.id
         table_headers = list(group_by) + ["metric"] + list(_STAT_COLS) if rows else []
+        chart_inner = f"{legend_html}<div class=\"chart-wrap\"><canvas id=\"chart-{safe}\"></canvas></div>"
+        chart_html = _collapsible("Chart", chart_inner, open=True)
+        table_html = _collapsible("Data", _table_html(rows, table_headers))
         sections.append(f"""
   <section>
     <h2>{title}</h2>
     <p class="meta">type: {plot.type}</p>
     {fixed_html}
-    {legend_html}
-    <div class="chart-wrap"><canvas id="chart-{safe}"></canvas></div>
-    {_table_html(rows, table_headers)}
+    {chart_html}
+    {table_html}
   </section>""")
 
         scripts.append(
