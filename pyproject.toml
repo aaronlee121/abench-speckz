@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,8 @@ name = "abench-speckz"
 version = "0.4.4"
 description = "YAML-driven benchmark sweeps: generate env-file combinations, execute a tool across each, and query DuckDB-backed aggregate stats."
 readme = "README.md"
-license = {file = "LICENSE"}
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [
     {name = "Benixon Arul Dhas", email = "its.me@benixon.dev"},
@@ -17,7 +18,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX",
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
