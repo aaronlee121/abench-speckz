@@ -6,8 +6,11 @@ from typing import Any
 
 import duckdb
 
-from abench_speckz import aggregate, prettynames
+from abench_speckz import aggregate, prettynames, render as _render_mod
 from abench_speckz.filters import check_ident, parse_kv
+# Re-exports kept for backwards compatibility with tests that import the
+# private helpers from this module. New code should use ``render`` directly.
+from abench_speckz.render import _fmt, _json_default  # noqa: F401
 
 _AGGREGATE_COLUMNS = ("n", "n_failed", "mean", "stddev", "p50", "p95", "p99", "ci95_low", "ci95_high")
 
@@ -93,7 +96,7 @@ def stats(
         return
 
     pretty_map = prettynames.load(results_dir / "pretty_names.json") if pretty else {}
-    _render(rows, fmt, out, pretty_map=pretty_map)
+    _render_mod.render(rows, fmt, out, pretty_map=pretty_map)
 
     if report is not None:
         from abench_speckz import plots as _plots
@@ -168,20 +171,10 @@ def _from_raw(
     con = duckdb.connect(":memory:")
     src = f"read_json_auto('{path}', format='newline_delimited')"
 
-    base_clauses = ["exit_code = 0", "results IS NOT NULL"]
-    base_clauses.append("NOT list_contains(tags, 'warmup')")
-    params: list[Any] = []
-    for pred in parse_kv(where_exprs):
-        base_clauses.append(f"(vars->>'{pred.key}') = ?")
-        params.append(pred.value)
-    for t in require_tags:
-        base_clauses.append("list_contains(tags, ?)")
-        params.append(t)
-    for t in exclude_tags:
-        base_clauses.append("NOT list_contains(tags, ?)")
-        params.append(t)
-
-    where_clause = " AND ".join(base_clauses)
+    where_clause, params = _build_where(
+        where_exprs, require_tags, exclude_tags, metrics=[],
+        extra_clauses=("exit_code = 0", "results IS NOT NULL", "NOT list_contains(tags, 'warmup')"),
+    )
     rows_sql = f"SELECT * FROM {src} WHERE {where_clause}"
     raw_rows = con.execute(rows_sql, params).fetchall()
     headers = [d[0] for d in con.description]
@@ -234,8 +227,15 @@ def _build_where(
     require_tags: list[str],
     exclude_tags: list[str],
     metrics: list[str],
+    *,
+    extra_clauses: tuple[str, ...] = (),
 ) -> tuple[str, list[Any]]:
-    clauses: list[str] = ["1=1"]
+    """Compose a DuckDB WHERE clause from CLI-style filter args.
+
+    ``extra_clauses`` are AND-joined verbatim before the dynamic predicates —
+    used by callers that need fixed-shape filters (e.g. ``exit_code = 0``).
+    """
+    clauses: list[str] = list(extra_clauses) or ["1=1"]
     params: list[Any] = []
     for pred in parse_kv(where_exprs):
         clauses.append(f"(vars->>'{pred.key}') = ?")
@@ -253,41 +253,3 @@ def _build_where(
     return " AND ".join(clauses), params
 
 
-def _render(rows: list[dict[str, Any]], fmt: str, out, *, pretty_map: dict) -> None:
-    headers = list(rows[0].keys())
-
-    def header_label(h: str) -> str:
-        if not pretty_map:
-            return h
-        return prettynames.resolve(pretty_map, h)
-
-    if fmt == "json":
-        out.write(json.dumps(rows, indent=2, default=_json_default) + "\n")
-        return
-    if fmt == "tsv":
-        out.write("\t".join(headers) + "\n")
-        for r in rows:
-            out.write("\t".join(_fmt(r[h]) for h in headers) + "\n")
-        return
-    pretty_headers = [header_label(h) for h in headers]
-    rendered = [[_fmt(r[h]) for h in headers] for r in rows]
-    widths = [max(len(h), *(len(row[i]) for row in rendered)) for i, h in enumerate(pretty_headers)]
-    fmt_line = "  ".join(f"{{:<{w}}}" for w in widths)
-    out.write(fmt_line.format(*pretty_headers) + "\n")
-    out.write(fmt_line.format(*("-" * w for w in widths)) + "\n")
-    for row in rendered:
-        out.write(fmt_line.format(*row) + "\n")
-
-
-def _fmt(v: Any) -> str:
-    if v is None:
-        return ""
-    if isinstance(v, float):
-        return f"{v:.4f}".rstrip("0").rstrip(".") or "0"
-    return str(v)
-
-
-def _json_default(v: Any):
-    if hasattr(v, "isoformat"):
-        return v.isoformat()
-    return str(v)
