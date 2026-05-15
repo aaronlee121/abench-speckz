@@ -99,11 +99,11 @@ def stats(
         from abench_speckz import report as _report
         pm = prettynames.load(results_dir / "pretty_names.json")
         if plots is not None:
-            specs = _plots.load_plots_file(plots)
+            specs, report_title = _plots.load_plots_file(plots)
         else:
-            specs = _plots.discover_from_tool_snapshots(results_dir)
+            specs, report_title = _plots.discover_from_tool_snapshots(results_dir)
         if specs:
-            _report.generate_plots_html(results_dir, specs, report, pm)
+            _report.generate_plots_html(results_dir, specs, report, pm, report_title)
         else:
             _report.generate_html(rows, report, group_by, pm)
         print(f"report written to {report}", file=out)

@@ -106,28 +106,33 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
     return out
 
 
-def load_plots_file(path: Path) -> list[PlotSpec]:
+def load_plots_file(path: Path) -> tuple[list[PlotSpec], str | None]:
     if not path.exists():
         raise RunError(f"{path}: plots file not found")
     raw = yaml.safe_load(path.read_text())
-    if isinstance(raw, dict) and "plots" in raw:
-        raw = raw["plots"]
-    return parse_plots(raw, source=str(path))
+    report_title: str | None = None
+    if isinstance(raw, dict):
+        report_title = raw.get("report_title") or None
+        raw = raw.get("plots", raw)
+    return parse_plots(raw, source=str(path)), report_title
 
 
-def discover_from_tool_snapshots(results_dir: Path) -> list[PlotSpec]:
+def discover_from_tool_snapshots(results_dir: Path) -> tuple[list[PlotSpec], str | None]:
     tools_dir = results_dir / "tools"
     if not tools_dir.is_dir():
-        return []
+        return [], None
     out: list[PlotSpec] = []
     seen_ids: set[str] = set()
+    report_title: str | None = None
     for tool_yaml in sorted(tools_dir.glob("*.yaml")):
         raw = yaml.safe_load(tool_yaml.read_text())
         if not isinstance(raw, dict):
             continue
+        if report_title is None:
+            report_title = raw.get("report_title") or None
         for spec in parse_plots(raw.get("plots"), source=str(tool_yaml)):
             if spec.id in seen_ids:
                 continue
             seen_ids.add(spec.id)
             out.append(spec)
-    return out
+    return out, report_title

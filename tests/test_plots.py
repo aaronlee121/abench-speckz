@@ -112,16 +112,26 @@ def test_parse_rejects_unknown_field():
 def test_load_plots_file_with_top_level_key(tmp_path):
     p = tmp_path / "plots.yaml"
     p.write_text("plots:\n  - id: p1\n    type: bar\n    x: w\n    y: rps\n")
-    specs = plots.load_plots_file(p)
+    specs, title = plots.load_plots_file(p)
     assert len(specs) == 1
     assert specs[0].id == "p1"
+    assert title is None
+
+
+def test_load_plots_file_report_title(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text("report_title: My Benchmark\nplots:\n  - id: p1\n    type: bar\n    x: w\n    y: rps\n")
+    specs, title = plots.load_plots_file(p)
+    assert specs[0].id == "p1"
+    assert title == "My Benchmark"
 
 
 def test_load_plots_file_top_level_list(tmp_path):
     p = tmp_path / "plots.yaml"
     p.write_text("- id: p1\n  type: bar\n  x: w\n  y: rps\n")
-    specs = plots.load_plots_file(p)
+    specs, title = plots.load_plots_file(p)
     assert specs[0].id == "p1"
+    assert title is None
 
 
 def test_load_plots_file_missing(tmp_path):
@@ -138,14 +148,28 @@ def test_discover_from_tool_snapshots(tmp_path):
     (tools_dir / "b.yaml").write_text(
         "name: b\ncommand: x\nplots:\n  - id: p2\n    type: line\n    x: c\n    y: lat\n"
     )
-    specs = plots.discover_from_tool_snapshots(tmp_path)
+    specs, title = plots.discover_from_tool_snapshots(tmp_path)
     ids = [s.id for s in specs]
     assert "p1" in ids
     assert "p2" in ids
+    assert title is None
+
+
+def test_discover_from_tool_snapshots_report_title(tmp_path):
+    tools_dir = tmp_path / "tools"
+    tools_dir.mkdir()
+    (tools_dir / "a.yaml").write_text(
+        "name: a\ncommand: x\nreport_title: My Suite\n"
+        "plots:\n  - id: p1\n    type: bar\n    x: w\n    y: rps\n"
+    )
+    specs, title = plots.discover_from_tool_snapshots(tmp_path)
+    assert title == "My Suite"
 
 
 def test_discover_from_tool_snapshots_no_dir(tmp_path):
-    assert plots.discover_from_tool_snapshots(tmp_path) == []
+    specs, title = plots.discover_from_tool_snapshots(tmp_path)
+    assert specs == []
+    assert title is None
 
 
 def test_discover_dedupes_by_id(tmp_path):
@@ -157,7 +181,7 @@ def test_discover_dedupes_by_id(tmp_path):
     (tools_dir / "b.yaml").write_text(
         "name: b\ncommand: x\nplots:\n  - id: shared\n    type: line\n    x: c\n    y: lat\n"
     )
-    specs = plots.discover_from_tool_snapshots(tmp_path)
+    specs, _ = plots.discover_from_tool_snapshots(tmp_path)
     assert len([s for s in specs if s.id == "shared"]) == 1
 
 

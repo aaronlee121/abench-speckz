@@ -44,14 +44,14 @@ def _try_numeric_sort(values: list[str]) -> list[str]:
         return sorted(values)
 
 
-def _html_shell(sections: list[str], scripts: list[str]) -> str:
+def _html_shell(sections: list[str], scripts: list[str], title: str = "abench_speckz report") -> str:
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>abench_speckz report</title>
+  <title>{title}</title>
   <script src="{_CHART_JS_CDN}"></script>
   <style>
     body {{ font-family: system-ui, sans-serif; max-width: 1100px; margin: 0 auto; padding: 1rem 2rem; color: #222; }}
@@ -75,7 +75,7 @@ def _html_shell(sections: list[str], scripts: list[str]) -> str:
   </style>
 </head>
 <body>
-  <h1>abench_speckz report</h1>
+  <h1>{title}</h1>
   <p class="meta">Generated: {timestamp}</p>
 {"".join(sections)}
   <script>
@@ -242,6 +242,7 @@ def generate_plots_html(
     plot_specs: list,
     output_path: Path,
     pretty_map: dict,
+    report_title: str | None = None,
 ) -> None:
     from abench_speckz import query
 
@@ -311,7 +312,8 @@ def generate_plots_html(
             f"{json.dumps(chart_config)});"
         )
 
-    output_path.write_text(_html_shell(sections, scripts))
+    title = report_title or "abench_speckz report"
+    output_path.write_text(_html_shell(sections, scripts, title=title))
 
 
 def _build_bar_or_line_config(
