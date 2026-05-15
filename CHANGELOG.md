@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-05-15
+
+### Added
+
+- `${_envfile}` and `${_run_id}` are now available in `setup_per_sweep` and `teardown_per_sweep`. For per_sweep phases, `_envfile` resolves to the first entry's env file in the group; `_run_id` is a single UUID generated per group and shared between setup and teardown (enabling scripts to coordinate across the two phases). Any reference to these vars in per_sweep steps no longer triggers the "disallowed combo var" validation error.
+
+### Changed
+
+- README expanded with full documentation for the report layout features (`report_title`, `report_description`, `sections`, `blocks`) introduced in 0.4.3, including a worked example with two editorial sections. Synthetic variables table and per_sweep bullets updated to reflect the new `_envfile`/`_run_id` availability.
+
 ## [0.4.3] - 2026-05-14
 
 ### Changed
