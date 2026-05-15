@@ -121,8 +121,8 @@ Variable names starting with `_` are reserved and will be rejected at load time.
 
 | Variable | Available in | Description |
 |---|---|---|
-| `${_envfile}` | `command`, `setup`, `teardown`, `post_run`, `monitor`, `output_file` | Absolute path to the current combo's env file |
-| `${_run_id}` | `command`, `setup`, `teardown`, `post_run`, `monitor` | UUID for this rep — same value written to `runs.jsonl` |
+| `${_envfile}` | `command`, `setup`, `teardown`, `post_run`, `monitor`, `output_file`, `setup_per_sweep`, `teardown_per_sweep` | Absolute path to the current combo's env file. In per_sweep phases, resolves to the first entry's env file in the group. |
+| `${_run_id}` | `command`, `setup`, `teardown`, `post_run`, `monitor`, `setup_per_sweep`, `teardown_per_sweep` | UUID for this rep — same value written to `runs.jsonl`. In per_sweep phases, one UUID is generated per group and shared between `setup_per_sweep` and `teardown_per_sweep`. |
 | `${_exit_code}` | `post_run` | Benchmark exit code |
 | `${_started_at}` | `post_run` | ISO timestamp when the benchmark started |
 | `${_finished_at}` | `post_run` | ISO timestamp when the benchmark finished |
@@ -251,6 +251,99 @@ plots:
 
 Negation is resolved at report time against the actual variable names in `aggregates.jsonl`. Unknown excluded names are silently ignored.
 
+**Report layout.** By default, every plot in `plots:` is rendered automatically in the order it is defined. To control layout, interleave prose, and publish only a subset of your plots, add a `sections:` list alongside `plots:`.
+
+```yaml
+report_title: "Database benchmark — Q3 2025"
+report_description: |
+  Throughput and latency sweeps across three workload types and four concurrency
+  levels. All runs used PostgreSQL 16 on a c5.4xlarge instance.
+
+plots:
+  - id: rps_by_workload
+    type: bar
+    title: "Throughput by workload"
+    x: workload
+    y: requests_per_sec
+
+  - id: latency_breakdown
+    type: stacked-bar
+    title: "Latency percentile breakdown"
+    x: workload
+    y: [p50_ms, p95_ms, p99_ms]
+
+  - id: rps_vs_concurrency
+    type: line
+    title: "Throughput scaling"
+    x: concurrency
+    y: requests_per_sec
+    group_by: workload
+
+  - id: throughput_vs_latency   # defined but not referenced below → omitted from report
+    type: scatter
+    x: requests_per_sec
+    y: p95_ms
+    group_by: workload
+
+sections:
+  - title: "Throughput"
+    description: |
+      Requests per second across all three workload types.
+    blocks:
+      - plot_id: rps_by_workload
+      - plot_id: rps_vs_concurrency
+      - text: |
+          **Key finding:** write throughput degrades sharply above 16 connections
+          due to lock contention in the storage layer.
+
+  - title: "Latency"
+    description: Percentile breakdown of response time by workload.
+    blocks:
+      - plot_id: latency_breakdown
+      - html: <p class="note">Numbers above exclude connection setup time.</p>
+      - include_html: methodology-table.html   # path relative to the YAML file
+```
+
+When `sections:` is present:
+- Plots are **not** auto-rendered — only plots referenced by a `plot_id` block appear in the report.
+- `report_description` is rendered as Markdown below the `report_title` heading.
+- The same `plot_id` can appear in multiple blocks; each reference renders an independent canvas.
+- Plots not referenced by any block are silently omitted, so you can maintain a plot library and selectively publish a subset.
+
+Each block has exactly one key:
+
+| Key | Value | Renders as |
+|---|---|---|
+| `plot_id` | id of a plot in the top-level `plots:` list | Chart.js chart |
+| `text` | Markdown string | Formatted prose |
+| `html` | Raw HTML string | Inlined verbatim |
+| `include_html` | File path relative to the YAML file | Contents of that file, inlined verbatim |
+
+**Using a separate plots file.** Pass `--plots plots.yaml` to supply plot definitions from a standalone file instead of the tool YAML. The standalone file uses the same format — a mapping with `plots:`, `sections:`, `report_title:`, `report_description:` — or just a bare list of plot entries for the minimal case:
+
+```sh
+# Plots come from the tool YAML (default)
+abench-speckz stats results/ --report report.html
+
+# Override with a standalone plots file
+abench-speckz stats results/ --report report.html --plots editorial.yaml
+```
+
+A bare-list standalone file (no sections, no title):
+
+```yaml
+# editorial.yaml — just a list
+- id: rps_by_workload
+  type: bar
+  x: workload
+  y: requests_per_sec
+- id: rps_vs_concurrency
+  type: line
+  x: concurrency
+  y: requests_per_sec
+  group_by: workload
+```
+
 **`env_probes`.** A mapping of key → shell command run **once** at the very start of the sweep (before any rep). The trimmed stdout of each command is stored in `env.snapshot.json` under `"probes"`. A non-zero exit code or missing command stores `null` for that key — probes never abort a sweep.
 
 **`combo_probes`.** A mapping of key → command template run **once per unique config hash**, before the first rep for that combo (after per-sweep setup). Commands interpolate combo vars (`${var}`, `${_envfile}`, `${env:VAR}`). Results are stored in two places: `combo_probes.json` (keyed by config hash) and embedded in every `runs.jsonl` row under `"combo_probes"`. Non-zero exit, missing command, timeout, or interpolation error stores `null` — probes never abort a sweep. Useful for capturing system or service state that varies per combo (e.g. effective DB config after per-sweep setup seeded a different dataset, kernel tuning parameters set per workload).
@@ -288,8 +381,8 @@ teardown_per_sweep: ["drop-db.sh"]
 per_sweep_var:      workload                    # optional; one var only
 ```
 
-- Without `per_sweep_var`: only `${env:VAR}` can be referenced; any `${combo_var}` rejected at sweep start.
-- With `per_sweep_var: X`: only `${X}` and `${env:VAR}` can be referenced; the current group's value of `X` is substituted.
+- Without `per_sweep_var`: only `${_envfile}`, `${_run_id}`, and `${env:VAR}` can be referenced; any other `${combo_var}` is rejected at sweep start.
+- With `per_sweep_var: X`: only `${X}`, `${_envfile}`, `${_run_id}`, and `${env:VAR}` can be referenced; the current group's value of `X` is substituted.
 - `--skip-existing`: if every rep in a group is already recorded, both phases are skipped for that group.
 - Setup failure: all planned reps in that group get a failure row with `failure_reason="per_sweep_setup[i]: …"`; teardown still runs best-effort. Next group proceeds.
 - Teardown failure: appended to the *last* rep row in the group's `failure_reason`.
