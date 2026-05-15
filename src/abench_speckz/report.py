@@ -74,6 +74,19 @@ def _html_shell(sections: list[str], scripts: list[str], title: str = "abench_sp
     summary:hover {{ color: #111; }}
     iframe.run-rpt {{ width: 100%; border: none; min-height: 400px; }}
     .run-group-heading {{ font-size: 1rem; margin: 1rem 0 0.25rem; color: #333; }}
+    .rotated-slant {{ --slant-px: 25px; }}
+    .rotated-slant table {{ border-collapse: separate; border-spacing: 0; }}
+    .rotated-slant td {{ border: 1px solid #ddd; border-left: none; min-width: 60px; padding: 3px 8px; text-align: center; }}
+    .rotated-slant td:first-child {{ border-left: 1px solid #ddd; }}
+    .rotated-slant thead th {{ border: 1px solid #ddd; border-top: none; border-left: none; border-right: none; background: transparent; padding: 3px 8px 6px; white-space: nowrap; vertical-align: bottom; text-align: center; min-width: 2rem; position: relative; overflow: visible; }}
+    .rotated-slant thead th .cell-bg {{ position: absolute; top: 0; left: 0; bottom: 0; width: calc(100% + var(--slant-px)); border-top: 1px solid #bbb; clip-path: polygon(var(--slant-px) 0%, 100% 0%, calc(100% - var(--slant-px)) 100%, 0% 100%); z-index: 0; }}
+    .rotated-slant thead th:nth-child(odd) .cell-bg {{ background: #eef1f6; }}
+    .rotated-slant thead th:nth-child(even) .cell-bg {{ background: #dde8f4; }}
+    .rotated-slant thead th span {{ position: relative; z-index: 2; }}
+    .rotated-slant thead th:first-child::before {{ display: none; }}
+    .rotated-slant thead th::before {{ content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: #bbb; transform: rotate(10deg); transform-origin: bottom center; z-index: 1; }}
+    .rotated-slant thead th:last-child::after {{ content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 1px; background: #bbb; transform: rotate(10deg); transform-origin: bottom center; z-index: 1; }}
+    .rotated-slant th.rotated-header span {{ writing-mode: vertical-rl; transform: rotate(190deg); display: inline-block; }}
   </style>
 </head>
 <body>
@@ -82,6 +95,26 @@ def _html_shell(sections: list[str], scripts: list[str], title: str = "abench_sp
 {"".join(sections)}
   <script>
 {"".join(scripts)}
+  </script>
+  <script>
+  (function() {{
+    var TAN10 = Math.tan(10 * Math.PI / 180);
+    var SIN10 = Math.sin(10 * Math.PI / 180);
+    function syncSlant() {{
+      document.querySelectorAll('.rotated-slant').forEach(function(wrap) {{
+        var thead = wrap.querySelector('thead');
+        if (!thead) return;
+        thead.querySelectorAll('th.rotated-header span').forEach(function(s) {{ s.style.marginLeft = ''; }});
+        var slantPx = Math.round(thead.getBoundingClientRect().height * TAN10);
+        wrap.style.setProperty('--slant-px', slantPx + 'px');
+        thead.querySelectorAll('th.rotated-header span').forEach(function(span) {{
+          span.style.marginLeft = Math.round(span.offsetHeight * SIN10) + 'px';
+        }});
+      }});
+    }}
+    window.addEventListener('load', syncSlant);
+    window.addEventListener('resize', syncSlant);
+  }})();
   </script>
 </body>
 </html>"""
@@ -139,9 +172,10 @@ def _legend_table_html(
         return ""
     header_cells = "<th></th>"
     if multi_metric:
-        header_cells += "<th>metric</th>"
+        header_cells += '<th class="rotated-header"><div class="cell-bg"></div><span>metric</span></th>'
     for k in varying_keys:
-        header_cells += f"<th>{_resolve_metric(pretty_map, k)}</th>"
+        label = _resolve_metric(pretty_map, k)
+        header_cells += f'<th class="rotated-header"><div class="cell-bg"></div><span>{label}</span></th>'
     body_rows = ""
     for s in series_meta:
         color = s["color"]
@@ -156,7 +190,7 @@ def _legend_table_html(
             cells += f"<td>{s['vals'].get(k, '')}</td>"
         body_rows += f"<tr>{cells}</tr>"
     return (
-        f'<div class="legend-wrap table-wrap">'
+        f'<div class="legend-wrap table-wrap rotated-slant">'
         f'<table><thead><tr>{header_cells}</tr></thead>'
         f'<tbody>{body_rows}</tbody>'
         f'</table></div>'
