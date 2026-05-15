@@ -110,3 +110,91 @@ def test_var_names_from_aggregates(tmp_path):
 
 def test_var_names_empty_when_no_data(tmp_path):
     assert query.var_names(tmp_path) == []
+
+
+def test_from_raw_with_require_tag(tmp_path):
+    store.init_results_dir(tmp_path)
+    for i, tags in enumerate([["bench"], ["bench"], ["other"]]):
+        store.append_run(tmp_path, {
+            "run_id": f"r{i}", "config_hash": "h1",
+            "vars": {"workload": "read"}, "tags": tags,
+            "exit_code": 0, "results": {"rps": 100.0 + i},
+        })
+    out = io.StringIO()
+    query.stats(
+        tmp_path, group_by=["workload"], metrics=["rps"], fmt="tsv",
+        require_tags=["bench"], from_raw=True, out=out,
+    )
+    lines = out.getvalue().strip().splitlines()
+    # 2 rows accepted (the 'other'-tagged row is filtered out): n=2 in the data column.
+    assert len(lines) == 2  # header + one workload row
+    row = lines[1].split("\t")
+    # n column is at the position after group_by + metric: workload, metric, n
+    assert "2" in row
+
+
+def test_from_raw_with_exclude_tag(tmp_path):
+    store.init_results_dir(tmp_path)
+    for i, tags in enumerate([["bench"], ["bench", "warmup-flag"], ["bench"]]):
+        store.append_run(tmp_path, {
+            "run_id": f"r{i}", "config_hash": "h1",
+            "vars": {"workload": "read"}, "tags": tags,
+            "exit_code": 0, "results": {"rps": 100.0 + i},
+        })
+    out = io.StringIO()
+    query.stats(
+        tmp_path, group_by=["workload"], metrics=["rps"], fmt="tsv",
+        exclude_tags=["warmup-flag"], from_raw=True, out=out,
+    )
+    lines = out.getvalue().strip().splitlines()
+    assert len(lines) == 2
+    assert "2" in lines[1].split("\t")  # only 2 of 3 runs survive
+
+
+def test_compute_rows_returns_empty_for_missing_aggregates(tmp_path):
+    # No aggregates.jsonl file at all.
+    rows = query.compute_rows(tmp_path)
+    assert rows == []
+
+
+def test_compute_rows_returns_empty_for_zero_byte_runs(tmp_path):
+    # from_raw forces the runs.jsonl path; an empty file returns no rows.
+    store.init_results_dir(tmp_path)
+    (tmp_path / "runs.jsonl").write_text("")
+    rows = query.compute_rows(tmp_path, group_by=["workload"], from_raw=True)
+    assert rows == []
+
+
+def test_fmt_helper_strips_trailing_zeros():
+    from abench_speckz.query import _fmt
+    assert _fmt(1.5) == "1.5"
+    assert _fmt(0.0) == "0"
+    assert _fmt(2.0) == "2"
+    assert _fmt(None) == ""
+    assert _fmt("hello") == "hello"
+
+
+def test_json_default_serializes_path():
+    from pathlib import Path
+    from abench_speckz.query import _json_default
+    # Path has no isoformat; fall through to str().
+    assert _json_default(Path("/tmp/x")) == "/tmp/x"
+
+
+def test_json_default_serializes_datetime():
+    from datetime import datetime
+    from abench_speckz.query import _json_default
+    dt = datetime(2026, 5, 14, 12, 0, 0)
+    assert _json_default(dt) == "2026-05-14T12:00:00"
+
+
+def test_stats_pretty_renders_table(tmp_path):
+    _seed(tmp_path)
+    # Persist a pretty-names mapping then render table format with --pretty.
+    from abench_speckz import prettynames
+    prettynames.write(tmp_path / "pretty_names.json", {"vars": {"workload": "Workload"}})
+    out = io.StringIO()
+    query.stats(tmp_path, group_by=["workload"], metrics=["rps"], fmt="table",
+                pretty=True, out=out)
+    text = out.getvalue()
+    assert "Workload" in text  # pretty label substituted for header

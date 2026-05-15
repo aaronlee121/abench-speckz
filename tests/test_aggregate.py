@@ -92,3 +92,31 @@ def test_rebuild_table_groups_by_hash():
     assert set(table) == {"h1", "h2"}
     assert table["h1"][0].n == 2
     assert table["h2"][0].n == 1
+
+
+def test_t_critical_zero_df_is_nan():
+    t = aggregate._t_critical_95(0)
+    assert math.isnan(t)
+
+
+def test_t_critical_large_df_falls_back_to_z():
+    # df > 29 falls back to 1.96 (normal-distribution critical value).
+    assert aggregate._t_critical_95(100) == 1.96
+
+
+def test_compute_aggregate_rows_empty_returns_empty():
+    assert aggregate.compute_aggregate_rows([]) == []
+
+
+def test_bool_results_excluded_from_metric_aggregation():
+    runs = [_run(results={"flag": True, "rps": 100}), _run(results={"flag": False, "rps": 110})]
+    rows = {r.metric: r for r in aggregate.compute_aggregate_rows(runs)}
+    assert "flag" not in rows  # bool is filtered out
+    assert "rps" in rows and rows["rps"].n == 2
+
+
+def test_string_numeric_results_excluded():
+    # extract.apply coerces strings to numbers, but if a parser returns strings, aggregate skips them.
+    runs = [_run(results={"rps": "100"}), _run(results={"rps": "110"})]
+    rows = aggregate.compute_aggregate_rows(runs)
+    assert rows == []

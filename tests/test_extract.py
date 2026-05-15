@@ -149,3 +149,85 @@ def test_json_format_rejects_jsonl_input():
     tool = _tool({"v": "$.value"}, output_format="json")
     out, fail = extract.apply(tool, _jsonl({"value": 1}, {"value": 2}))
     assert fail and "not JSON" in fail
+
+
+# --- empty capture, bad jsonpath, parser format, _coerce branches ---
+
+
+def test_empty_capture_json_returns_empty():
+    out, fail = extract.apply(_tool({}), '{"a": 1}')
+    assert fail is None and out == {}
+
+
+def test_empty_capture_jsonl_returns_empty():
+    out, fail = extract.apply(_tool({}, output_format="jsonl"), '{"a": 1}\n')
+    assert fail is None and out == {}
+
+
+def test_bad_jsonpath_reports_error():
+    out, fail = extract.apply(_tool({"x": "$$$ not jsonpath"}), '{"a": 1}')
+    assert fail and "bad jsonpath" in fail and "x" in fail
+    assert out == {}
+
+
+def test_parser_missing_colon():
+    out, fail = extract.apply(_tool(parser="no_colon_here"), "anything")
+    assert fail and "expected 'module:func'" in fail
+
+
+def test_parser_module_not_importable():
+    out, fail = extract.apply(_tool(parser="nonexistent_pkg_xyz123:fn"), "anything")
+    assert fail and "cannot load" in fail
+
+
+def test_parser_missing_attribute(tmp_path, monkeypatch):
+    pkg = tmp_path / "halfpkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("def other():\n    return {}\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    out, fail = extract.apply(_tool(parser="halfpkg:missing_fn"), "anything")
+    assert fail and "cannot load" in fail
+
+
+def test_coerce_bool_preserved():
+    # Plugin returns a bool; should stay bool, not become int.
+    out, _ = extract.apply(
+        _tool({"x": "$.flag"}),
+        json.dumps({"flag": True}),
+    )
+    assert out == {"x": True} and isinstance(out["x"], bool)
+
+
+def test_coerce_scientific_notation_string():
+    out, _ = extract.apply(_tool({"x": "$.a"}), json.dumps({"a": "1.5e3"}))
+    assert out == {"x": 1500.0}
+
+
+def test_coerce_negative_int_string():
+    out, _ = extract.apply(_tool({"x": "$.a"}), json.dumps({"a": "-42"}))
+    assert out == {"x": -42}
+
+
+def test_coerce_leaves_plain_string():
+    out, _ = extract.apply(_tool({"x": "$.a"}), json.dumps({"a": "hello"}))
+    assert out == {"x": "hello"}
+
+
+def test_coerce_list_passes_through():
+    out, _ = extract.apply(_tool({"x": "$.a"}), json.dumps({"a": [1, 2]}))
+    assert out == {"x": [1, 2]}
+
+
+def test_coerce_dict_passes_through():
+    out, _ = extract.apply(_tool({"x": "$.a"}), json.dumps({"a": {"k": 1}}))
+    assert out == {"x": {"k": 1}}
+
+
+def test_coerce_none_becomes_string(tmp_path, monkeypatch):
+    # A parser plugin returning {key: None} should produce "None" via _coerce's fallback.
+    pkg = tmp_path / "noneparser"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("def parse(s):\n    return {'k': None}\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    out, fail = extract.apply(_tool(parser="noneparser:parse"), "anything")
+    assert fail is None and out == {"k": "None"}

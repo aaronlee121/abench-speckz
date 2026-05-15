@@ -99,3 +99,48 @@ def test_full_pipeline_smoke(fixtures_dir):
     # interpolation resolved
     for c in stress:
         assert c.vars["THREAD_POOL"] == "64"
+
+
+def test_apply_excludes_no_rules_returns_input():
+    combos = [Combo(vars={"a": 1}, varying_keys=("a",))]
+    assert generate.apply_excludes(combos, []) is combos
+
+
+def test_apply_when_no_rules_returns_input():
+    combos = [Combo(vars={"a": 1}, varying_keys=("a",))]
+    assert generate.apply_when(combos, []) is combos
+
+
+def test_assign_universal_tags_empty_set_is_noop():
+    combos = [Combo(vars={"a": 1}, tags={"x"})]
+    out = generate.assign_universal_tags(combos, [])
+    assert out is combos and out[0].tags == {"x"}
+
+
+def test_assign_universal_tags_unions():
+    combos = [Combo(vars={"a": 1}, tags={"x"})]
+    generate.assign_universal_tags(combos, ["bench", "x"])
+    assert combos[0].tags == {"bench", "x"}
+
+
+def test_dedupe_with_list_valued_var():
+    # _hashable must convert list/dict so dedupe keys are hashable.
+    c1 = Combo(vars={"a": [1, 2]}, tags={"t1"}, varying_keys=("a",))
+    c2 = Combo(vars={"a": [1, 2]}, tags={"t2"}, varying_keys=("a",))
+    out = generate.dedupe([c1, c2])
+    assert len(out) == 1
+    assert out[0].tags == {"t1", "t2"}
+
+
+def test_dedupe_with_dict_valued_var():
+    c1 = Combo(vars={"a": {"k": 1}}, tags={"t1"}, varying_keys=("a",))
+    c2 = Combo(vars={"a": {"k": 1}}, tags={"t2"}, varying_keys=("a",))
+    out = generate.dedupe([c1, c2])
+    assert len(out) == 1 and out[0].tags == {"t1", "t2"}
+
+
+def test_dedupe_distinguishes_different_lists():
+    c1 = Combo(vars={"a": [1, 2]}, tags={"t1"}, varying_keys=("a",))
+    c2 = Combo(vars={"a": [3, 4]}, tags={"t2"}, varying_keys=("a",))
+    out = generate.dedupe([c1, c2])
+    assert len(out) == 2

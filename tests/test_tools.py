@@ -202,3 +202,132 @@ def test_monitor_steps_must_be_strings(tmp_path):
     with pytest.raises(RunError, match=r"tool.monitor\[0\] must be a string"):
         tools.load_tool(p)
 
+
+# --- root, parser, capture, combo_probes, per_sweep_var, setup_timeout edge paths ---
+
+
+def test_tool_root_must_be_mapping(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("- a\n- b\n")
+    with pytest.raises(RunError, match="root must be a mapping"):
+        tools.load_tool(p)
+
+
+def test_tool_name_required(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("command: x\n")
+    with pytest.raises(RunError, match="tool.name"):
+        tools.load_tool(p)
+
+
+def test_tool_name_must_be_string(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: 7\ncommand: x\n")
+    with pytest.raises(RunError, match="tool.name"):
+        tools.load_tool(p)
+
+
+def test_tool_command_must_be_string(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: 7\n")
+    with pytest.raises(RunError, match="tool.command"):
+        tools.load_tool(p)
+
+
+def test_parser_must_be_string(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nparser: [a, b]\n")
+    with pytest.raises(RunError, match="tool.parser"):
+        tools.load_tool(p)
+
+
+def test_capture_must_be_mapping(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\ncapture: [a, b]\n")
+    with pytest.raises(RunError, match="tool.capture"):
+        tools.load_tool(p)
+
+
+def test_combo_probes_loaded(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text(
+        "name: t\ncommand: x\n"
+        "combo_probes:\n  shape: 'redis-cli config get maxmemory'\n"
+    )
+    spec = tools.load_tool(p)
+    assert spec.combo_probes == {"shape": "redis-cli config get maxmemory"}
+
+
+def test_combo_probes_default_empty(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\n")
+    spec = tools.load_tool(p)
+    assert spec.combo_probes == {}
+
+
+def test_combo_probes_must_be_mapping(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\ncombo_probes: [a, b]\n")
+    with pytest.raises(RunError, match="combo_probes must be a mapping"):
+        tools.load_tool(p)
+
+
+def test_combo_probes_value_must_be_non_empty_string(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\ncombo_probes:\n  key: 42\n")
+    with pytest.raises(RunError, match=r"combo_probes\[.key.\]"):
+        tools.load_tool(p)
+
+
+def test_combo_probes_empty_key_rejected(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\ncombo_probes:\n  '': 'echo'\n")
+    with pytest.raises(RunError, match="combo_probes keys"):
+        tools.load_tool(p)
+
+
+def test_per_sweep_var_must_be_non_empty_string(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nper_sweep_var: ''\n")
+    with pytest.raises(RunError, match="per_sweep_var"):
+        tools.load_tool(p)
+
+
+def test_per_sweep_var_must_not_be_int(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nper_sweep_var: 42\n")
+    with pytest.raises(RunError, match="per_sweep_var"):
+        tools.load_tool(p)
+
+
+def test_setup_timeout_rejects_bool(tmp_path):
+    # bool is an int subclass; the guard must reject it explicitly.
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nsetup_timeout_seconds: true\n")
+    with pytest.raises(RunError, match="setup_timeout_seconds"):
+        tools.load_tool(p)
+
+
+def test_setup_timeout_rejects_negative(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nsetup_timeout_seconds: -5\n")
+    with pytest.raises(RunError, match="setup_timeout_seconds"):
+        tools.load_tool(p)
+
+
+def test_resolve_tool_version_none_when_no_command(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\n")
+    spec = tools.load_tool(p)
+    assert tools.resolve_tool_version(spec) is None
+
+
+def test_resolve_tool_version_command_not_found(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text(
+        "name: t\ncommand: x\nversion_command: 'definitely-not-a-real-binary-xyz --version'\n"
+    )
+    spec = tools.load_tool(p)
+    v = tools.resolve_tool_version(spec)
+    assert v is not None and "FileNotFoundError" in v
+

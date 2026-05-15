@@ -1129,3 +1129,101 @@ monitor:
     assert summary["succeeded"] == 1
     # Monitor wrote the started file, proving it ran while the benchmark was executing.
     assert started_file.exists()
+
+
+# --- load_manifest / load_envfile / config_hash / monitor unit tests ---
+
+
+def test_load_manifest_missing_raises(tmp_path):
+    with pytest.raises(RunError, match="manifest not found"):
+        runner.load_manifest(tmp_path / "nope.json")
+
+
+def test_load_manifest_directory_form(tmp_path):
+    out = _make_manifest(tmp_path, [{"a": "1"}])
+    path, entries = runner.load_manifest(out)
+    assert path == out / "manifest.json"
+    assert len(entries) == 1 and entries[0]["vars"] == {"a": "1"}
+
+
+def test_load_manifest_rejects_non_list(tmp_path):
+    p = tmp_path / "manifest.json"
+    p.write_text('{"not": "a list"}')
+    with pytest.raises(RunError, match="expected an array"):
+        runner.load_manifest(p)
+
+
+def test_load_envfile_basic(tmp_path):
+    p = tmp_path / "x.env"
+    p.write_text("A=1\nB=hello world\n")
+    assert runner.load_envfile(p) == {"A": "1", "B": "hello world"}
+
+
+def test_load_envfile_skips_comments_and_blank_lines(tmp_path):
+    p = tmp_path / "x.env"
+    p.write_text("# this is a comment\n\nA=1\n# trailing comment\nB=2\n")
+    assert runner.load_envfile(p) == {"A": "1", "B": "2"}
+
+
+def test_load_envfile_skips_lines_without_equals(tmp_path):
+    p = tmp_path / "x.env"
+    p.write_text("A=1\nBADLINE\nC=3\n")
+    assert runner.load_envfile(p) == {"A": "1", "C": "3"}
+
+
+def test_load_envfile_value_containing_equals(tmp_path):
+    p = tmp_path / "x.env"
+    p.write_text("URL=http://x?a=b\n")
+    # partition keeps everything after the first '=' as the value.
+    assert runner.load_envfile(p) == {"URL": "http://x?a=b"}
+
+
+def test_config_hash_stable_and_independent_of_key_order():
+    a = runner.config_hash({"workload": "read", "backend": "postgres"})
+    b = runner.config_hash({"backend": "postgres", "workload": "read"})
+    assert a == b
+    # Stable hex (16-char prefix); locks the hashing contract so a refactor
+    # cannot silently invalidate every results dir written before the change.
+    assert a == "941764a969a7517e"
+
+
+def test_config_hash_handles_non_json_value():
+    # Path is not JSON-serializable by default; default=str must serialize it.
+    h = runner.config_hash({"p": Path("/tmp/x")})
+    assert isinstance(h, str) and len(h) == 16
+
+
+def test_monitor_interpolation_failure_recorded(tmp_path):
+    started_file = tmp_path / "started.txt"
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    # ${nonexistent} fails interpolation; the run should still succeed.
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+monitor:
+  - "echo ${{nonexistent_var}} {started_file}"
+"""
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path,
+        results_dir=results, repeat=1,
+    )
+    # Benchmark still succeeds, but raw is forced because a monitor failed to start.
+    assert summary["succeeded"] == 1
+    runs = store.read_runs(results)
+    raw = store.load_raw_run(results, runs[0]["run_id"])
+    assert raw is not None
+    starts = raw.get("monitor_start") or []
+    assert starts and any("interpolation" in (s.get("error") or "") for s in starts)
+
+
+def test_collect_env_metadata_returns_known_keys():
+    info = runner.collect_env_metadata()
+    for key in ("host", "system", "release", "machine", "python", "cpu_count"):
+        assert key in info

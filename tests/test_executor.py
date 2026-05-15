@@ -56,3 +56,16 @@ def test_env_is_passed():
     ))
     assert r.exit_code == 0
     assert "hello" in r.stdout
+
+
+def test_to_str_handles_bytes():
+    from abench_speckz.executor import _to_str
+    assert _to_str(b"hello") == "hello"
+    # Invalid utf-8 falls back to "replace" errors mode (returns a string).
+    assert _to_str(b"\xff\xfe") == "��"
+
+
+def test_to_str_handles_none_and_str():
+    from abench_speckz.executor import _to_str
+    assert _to_str(None) == ""
+    assert _to_str("already-a-string") == "already-a-string"

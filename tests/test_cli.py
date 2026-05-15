@@ -118,3 +118,88 @@ def test_rebuild_aggregates(tmp_path):
         })
     r = _run("rebuild-aggregates", str(tmp_path))
     assert r.returncode == 0
+
+
+def test_gen_zero_combos_after_filter(tmp_path):
+    # --tag matches nothing → gen prints a warning and exits 0 without writing.
+    out = tmp_path / "out"
+    r = _run(
+        "gen", str(FIXTURES / "full.yaml"), "--profile", "full",
+        "--tag", "nonexistent-tag", "--out", str(out),
+    )
+    assert r.returncode == 0
+    assert "0 combos" in r.stderr
+    # No manifest written when nothing to emit.
+    assert not (out / "manifest.json").exists()
+
+
+def test_run_dry_run_writes_no_results(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "c.env").write_text("workload=read\n")
+    (out / "manifest.json").write_text(
+        '[{"filename":"c.env","vars":{"workload":"read"},"tags":[]}]'
+    )
+    tool = tmp_path / "tool.yaml"
+    tool.write_text(
+        f'name: faketool\n'
+        f'command: "{sys.executable} {FIXTURES / "fake_tool.py"}"\n'
+        f'capture:\n  rps: $.summary.requestsPerSec\n'
+    )
+    results = tmp_path / "results"
+    r = _run("run", str(out), "--tool", str(tool), "--results", str(results), "--dry-run")
+    assert r.returncode == 0
+    # Dry run must not create the results directory or write any runs.
+    assert not (results / "runs.jsonl").exists()
+
+
+def test_stats_report_writes_html_file(tmp_path):
+    # End-to-end wiring of --report through argparse → query → report renderer.
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "c.env").write_text("workload=read\nconcurrency=1\n")
+    (out / "manifest.json").write_text(
+        '[{"filename":"c.env","vars":{"workload":"read","concurrency":"1"},"tags":[]}]'
+    )
+    tool = tmp_path / "tool.yaml"
+    tool.write_text(
+        f'name: faketool\n'
+        f'command: "{sys.executable} {FIXTURES / "fake_tool.py"}"\n'
+        f'capture:\n  rps: $.summary.requestsPerSec\n'
+    )
+    results = tmp_path / "results"
+    r = _run("run", str(out), "--tool", str(tool), "--repeat", "2", "--results", str(results))
+    assert r.returncode == 0, r.stderr
+
+    report = tmp_path / "report.html"
+    s = _run("stats", str(results), "--metric", "rps", "--report", str(report),
+             "--no-run-reports")
+    assert s.returncode == 0, s.stderr
+    assert report.exists()
+    body = report.read_text()
+    assert "<!DOCTYPE html>" in body
+    assert "rps" in body
+
+
+def test_stats_link_run_reports_flag(tmp_path):
+    # Exercise --link-run-reports wiring (mutually exclusive with --no-run-reports).
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "c.env").write_text("workload=read\n")
+    (out / "manifest.json").write_text(
+        '[{"filename":"c.env","vars":{"workload":"read"},"tags":[]}]'
+    )
+    tool = tmp_path / "tool.yaml"
+    tool.write_text(
+        f'name: faketool\n'
+        f'command: "{sys.executable} {FIXTURES / "fake_tool.py"}"\n'
+        f'capture:\n  rps: $.summary.requestsPerSec\n'
+    )
+    results = tmp_path / "results"
+    _run("run", str(out), "--tool", str(tool), "--results", str(results))
+
+    report = tmp_path / "report.html"
+    s = _run("stats", str(results), "--metric", "rps",
+             "--report", str(report), "--link-run-reports")
+    assert s.returncode == 0, s.stderr
+    assert report.exists()

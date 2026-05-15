@@ -41,3 +41,21 @@ def test_resolve_finds_metric_in_any_tool_when_tool_unspecified():
     assert prettynames.resolve(m, "p95") == "P95 (ms)"
     assert prettynames.resolve(m, "workload") == "Workload"
     assert prettynames.resolve(m, "unknown") == "unknown"
+
+
+def test_resolve_with_tool_falls_through_to_vars():
+    # Tool is specified but key is not under that tool — falls through to vars.
+    m = {"oha": {"rps": "Requests/sec"}, "vars": {"workload": "Workload"}}
+    assert prettynames.resolve(m, "workload", tool="oha") == "Workload"
+
+
+def test_merge_overrides_scalar_with_non_dict():
+    # If incoming has a non-dict at a namespace, it should override (not merge).
+    a = {"key": "old"}
+    b = {"key": "new"}
+    assert prettynames.merge(a, b) == {"key": "new"}
+
+
+def test_load_missing_returns_empty():
+    from pathlib import Path
+    assert prettynames.load(Path("/nonexistent/path/pn.json")) == {}

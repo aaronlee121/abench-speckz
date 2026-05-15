@@ -66,3 +66,19 @@ def test_check_ident_rejects_quote():
 def test_check_ident_rejects_leading_digit():
     with pytest.raises(RunError):
         filters.check_ident("1abc", context="x")
+
+
+def test_parse_kv_empty_iterable():
+    assert filters.parse_kv([]) == []
+
+
+def test_parse_kv_strips_surrounding_whitespace():
+    # parse_kv strips whitespace around key and value.
+    p = filters.parse_kv(["  a  =  hello  "])
+    assert (p[0].key, p[0].op, p[0].value) == ("a", "=", "hello")
+
+
+def test_make_filter_no_predicates_passes_everything():
+    fn = filters.make_filter()
+    assert fn({}, [])
+    assert fn({"a": "1"}, ["any"])
