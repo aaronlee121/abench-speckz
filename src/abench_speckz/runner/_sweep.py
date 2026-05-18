@@ -19,6 +19,7 @@ from abench_speckz.runner._planning import (
     existing_counts,
     group_work,
     plan_sweep,
+    resolve_per_sweep_vars,
     validate_per_sweep,
 )
 from abench_speckz.runner._probes import collect_probe_results, config_hash
@@ -58,6 +59,9 @@ def execute_sweep(
     manifest_dir = actual_manifest_path.parent
     tool = tools.load_tool(tool_path)
 
+    all_var_names = sorted({k for e in manifest_entries for k in (e.get("vars") or {})})
+    per_sweep_vars = resolve_per_sweep_vars(tool.per_sweep_var, all_var_names)
+
     work = plan_sweep(
         manifest_entries,
         repeat,
@@ -65,17 +69,17 @@ def execute_sweep(
         where,
         require_tags,
         exclude_tags,
-        per_sweep_var=tool.per_sweep_var,
+        per_sweep_vars=per_sweep_vars,
     )
     if not work:
         print("no combos selected after filters", file=progress_stream)
         return _empty_summary()
 
-    validate_per_sweep(tool, [e for (e, _, _) in work])
-    groups = group_work(work, tool.per_sweep_var)
+    validate_per_sweep(tool, [e for (e, _, _) in work], per_sweep_vars)
+    groups = group_work(work, per_sweep_vars)
 
     if dry_run:
-        _dry_run_preview(groups, tool, progress_stream, manifest_dir)
+        _dry_run_preview(groups, tool, per_sweep_vars, progress_stream, manifest_dir)
         return _empty_summary()
 
     with store.lock_results_dir(results_dir):
@@ -98,6 +102,7 @@ def execute_sweep(
                 groups=groups,
                 tool=tool,
                 tool_version=tool_version,
+                per_sweep_vars=per_sweep_vars,
                 manifest_dir=manifest_dir,
                 results_dir=results_dir,
                 executor=executor,
@@ -145,6 +150,7 @@ def _run_groups(
     groups: list[WorkGroup],
     tool: ToolSpec,
     tool_version: str | None,
+    per_sweep_vars: list[str] | None,
     manifest_dir: Path,
     results_dir: Path,
     executor: Executor,
@@ -165,10 +171,14 @@ def _run_groups(
     per_group_cmds = [m.command for m in tool.monitor if m.span == "per_group"]
 
     for group_key, items in groups:
-        group_slug = slug_mod.slug(group_key) if (tool.per_sweep_var and group_key is not None) else None
+        group_slug = (
+            "-".join(slug_mod.slug(v) for v in group_key)
+            if (per_sweep_vars and group_key is not None)
+            else None
+        )
         first_env_file = manifest_dir / items[0][0]["filename"]
         phase_vars: dict[str, Any] = {
-            **({tool.per_sweep_var: group_key} if tool.per_sweep_var else {}),
+            **(dict(zip(per_sweep_vars, group_key)) if per_sweep_vars else {}),
             "_run_id": str(uuid.uuid4()),
             "_envfile": str(first_env_file.resolve()),
         }
@@ -439,17 +449,22 @@ def _maybe_write_sweep_raw(
 def _dry_run_preview(
     groups: list[WorkGroup],
     tool: ToolSpec,
+    per_sweep_vars: list[str] | None,
     stream,
     manifest_dir: Path,
 ) -> None:
     for group_key, items in groups:
         first_env_file = manifest_dir / items[0][0]["filename"]
         phase_vars: dict[str, Any] = {
-            **({tool.per_sweep_var: group_key} if tool.per_sweep_var else {}),
+            **(dict(zip(per_sweep_vars, group_key)) if per_sweep_vars else {}),
             "_run_id": str(uuid.uuid4()),
             "_envfile": str(first_env_file.resolve()),
         }
-        label = f", {tool.per_sweep_var}={group_key}" if tool.per_sweep_var else ""
+        label = (
+            ", " + ", ".join(f"{v}={group_key[i]}" for i, v in enumerate(per_sweep_vars))
+            if per_sweep_vars
+            else ""
+        )
         for k, template in enumerate(tool.setup_per_sweep):
             cmd = interpolate.resolve_string(template, phase_vars, env=os.environ)
             print(f"[per_sweep setup {k}{label}]: {cmd}", file=stream)

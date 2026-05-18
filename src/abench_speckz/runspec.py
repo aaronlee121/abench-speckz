@@ -34,7 +34,7 @@ class ToolSpec:
     setup_timeout_seconds: int = 120
     setup_per_sweep: list[str] = field(default_factory=list)
     teardown_per_sweep: list[str] = field(default_factory=list)
-    per_sweep_var: str | None = None
+    per_sweep_var: str | list[str] | None = None
 
 
 @dataclass

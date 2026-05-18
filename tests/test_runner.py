@@ -902,6 +902,109 @@ def test_per_sweep_mode_b_allows_envfile_and_run_id(tmp_path):
     assert summary["succeeded"] == 1
 
 
+def _per_sweep_tool_yaml_raw(tmp_path: Path, *, per_sweep_var_yaml: str, setup_per_sweep=None) -> Path:
+    """Like _per_sweep_tool_yaml but accepts a raw YAML snippet for per_sweep_var."""
+    p = tmp_path / "tool.yaml"
+    lines = [
+        "name: faketool",
+        f'command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"',
+        "timeout_seconds: 10",
+        "capture:",
+        "  rps: $.summary.requestsPerSec",
+        f"per_sweep_var: {per_sweep_var_yaml}",
+    ]
+    if setup_per_sweep:
+        lines.append("setup_per_sweep:")
+        for step in setup_per_sweep:
+            lines.append(f"  - {json.dumps(step)}")
+    p.write_text("\n".join(lines) + "\n")
+    return p
+
+
+def test_per_sweep_multi_var_groups_by_composite_key(tmp_path):
+    """per_sweep_var list groups by all listed vars; free var varies within each group."""
+    phase = _phase_script(tmp_path)
+    marker = tmp_path / "marker.txt"
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"backend": "pg", "workload": "read", "concurrency": "1"},
+            {"backend": "pg", "workload": "read", "concurrency": "8"},
+            {"backend": "pg", "workload": "write", "concurrency": "1"},
+            {"backend": "mysql", "workload": "read", "concurrency": "1"},
+        ],
+    )
+    tool_path = _per_sweep_tool_yaml_raw(
+        tmp_path,
+        per_sweep_var_yaml="[backend, workload]",
+        setup_per_sweep=[f"python {phase} setup-${{backend}}-${{workload}} {marker}"],
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+    )
+    assert summary["succeeded"] == 4
+
+    lines = marker.read_text().splitlines()
+    # Three unique (backend, workload) groups: (mysql, read), (pg, read), (pg, write)
+    assert sorted(lines) == ["setup-mysql-read", "setup-pg-read", "setup-pg-write"]
+
+
+def test_per_sweep_negation_groups_by_all_except_excluded(tmp_path):
+    """per_sweep_var: '!concurrency' groups by all vars except concurrency."""
+    phase = _phase_script(tmp_path)
+    marker = tmp_path / "marker.txt"
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"workload": "read", "concurrency": "1"},
+            {"workload": "read", "concurrency": "8"},
+            {"workload": "write", "concurrency": "1"},
+        ],
+    )
+    tool_path = _per_sweep_tool_yaml_raw(
+        tmp_path,
+        per_sweep_var_yaml="'!concurrency'",
+        setup_per_sweep=[f"python {phase} setup-${{workload}} {marker}"],
+    )
+    results = tmp_path / "results"
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+    )
+    assert summary["succeeded"] == 3
+
+    lines = marker.read_text().splitlines()
+    # Two unique workload groups: read (with concurrency 1 and 8 inside), write
+    assert sorted(lines) == ["setup-read", "setup-write"]
+
+
+def test_per_sweep_negation_rejects_excluded_var_in_steps(tmp_path):
+    """Negation: the excluded variable must not appear in per_sweep steps."""
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
+    tool_path = _per_sweep_tool_yaml_raw(
+        tmp_path,
+        per_sweep_var_yaml="'!concurrency'",
+        setup_per_sweep=["echo ${concurrency}"],  # excluded var, not allowed
+    )
+    results = tmp_path / "results"
+    with pytest.raises(RunError) as ei:
+        runner.execute_sweep(
+            manifest_path=manifest_dir,
+            tool_path=tool_path,
+            results_dir=results,
+            repeat=1,
+        )
+    assert "${concurrency}" in str(ei.value)
+
+
 # ---------------------------------------------------------------------------
 # env_probes
 # ---------------------------------------------------------------------------

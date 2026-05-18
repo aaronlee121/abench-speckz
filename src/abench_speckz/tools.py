@@ -138,8 +138,20 @@ def load_tool(path: str | Path) -> ToolSpec:
     teardown_per_sweep = _load_phase(raw, path, "teardown_per_sweep")
 
     per_sweep_var = raw.get("per_sweep_var")
-    if per_sweep_var is not None and (not isinstance(per_sweep_var, str) or not per_sweep_var):
-        raise RunError(f"{path}: tool.per_sweep_var must be a non-empty string")
+    if per_sweep_var is not None:
+        entries = [per_sweep_var] if isinstance(per_sweep_var, str) else per_sweep_var
+        if not isinstance(entries, list) or not entries:
+            raise RunError(f"{path}: tool.per_sweep_var must be a non-empty string or list of strings")
+        for i, entry in enumerate(entries):
+            if not isinstance(entry, str) or not entry:
+                raise RunError(
+                    f"{path}: tool.per_sweep_var[{i}] must be a non-empty string"
+                )
+            bare = entry[1:] if entry.startswith("!") else entry
+            if not bare:
+                raise RunError(
+                    f"{path}: tool.per_sweep_var[{i}] '!' must be followed by a variable name"
+                )
 
     setup_timeout = raw.get("setup_timeout_seconds", 120)
     if not isinstance(setup_timeout, int) or isinstance(setup_timeout, bool) or setup_timeout <= 0:

@@ -325,6 +325,41 @@ def test_per_sweep_var_must_not_be_int(tmp_path):
         tools.load_tool(p)
 
 
+def test_per_sweep_var_accepts_list(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nper_sweep_var:\n  - backend\n  - workload\n")
+    spec = tools.load_tool(p)
+    assert spec.per_sweep_var == ["backend", "workload"]
+
+
+def test_per_sweep_var_accepts_negation_string(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nper_sweep_var: '!concurrency'\n")
+    spec = tools.load_tool(p)
+    assert spec.per_sweep_var == "!concurrency"
+
+
+def test_per_sweep_var_accepts_negation_in_list(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nper_sweep_var:\n  - backend\n  - '!concurrency'\n")
+    spec = tools.load_tool(p)
+    assert spec.per_sweep_var == ["backend", "!concurrency"]
+
+
+def test_per_sweep_var_rejects_bare_bang(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nper_sweep_var:\n  - '!'\n")
+    with pytest.raises(RunError, match="per_sweep_var"):
+        tools.load_tool(p)
+
+
+def test_per_sweep_var_rejects_empty_list(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nper_sweep_var: []\n")
+    with pytest.raises(RunError, match="per_sweep_var"):
+        tools.load_tool(p)
+
+
 def test_setup_timeout_rejects_bool(tmp_path):
     # bool is an int subclass; the guard must reject it explicitly.
     p = tmp_path / "t.yaml"
