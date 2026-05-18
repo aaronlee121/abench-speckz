@@ -110,8 +110,9 @@ def execute_one_rep(
     monitor_procs: list[subprocess.Popen] = []
     monitor_start_records: list[dict[str, Any]] = []
     monitor_stop_records: list[dict[str, Any]] = []
-    if tool.monitor:
-        monitor_procs, monitor_start_records = run_monitors(tool.monitor, combo_vars, env)
+    per_rep_cmds = [m.command for m in tool.monitor if m.span == "per_rep"]
+    if per_rep_cmds:
+        monitor_procs, monitor_start_records = run_monitors(per_rep_cmds, combo_vars, env)
 
     result = None
     teardown_failure: str | None = None

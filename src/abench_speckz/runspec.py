@@ -2,6 +2,14 @@
 
 from dataclasses import dataclass, field
 
+_MONITOR_SPANS = ("per_rep", "per_group", "per_sweep")
+
+
+@dataclass
+class MonitorEntry:
+    command: str
+    span: str = "per_rep"  # "per_rep" | "per_group" | "per_sweep"
+
 
 @dataclass
 class ToolSpec:
@@ -22,7 +30,7 @@ class ToolSpec:
     setup: list[str] = field(default_factory=list)
     teardown: list[str] = field(default_factory=list)
     post_run: list[str] = field(default_factory=list)
-    monitor: list[str] = field(default_factory=list)
+    monitor: list[MonitorEntry] = field(default_factory=list)
     setup_timeout_seconds: int = 120
     setup_per_sweep: list[str] = field(default_factory=list)
     teardown_per_sweep: list[str] = field(default_factory=list)

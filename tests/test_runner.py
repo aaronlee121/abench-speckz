@@ -1447,6 +1447,225 @@ monitor:
     assert starts and any("interpolation" in (s.get("error") or "") for s in starts)
 
 
+def test_monitor_string_syntax_defaults_to_per_rep(tmp_path):
+    """Backwards compat: plain string monitor entries default to span=per_rep."""
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+monitor:
+  - "python -c \\"import time; time.sleep(30)\\""
+"""
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+        keep_raw=True,
+    )
+    assert summary["succeeded"] == 1
+    runs = store.read_runs(results)
+    raw = store.load_raw_run(results, runs[0]["run_id"])
+    assert "monitor_start" in raw, "per_rep monitor records should appear in run raw"
+    assert raw["monitor_start"][0]["pid"] is not None
+
+
+def test_monitor_dict_per_rep_explicit(tmp_path):
+    """Object-form monitor with explicit span: per_rep works same as string form."""
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+monitor:
+  - command: "python -c \\"import time; time.sleep(30)\\""
+    span: per_rep
+"""
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+        keep_raw=True,
+    )
+    assert summary["succeeded"] == 1
+    runs = store.read_runs(results)
+    raw = store.load_raw_run(results, runs[0]["run_id"])
+    assert "monitor_start" in raw
+    assert raw["monitor_start"][0]["pid"] is not None
+
+
+def test_monitor_per_sweep_spans_entire_sweep(tmp_path):
+    """A per_sweep monitor runs for the whole sweep; records land in raw/sweep_monitors.json."""
+    flag = tmp_path / "monitor_ran.txt"
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}, {"workload": "write"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+monitor:
+  - command: "python -c \\"import time; open('{flag}', 'w').write('alive'); time.sleep(60)\\""
+    span: per_sweep
+"""
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+        keep_raw=True,
+    )
+    assert summary["succeeded"] == 2
+
+    # Monitor records are NOT in individual run raw files
+    runs = store.read_runs(results)
+    for run in runs:
+        raw = store.load_raw_run(results, run["run_id"])
+        assert "monitor_start" not in raw, "per_sweep monitor should not appear in per-run raw"
+
+    # Records land in raw/sweep_monitors.json
+    sweep_mon = results / "raw" / "sweep_monitors.json"
+    assert sweep_mon.exists(), "sweep_monitors.json should be written with keep_raw=True"
+    doc = json.loads(sweep_mon.read_text())
+    assert "monitor_start" in doc
+    assert doc["monitor_start"][0]["pid"] is not None
+    assert "monitor_stop" in doc
+    assert doc["monitor_stop"][0]["exit_code"] is not None
+
+
+def test_monitor_per_sweep_records_written_on_error(tmp_path):
+    """sweep_monitors.json is written even without keep_raw when a monitor fails to start."""
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+monitor:
+  - command: "nonexistent-sweep-monitor-xyz"
+    span: per_sweep
+"""
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+    )
+    assert summary["succeeded"] == 1
+
+    sweep_mon = results / "raw" / "sweep_monitors.json"
+    assert sweep_mon.exists(), "sweep_monitors.json written when monitor start fails"
+    doc = json.loads(sweep_mon.read_text())
+    assert doc["monitor_start"][0].get("error") is not None
+
+
+def test_monitor_per_group_spans_group(tmp_path):
+    """A per_group monitor runs across all reps of a per_sweep group; records in sweep raw file."""
+    flag = tmp_path / "monitor_alive.txt"
+    manifest_dir = _make_manifest(tmp_path, [{"host": "a"}, {"host": "b"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+per_sweep_var: host
+monitor:
+  - command: "python -c \\"import time; open('{flag}', 'w').write('alive'); time.sleep(60)\\""
+    span: per_group
+"""
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+        keep_raw=True,
+    )
+    assert summary["succeeded"] == 2
+
+    # Monitor records are NOT in per-run raw files
+    runs = store.read_runs(results)
+    for run in runs:
+        raw = store.load_raw_run(results, run["run_id"])
+        assert "monitor_start" not in raw, "per_group monitor should not appear in per-run raw"
+
+    # Records appear in at least one per-group sweep raw file
+    raw_dir = results / "raw"
+    sweep_files = list(raw_dir.glob("sweep-*.json"))
+    assert sweep_files, "per-group sweep raw files should exist with keep_raw=True"
+    all_have_monitor = all(
+        "monitor_start" in json.loads(f.read_text()) for f in sweep_files
+    )
+    assert all_have_monitor, "each group's sweep raw file should contain monitor_start"
+
+
+def test_monitor_mixed_spans(tmp_path):
+    """per_sweep and per_rep monitors coexist; records land in correct locations."""
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+monitor:
+  - command: "python -c \\"import time; time.sleep(60)\\""
+    span: per_sweep
+  - command: "python -c \\"import time; time.sleep(60)\\""
+    span: per_rep
+"""
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+        keep_raw=True,
+    )
+    assert summary["succeeded"] == 1
+
+    # per_rep monitor in run raw
+    runs = store.read_runs(results)
+    raw = store.load_raw_run(results, runs[0]["run_id"])
+    assert "monitor_start" in raw, "per_rep monitor should be in run raw"
+
+    # per_sweep monitor in sweep_monitors.json
+    sweep_mon = results / "raw" / "sweep_monitors.json"
+    assert sweep_mon.exists(), "sweep_monitors.json should exist for per_sweep monitor"
+    doc = json.loads(sweep_mon.read_text())
+    assert doc["monitor_start"][0]["pid"] is not None
+
+
 def test_collect_env_metadata_returns_known_keys():
     info = runner.collect_env_metadata()
     for key in ("host", "system", "release", "machine", "python", "cpu_count"):

@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 from abench_speckz.model import RunError
-from abench_speckz.runspec import ToolSpec
+from abench_speckz.runspec import MonitorEntry, ToolSpec, _MONITOR_SPANS
 
 _FIELDS = {
     "name",
@@ -33,6 +33,36 @@ _FIELDS = {
     "teardown_per_sweep",
     "per_sweep_var",
 }
+
+
+def _load_monitors(raw: dict, path) -> list[MonitorEntry]:
+    value = raw.get("monitor")
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise RunError(f"{path}: tool.monitor must be a list")
+    entries: list[MonitorEntry] = []
+    for i, item in enumerate(value):
+        if isinstance(item, str):
+            entries.append(MonitorEntry(command=item))
+        elif isinstance(item, dict):
+            cmd = item.get("command")
+            if not isinstance(cmd, str) or not cmd:
+                raise RunError(f"{path}: tool.monitor[{i}].command must be a non-empty string")
+            span = item.get("span", "per_rep")
+            if span not in _MONITOR_SPANS:
+                raise RunError(
+                    f"{path}: tool.monitor[{i}].span must be one of {list(_MONITOR_SPANS)}, got {span!r}"
+                )
+            unknown = set(item) - {"command", "span"}
+            if unknown:
+                raise RunError(f"{path}: tool.monitor[{i}] has unknown keys: {sorted(unknown)}")
+            entries.append(MonitorEntry(command=cmd, span=span))
+        else:
+            raise RunError(
+                f"{path}: tool.monitor[{i}] must be a string or mapping, got {type(item).__name__}"
+            )
+    return entries
 
 
 def _load_phase(raw: dict, path, key: str) -> list[str]:
@@ -103,7 +133,7 @@ def load_tool(path: str | Path) -> ToolSpec:
     setup = _load_phase(raw, path, "setup")
     teardown = _load_phase(raw, path, "teardown")
     post_run = _load_phase(raw, path, "post_run")
-    monitor = _load_phase(raw, path, "monitor")
+    monitor = _load_monitors(raw, path)
     setup_per_sweep = _load_phase(raw, path, "setup_per_sweep")
     teardown_per_sweep = _load_phase(raw, path, "teardown_per_sweep")
 

@@ -53,7 +53,7 @@ Profiles overlay the base spec (variables, static, when, exclude are merged); `d
 - Writes to `runs.jsonl` (one JSON line per run) and updates `aggregates.jsonl` after each run
 - Results directory is protected by a `flock` during the sweep
 
-**Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `output_file` (read extraction input from a file the tool writes instead of stdout), `output_format` (`json` default, or `jsonl` for one object per line), `pretty_names`, `units`, `higher_is_better`, `plots` (declarative Chart.js plot definitions consumed by `stats --report`), `env_probes` (mapping of key → shell command run once at sweep start; stdout captured into `env.snapshot.json` under `"probes"`), `combo_probes` (mapping of key → command template run once per unique config hash; stdout captured into `combo_probes.json` and each run row; see below), `setup` / `teardown` (per-rep shell steps), `post_run` (per-rep shell steps that run after teardown with access to run-result vars; see below), `monitor` (list of shell commands launched as background processes before the benchmark command and terminated after it completes; see below), `setup_timeout_seconds` (per-step timeout, default 120).
+**Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `output_file` (read extraction input from a file the tool writes instead of stdout), `output_format` (`json` default, or `jsonl` for one object per line), `pretty_names`, `units`, `higher_is_better`, `plots` (declarative Chart.js plot definitions consumed by `stats --report`), `env_probes` (mapping of key → shell command run once at sweep start; stdout captured into `env.snapshot.json` under `"probes"`), `combo_probes` (mapping of key → command template run once per unique config hash; stdout captured into `combo_probes.json` and each run row; see below), `setup` / `teardown` (per-rep shell steps), `post_run` (per-rep shell steps that run after teardown with access to run-result vars; see below), `monitor` (list of background-process definitions, each a string or `{command, span}` object; `span` is `per_rep` (default), `per_group`, or `per_sweep`; see below), `setup_timeout_seconds` (per-step timeout, default 120).
 
 **Plot fields:** Each entry in `plots` has: `id` (unique string), `type` (`bar`, `stacked-bar`, `line`, `scatter`), `x` (variable name for the x-axis, or a metric name for `scatter`), `y` (metric name or list of metric names; `scatter` requires exactly one, `stacked-bar` requires at least two), `title` (optional display title), `group_by` (optional variable name or list of variable names — see below).
 
@@ -142,4 +142,26 @@ Variable names starting with `_` are reserved and rejected in spec YAML.
 
 **`combo_probes`** runs each command template once per unique config hash (before the first rep for that hash). Commands interpolate combo vars (`${var}`, `${_envfile}`, `${env:VAR}`). Trimmed stdout is the value; non-zero exit, missing command, timeout, or interpolation error stores `null` — probes never abort a sweep. Results are written to `combo_probes.json` (keyed by config hash) and embedded in every `runs.jsonl` row under `"combo_probes"`. Useful for capturing system or service state that varies per combo (e.g. effective DB config, kernel parameters after per-sweep setup).
 
-**`monitor`** is a list of shell commands launched as **background processes** after `setup` completes and before the benchmark command runs. Each process is sent SIGTERM when the benchmark finishes (success or failure); if it does not exit within 5 seconds it receives SIGKILL. Commands interpolate combo vars (`${var}`, `${_envfile}`, `${env:VAR}`). A monitor that fails to start is recorded but never aborts the run. Start records (`monitor_start`) and stop records (`monitor_stop`) are written to `raw/{run_id}.json` under `keep_raw` or when any monitor fails to start. Useful for running side-car collectors (e.g. `python collect_metrics.py`) that run concurrently with each rep.
+**`monitor`** is a list of background-process definitions. Each entry is either a plain string (command template) or an object with `command` and an optional `span` field. The `span` controls how long the monitor lives:
+
+| `span` | Lifetime | Variables available |
+|---|---|---|
+| `per_rep` (default) | After `setup`, until benchmark finishes | Full combo vars + `${_run_id}`, `${_envfile}`, `${env:VAR}` |
+| `per_group` | After `setup_per_sweep`, until before `teardown_per_sweep` (spans all reps of a group) | Group phase vars: per_sweep_var value + `${_run_id}`, `${_envfile}`, `${env:VAR}` |
+| `per_sweep` | After sweep init, until all groups finish | `${_run_id}` (sweep-level UUID) + `${env:VAR}` |
+
+Each process receives SIGTERM when its span ends; SIGKILL follows after 5 seconds if it has not exited. A monitor that fails to start is recorded but never aborts the run.
+
+Records (`monitor_start`, `monitor_stop`) are written under `keep_raw` or when any monitor fails to start:
+- `per_rep`: in `raw/{run_id}.json`
+- `per_group`: in `raw/sweep.json` / `raw/sweep-{slug}.json` alongside setup/teardown records
+- `per_sweep`: in `raw/sweep_monitors.json`
+
+```yaml
+monitor:
+  - "python collect_metrics.py --rep ${_run_id}"    # span: per_rep (default, string form)
+  - command: "group_monitor.sh ${workload}"
+    span: per_group
+  - command: "top -b > sweep.log"
+    span: per_sweep
+```

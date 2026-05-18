@@ -2,6 +2,7 @@ import pytest
 
 from abench_speckz import tools
 from abench_speckz.model import RunError
+from abench_speckz.runspec import MonitorEntry
 
 
 def test_load_minimal(tmp_path):
@@ -173,7 +174,40 @@ def test_monitor_field_loaded(tmp_path):
     p = tmp_path / "t.yaml"
     p.write_text("name: t\ncommand: x\nmonitor:\n  - 'python monitor.py'\n  - 'python metrics.py'\n")
     spec = tools.load_tool(p)
-    assert spec.monitor == ["python monitor.py", "python metrics.py"]
+    assert spec.monitor == [
+        MonitorEntry(command="python monitor.py", span="per_rep"),
+        MonitorEntry(command="python metrics.py", span="per_rep"),
+    ]
+
+
+def test_monitor_dict_form(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text(
+        "name: t\ncommand: x\nmonitor:\n"
+        "  - command: 'sweep.sh'\n    span: per_sweep\n"
+        "  - command: 'group.sh'\n    span: per_group\n"
+        "  - command: 'rep.sh'\n    span: per_rep\n"
+    )
+    spec = tools.load_tool(p)
+    assert spec.monitor == [
+        MonitorEntry(command="sweep.sh", span="per_sweep"),
+        MonitorEntry(command="group.sh", span="per_group"),
+        MonitorEntry(command="rep.sh", span="per_rep"),
+    ]
+
+
+def test_monitor_invalid_span(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nmonitor:\n  - command: 'x'\n    span: per_unknown\n")
+    with pytest.raises(RunError, match=r"span must be one of"):
+        tools.load_tool(p)
+
+
+def test_monitor_dict_missing_command(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nmonitor:\n  - span: per_sweep\n")
+    with pytest.raises(RunError, match=r"monitor\[0\].command must be a non-empty string"):
+        tools.load_tool(p)
 
 
 def test_monitor_default_empty(tmp_path):

@@ -12,6 +12,7 @@ from abench_speckz import interpolate, prettynames, store, tools
 from abench_speckz import slug as slug_mod
 from abench_speckz.executor import Executor, LocalSubprocessExecutor
 from abench_speckz.runner._manifest import collect_env_metadata, load_envfile, load_manifest
+from abench_speckz.runner._monitors import run_monitors, stop_monitors
 from abench_speckz.runner._phases import run_phase
 from abench_speckz.runner._planning import (
     WorkGroup,
@@ -81,20 +82,40 @@ def execute_sweep(
         _init_sweep(results_dir, actual_manifest_path, tool_path, tool)
         tool_version = tools.resolve_tool_version(tool)
         skip_counts = existing_counts(results_dir) if skip_existing else Counter()
-        return _run_groups(
-            groups=groups,
-            tool=tool,
-            tool_version=tool_version,
-            manifest_dir=manifest_dir,
-            results_dir=results_dir,
-            executor=executor,
-            keep_raw=keep_raw,
-            skip_existing=skip_existing,
-            skip_counts=skip_counts,
-            repeat=repeat,
-            total=len(work),
-            progress_stream=progress_stream,
-        )
+
+        sweep_monitor_procs: list = []
+        sweep_monitor_start_records: list[dict] = []
+        sweep_monitor_stop_records: list[dict] = []
+        per_sweep_cmds = [m.command for m in tool.monitor if m.span == "per_sweep"]
+        if per_sweep_cmds:
+            sweep_run_id = str(uuid.uuid4())
+            sweep_monitor_procs, sweep_monitor_start_records = run_monitors(
+                per_sweep_cmds, {"_run_id": sweep_run_id}, dict(os.environ)
+            )
+
+        try:
+            return _run_groups(
+                groups=groups,
+                tool=tool,
+                tool_version=tool_version,
+                manifest_dir=manifest_dir,
+                results_dir=results_dir,
+                executor=executor,
+                keep_raw=keep_raw,
+                skip_existing=skip_existing,
+                skip_counts=skip_counts,
+                repeat=repeat,
+                total=len(work),
+                progress_stream=progress_stream,
+            )
+        finally:
+            if sweep_monitor_procs:
+                sweep_monitor_stop_records = stop_monitors(sweep_monitor_procs)
+            has_error = any(r.get("error") for r in sweep_monitor_start_records)
+            if sweep_monitor_start_records and (keep_raw or has_error):
+                store.write_raw_sweep_monitors(
+                    results_dir, sweep_monitor_start_records, sweep_monitor_stop_records
+                )
 
 
 def _init_sweep(
@@ -141,6 +162,7 @@ def _run_groups(
     base_env = {**os.environ}
     probed_hashes: set[str] = set()
     combo_probe_cache: dict[str, dict[str, Any]] = {}
+    per_group_cmds = [m.command for m in tool.monitor if m.span == "per_group"]
 
     for group_key, items in groups:
         group_slug = slug_mod.slug(group_key) if (tool.per_sweep_var and group_key is not None) else None
@@ -170,6 +192,10 @@ def _run_groups(
             if tool.setup_per_sweep
             else (None, [])
         )
+
+        group_monitor_procs: list = []
+        group_monitor_start_records: list[dict[str, Any]] = []
+        group_monitor_stop_records: list[dict[str, Any]] = []
 
         sweep_teardown_failure: str | None = None
         sweep_teardown_records: list[dict[str, Any]] = []
@@ -209,6 +235,11 @@ def _run_groups(
             )
             continue
 
+        if per_group_cmds:
+            group_monitor_procs, group_monitor_start_records = run_monitors(
+                per_group_cmds, phase_vars, base_env
+            )
+
         last_runnable = runnable_idx[-1]
         try:
             for j, (entry, _r, is_warmup) in enumerate(items):
@@ -245,19 +276,23 @@ def _run_groups(
                     _progress(progress_stream, sweep_idx, total, t_sweep, "INT", ch)
                     raise
 
-                if j == last_runnable and tool.teardown_per_sweep:
-                    sweep_teardown_failure, sweep_teardown_records = run_phase(
-                        "per_sweep_teardown",
-                        tool.teardown_per_sweep,
-                        phase_vars,
-                        base_env,
-                        tool.setup_timeout_seconds,
-                    )
-                    if sweep_teardown_failure:
-                        prior = row.get("failure_reason")
-                        row["failure_reason"] = (
-                            f"{prior}; {sweep_teardown_failure}" if prior else sweep_teardown_failure
+                if j == last_runnable:
+                    if group_monitor_procs:
+                        group_monitor_stop_records = stop_monitors(group_monitor_procs)
+                        group_monitor_procs = []
+                    if tool.teardown_per_sweep:
+                        sweep_teardown_failure, sweep_teardown_records = run_phase(
+                            "per_sweep_teardown",
+                            tool.teardown_per_sweep,
+                            phase_vars,
+                            base_env,
+                            tool.setup_timeout_seconds,
                         )
+                        if sweep_teardown_failure:
+                            prior = row.get("failure_reason")
+                            row["failure_reason"] = (
+                                f"{prior}; {sweep_teardown_failure}" if prior else sweep_teardown_failure
+                            )
 
                 store.append_run(results_dir, row)
                 store.update_aggregates_for_hash(results_dir, ch)
@@ -268,6 +303,8 @@ def _run_groups(
                     counts["succeeded"] += 1
                     _progress(progress_stream, sweep_idx, total, t_sweep, "ok", ch)
         except KeyboardInterrupt:
+            if group_monitor_procs:
+                stop_monitors(group_monitor_procs)
             if tool.teardown_per_sweep:
                 run_phase(
                     "per_sweep_teardown",
@@ -284,6 +321,8 @@ def _run_groups(
             sweep_setup_records,
             sweep_teardown_records,
             force=bool(sweep_teardown_failure or keep_raw),
+            monitor_start=group_monitor_start_records,
+            monitor_stop=group_monitor_stop_records,
         )
 
     return {
@@ -378,14 +417,21 @@ def _maybe_write_sweep_raw(
     teardown_records: list[dict[str, Any]],
     *,
     force: bool,
+    monitor_start: list[dict[str, Any]] | None = None,
+    monitor_stop: list[dict[str, Any]] | None = None,
 ) -> None:
-    if not force:
+    has_monitor_error = any(r.get("error") for r in (monitor_start or []))
+    if not force and not has_monitor_error:
         return
     raw: dict[str, Any] = {}
     if setup_records:
         raw["setup"] = setup_records
     if teardown_records:
         raw["teardown"] = teardown_records
+    if monitor_start:
+        raw["monitor_start"] = monitor_start
+    if monitor_stop:
+        raw["monitor_stop"] = monitor_stop
     if raw:
         store.write_raw_sweep_phase(results_dir, group_slug, raw)
 

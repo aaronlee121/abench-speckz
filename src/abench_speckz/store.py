@@ -217,6 +217,23 @@ def write_raw_sweep_phase(results_dir: Path, group_slug: str | None, raw: dict[s
     return target
 
 
+def write_raw_sweep_monitors(
+    results_dir: Path,
+    monitor_start: list[dict[str, Any]],
+    monitor_stop: list[dict[str, Any]],
+) -> Path:
+    """Persist per-sweep monitor start/stop records to ``raw/sweep_monitors.json``."""
+    target = results_dir / "raw" / "sweep_monitors.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    raw: dict[str, Any] = {}
+    if monitor_start:
+        raw["monitor_start"] = monitor_start
+    if monitor_stop:
+        raw["monitor_stop"] = monitor_stop
+    target.write_text(json.dumps(raw, indent=2))
+    return target
+
+
 def snapshot_manifest(results_dir: Path, manifest_path: Path) -> Path:
     target = results_dir / "manifest.snapshot.json"
     if target.exists():
