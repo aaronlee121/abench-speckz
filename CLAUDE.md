@@ -53,7 +53,7 @@ Profiles overlay the base spec (variables, static, when, exclude are merged); `d
 - Writes to `runs.jsonl` (one JSON line per run) and updates `aggregates.jsonl` after each run
 - Results directory is protected by a `flock` during the sweep
 
-**Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `output_file` (read extraction input from a file the tool writes instead of stdout), `output_format` (`json` default, or `jsonl` for one object per line), `pretty_names`, `units`, `higher_is_better`, `plots` (declarative Chart.js plot definitions consumed by `stats --report`), `env_probes` (mapping of key → shell command run once at sweep start; stdout captured into `env.snapshot.json` under `"probes"`), `combo_probes` (mapping of key → command template run once per unique config hash; stdout captured into `combo_probes.json` and each run row; see below), `setup` / `teardown` (per-rep shell steps), `post_run` (per-rep shell steps that run after teardown with access to run-result vars; see below), `monitor` (list of background-process definitions, each a string or `{command, span}` object; `span` is `per_rep` (default), `per_group`, or `per_sweep`; see below), `setup_timeout_seconds` (per-step timeout, default 120).
+**Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `output_file` (read extraction input from a file the tool writes instead of stdout), `output_format` (`json` default, or `jsonl` for one object per line), `pretty_names`, `units`, `higher_is_better`, `plots` (declarative Chart.js plot definitions consumed by `stats --report`), `env_probes` (mapping of key → shell command run once at sweep start; stdout captured into `env.snapshot.json` under `"probes"`), `combo_probes` (mapping of key → command template run once per unique config hash; stdout captured into `combo_probes.json` and each run row; see below), `setup` / `teardown` (per-rep shell steps), `post_run` (per-rep shell steps that run after teardown with access to run-result vars; see below), `monitor` (list of background-process definitions, each a string or `{command, span}` object; `span` is `per_rep` (default), `per_group`, or `per_sweep`; see below), `setup_timeout_seconds` (per-step timeout, default 120), `per_sweep_var` (string, list of strings, or negation entries like `"!var"` — see below).
 
 **Plot fields:** Each entry in `plots` has: `id` (unique string), `type` (`bar`, `stacked-bar`, `line`, `scatter`), `x` (variable name for the x-axis, or a metric name for `scatter`), `y` (metric name or list of metric names; `scatter` requires exactly one, `stacked-bar` requires at least two), `title` (optional display title), `group_by` (optional variable name or list of variable names — see below).
 
@@ -147,7 +147,7 @@ Variable names starting with `_` are reserved and rejected in spec YAML.
 | `span` | Lifetime | Variables available |
 |---|---|---|
 | `per_rep` (default) | After `setup`, until benchmark finishes | Full combo vars + `${_run_id}`, `${_envfile}`, `${env:VAR}` |
-| `per_group` | After `setup_per_sweep`, until before `teardown_per_sweep` (spans all reps of a group) | Group phase vars: per_sweep_var value + `${_run_id}`, `${_envfile}`, `${env:VAR}` |
+| `per_group` | After `setup_per_sweep`, until before `teardown_per_sweep` (spans all reps of a group) | Group phase vars: all per_sweep_var values + `${_run_id}`, `${_envfile}`, `${env:VAR}` |
 | `per_sweep` | After sweep init, until all groups finish | `${_run_id}` (sweep-level UUID) + `${env:VAR}` |
 
 Each process receives SIGTERM when its span ends; SIGKILL follows after 5 seconds if it has not exited. A monitor that fails to start is recorded but never aborts the run.
@@ -165,3 +165,14 @@ monitor:
   - command: "top -b > sweep.log"
     span: per_sweep
 ```
+
+**`per_sweep_var`** controls how combos are grouped for `setup_per_sweep` / `teardown_per_sweep`. Accepts a string, a list of strings, or negation entries (prefix `!` to exclude a variable from the auto-expanded set). Negation is resolved against the full set of variable names in the manifest, mirroring the `group_by` negation in plots.
+
+```yaml
+per_sweep_var: backend                  # one group per backend value
+per_sweep_var: [backend, workload]      # one group per (backend, workload) combo
+per_sweep_var: "!concurrency"           # one group per unique combo of all vars except concurrency
+per_sweep_var: [backend, "!concurrency"] # include backend explicitly, exclude concurrency
+```
+
+`setup_per_sweep` / `teardown_per_sweep` steps may only reference variables listed in `per_sweep_var` (after negation expansion), plus `${_envfile}`, `${_run_id}`, and `${env:VAR}`. The group slug in raw file names joins all group variable values with `-`.

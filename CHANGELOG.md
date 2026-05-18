@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-05-17
+
+### Added
+
+- `per_sweep_var` now accepts a list of variable names to group by a composite key, and `!var` negation entries to group by all variables except the excluded ones — mirroring the `group_by` negation syntax used in plots. For example, `per_sweep_var: [backend, workload]` fires `setup_per_sweep` / `teardown_per_sweep` once per unique `(backend, workload)` combination while letting `concurrency` vary freely within each group; `per_sweep_var: "!concurrency"` achieves the same by exclusion. The group slug in raw file names joins all group variable values with `-`. Validation ensures that `setup_per_sweep` / `teardown_per_sweep` steps only reference variables that appear in the resolved `per_sweep_var` list.
+
 ## [0.4.4] - 2026-05-15
 
 ### Added

@@ -373,20 +373,41 @@ Teardown runs in a `finally` block, so it fires even on benchmark failure or `Ct
 - `post_run` → runs after teardown completes, always — including when the benchmark exits non-zero. In addition to combo vars, it receives `${_exit_code}`, `${_started_at}`, `${_finished_at}`, and `${_duration_ms}`. Useful for collecting time-windowed metrics from external systems (Prometheus, InfluxDB, etc.) keyed to the exact run via `${_run_id}`. `post_run` failure is appended to `failure_reason` but does not suppress the benchmark result or its metrics.
 - `monitor` → each command is launched as a background process immediately after setup succeeds. Processes receive SIGTERM once the benchmark command finishes; any that don't exit within 5 seconds receive SIGKILL. A monitor that fails to start is recorded but never aborts the run. Interpolates combo vars including `${_run_id}` and `${_envfile}`. Start and stop records are written to `raw/{run_id}.json` under `--keep-raw` or when any monitor fails to start.
 
-**Sweep-scoped setup / teardown.** `setup_per_sweep` and `teardown_per_sweep` run *outside* the per-rep loop, useful for expensive prep like seeding a database. By default each fires exactly once for the whole sweep. Set `per_sweep_var: <name>` to scope each fire to a single variable: combos are stably grouped by that variable's value, and the phases fire once per distinct value (around the reps for that group).
+**Sweep-scoped setup / teardown.** `setup_per_sweep` and `teardown_per_sweep` run *outside* the per-rep loop, useful for expensive prep like seeding a database. By default each fires exactly once for the whole sweep. Set `per_sweep_var` to group combos and fire the phases once per distinct group.
+
+`per_sweep_var` accepts three forms:
 
 ```yaml
-setup_per_sweep:    ["seed-db.sh"]              # fires once before any rep
-teardown_per_sweep: ["drop-db.sh"]
-per_sweep_var:      workload                    # optional; one var only
+# Single variable — one group per distinct value of 'backend'
+per_sweep_var: backend
+
+# List of variables — one group per unique combination of (backend, workload);
+# 'concurrency' varies freely within each group
+per_sweep_var: [backend, workload]
+
+# Negation — group by all variables EXCEPT 'concurrency'
+per_sweep_var: "!concurrency"
+
+# Negation in a list — explicitly include 'backend', exclude 'concurrency'
+per_sweep_var: [backend, "!concurrency"]
+```
+
+Negation entries (`!var`) are expanded against the full variable set in the manifest, mirroring the `group_by` negation syntax used in plots. The group slug in raw file names joins all variable values (e.g. `postgres-read_heavy`).
+
+```yaml
+setup_per_sweep:
+  - "seed-db.sh ${backend} --mode ${workload}"
+teardown_per_sweep:
+  - "drop-db.sh ${backend}"
+per_sweep_var: [backend, workload]   # concurrency varies freely within each group
 ```
 
 - Without `per_sweep_var`: only `${_envfile}`, `${_run_id}`, and `${env:VAR}` can be referenced; any other `${combo_var}` is rejected at sweep start.
-- With `per_sweep_var: X`: only `${X}`, `${_envfile}`, `${_run_id}`, and `${env:VAR}` can be referenced; the current group's value of `X` is substituted.
+- With `per_sweep_var`: only the listed variables, `${_envfile}`, `${_run_id}`, and `${env:VAR}` can be referenced in per_sweep steps; the current group's values are substituted.
 - `--skip-existing`: if every rep in a group is already recorded, both phases are skipped for that group.
 - Setup failure: all planned reps in that group get a failure row with `failure_reason="per_sweep_setup[i]: …"`; teardown still runs best-effort. Next group proceeds.
 - Teardown failure: appended to the *last* rep row in the group's `failure_reason`.
-- Raw record: `raw/sweep.json` (Mode A) or `raw/sweep-{slug(value)}.json` (Mode B) — same shape as per-rep raw files.
+- Raw record: `raw/sweep.json` (no grouping) or `raw/sweep-{slug}.json` (grouped, slug joins all group variable values) — same shape as per-rep raw files.
 
 **Raw output records.** When a raw record is written, `raw/{run_id}.json` is a JSON object with:
 
