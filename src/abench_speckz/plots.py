@@ -20,6 +20,7 @@ class PlotSpec:
     y: list[str]
     title: str | None = None
     group_by: list[str] | None = None
+    smooth: bool = False
 
 
 @dataclass
@@ -114,11 +115,18 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
                     )
             group_by = list(entries)
 
-        unknown = set(item) - {"id", "type", "x", "y", "title", "group_by"}
+        smooth_raw = item.get("smooth", False)
+        if not isinstance(smooth_raw, bool):
+            raise RunError(f"{source}: plot {plot_id!r}: smooth must be a boolean")
+        if smooth_raw and ptype != "line":
+            raise RunError(f"{source}: plot {plot_id!r}: smooth is only valid for line plots")
+        smooth = smooth_raw
+
+        unknown = set(item) - {"id", "type", "x", "y", "title", "group_by", "smooth"}
         if unknown:
             raise RunError(f"{source}: plot {plot_id!r}: unknown fields {sorted(unknown)}")
 
-        out.append(PlotSpec(id=plot_id, type=ptype, x=x, y=y, title=title, group_by=group_by))
+        out.append(PlotSpec(id=plot_id, type=ptype, x=x, y=y, title=title, group_by=group_by, smooth=smooth))
     return out
 
 

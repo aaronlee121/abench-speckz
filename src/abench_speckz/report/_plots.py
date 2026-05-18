@@ -53,6 +53,7 @@ def build_plot_artifacts(plot, all_vars: list[str], results_dir: Path, pretty_ma
             stacked=(plot.type == "stacked-bar"),
             group_by=gb_keys,
             varying_keys=varying_keys,
+            smooth=False,
         )
     elif plot.type == "line":
         chart_config, series_meta = build_bar_or_line_config(
@@ -63,6 +64,7 @@ def build_plot_artifacts(plot, all_vars: list[str], results_dir: Path, pretty_ma
             stacked=False,
             group_by=gb_keys,
             varying_keys=varying_keys,
+            smooth=getattr(plot, "smooth", False),
         )
     else:
         return None
@@ -97,9 +99,10 @@ def build_plot_artifacts(plot, all_vars: list[str], results_dir: Path, pretty_ma
 def render_plot_block(art: dict, occurrence: int) -> tuple[str, str]:
     """Return (inner_html, init_script) for one occurrence of a plot."""
     canvas_id = f"chart-{safe_id(art['plot'].id)}-{occurrence}"
+    title_html = f'<h3 class="plot-title">{art["plot"].title}</h3>\n    ' if art["plot"].title else ""
     chart_inner = f'{art["legend_html"]}<div class="chart-wrap"><canvas id="{canvas_id}"></canvas></div>'
     chart_html = collapsible("Chart", chart_inner, open=True)
     data_html = collapsible("Data", art["table_html_inner"])
-    inner = f"{art['fixed_html']}\n    {chart_html}\n    {data_html}"
+    inner = f"{title_html}{art['fixed_html']}\n    {chart_html}\n    {data_html}"
     script = f"\n  new Chart(document.getElementById('{canvas_id}'), {json.dumps(art['chart_config'])});"
     return inner, script

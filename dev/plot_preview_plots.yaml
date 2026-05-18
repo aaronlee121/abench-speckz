@@ -1,0 +1,114 @@
+report_title: "Plot format gallery"
+report_description: |
+  All supported plot types and YAML features rendered against a synthetic
+  benchmark dataset: **3 workloads × 3 backends × 5 concurrency levels**.
+  Pretty names, `text` blocks, multi-key `group_by`, and chart titles are
+  all demonstrated below.
+
+sections:
+  - title: "Bar"
+    description: |
+      `type: bar` — each x-axis value gets one bar per series.
+      Use `group_by` to split a single metric across variable values.
+    blocks:
+      - text: "**No `group_by`** — all data collapses into a single series per metric."
+      - plot_id: bar_simple
+      - text: "**`group_by: backend`** — one bar cluster per workload, one bar per backend."
+      - plot_id: bar_grouped
+      - text: "**`group_by: [workload, backend]`** — multiple keys joined in the legend label."
+      - plot_id: bar_multi_group
+
+  - title: "Stacked bar"
+    description: |
+      `type: stacked-bar` — bars subdivided by metric. Requires at least two `y` values.
+      Useful for showing composition (e.g. how latency percentiles stack up).
+    blocks:
+      - plot_id: stacked
+
+  - title: "Line"
+    description: |
+      `type: line` — x-axis values are connected with a line. Works best when
+      x is a numeric variable (concurrency, threads, payload size …).
+      Add `smooth: true` to use a spline curve instead of straight segments.
+    blocks:
+      - text: "**No `group_by`** — single line across all data."
+      - plot_id: line_single
+      - text: "**`group_by: backend`** — one line per backend."
+      - plot_id: line_grouped
+      - text: "**`smooth: true`** — same chart with spline interpolation."
+      - plot_id: line_smooth
+
+  - title: "Scatter"
+    description: |
+      `type: scatter` — **both axes are metrics**, not variables.
+      Each point is one combo's mean values. `group_by` names each point.
+    blocks:
+      - text: "**No `group_by`** — all combos collapse to a single unlabelled point."
+      - plot_id: scatter_plain
+      - text: "**`group_by: workload`** — one labelled point per workload."
+      - plot_id: scatter_grouped
+
+plots:
+  # ── Bar ──────────────────────────────────────────────────────────────────
+  - id: bar_simple
+    type: bar
+    title: "Throughput by workload"
+    x: workload
+    y: rps
+
+  - id: bar_grouped
+    type: bar
+    title: "Throughput by workload × backend"
+    x: workload
+    y: rps
+    group_by: backend
+
+  - id: bar_multi_group
+    type: bar
+    title: "Throughput — multi-key group_by"
+    x: concurrency
+    y: rps
+    group_by: [workload, backend]
+
+  # ── Stacked bar ──────────────────────────────────────────────────────────
+  - id: stacked
+    type: stacked-bar
+    title: "Latency percentile breakdown by workload"
+    x: workload
+    y: [p50_ms, p95_ms, p99_ms]
+
+  # ── Line ─────────────────────────────────────────────────────────────────
+  - id: line_single
+    type: line
+    title: "Throughput vs concurrency"
+    x: concurrency
+    y: rps
+
+  - id: line_grouped
+    type: line
+    title: "Throughput vs concurrency, per backend"
+    x: concurrency
+    y: rps
+    group_by: backend
+
+  - id: line_smooth
+    type: line
+    title: "Throughput vs concurrency, per backend (smooth)"
+    x: concurrency
+    y: rps
+    group_by: backend
+    smooth: true
+
+  # ── Scatter ──────────────────────────────────────────────────────────────
+  - id: scatter_plain
+    type: scatter
+    title: "Throughput / latency tradeoff"
+    x: rps
+    y: [p95_ms]
+
+  - id: scatter_grouped
+    type: scatter
+    title: "Throughput / latency tradeoff, per workload"
+    x: rps
+    y: [p95_ms]
+    group_by: workload

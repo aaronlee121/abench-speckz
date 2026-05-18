@@ -14,6 +14,7 @@ def build_bar_or_line_config(
     stacked: bool,
     group_by: list[str],
     varying_keys: list[str],
+    smooth: bool = False,
 ) -> tuple[dict, list[dict]]:
     """Return (chart_config, series_meta) for a bar/line/stacked-bar plot."""
     x_values_raw = sorted({str(r.get(plot.x, "")) for r in rows})
@@ -45,7 +46,7 @@ def build_bar_or_line_config(
         }
         if chart_type == "line":
             ds["fill"] = False
-            ds["tension"] = 0.1
+            ds["tension"] = 0.4 if smooth else 0.1
         datasets.append(ds)
         series_meta.append({"metric": metric, "vals": vals, "color": c})
 

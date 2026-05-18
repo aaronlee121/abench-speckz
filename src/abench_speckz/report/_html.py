@@ -14,11 +14,11 @@ STAT_COLS = ("n", "n_failed", "mean", "stddev", "p50", "p95", "p99", "ci95_low",
 # Page-level styles. Extracted to a module constant so the shell template below
 # stays readable; doubled braces are required because of the f-string in _html_shell.
 _CSS = """
-    body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 0 auto; padding: 1rem 2rem; color: #222; }
+    body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 0 auto; padding: 1rem 2rem; color: #222; background: #f7f8fa; }
     h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
     .meta { color: #666; font-size: 0.875rem; margin-bottom: 2rem; }
-    section { margin-bottom: 3rem; }
-    h2 { font-size: 1.2rem; border-bottom: 1px solid #ddd; padding-bottom: 0.25rem; }
+    section { margin-bottom: 2rem; padding: 1.5rem 1.75rem; border: 1px solid #ddd; border-radius: 10px; background: #fff; }
+    h2 { font-size: 1.2rem; margin-top: 0; padding-bottom: 0.4rem; border-bottom: 1px solid #eee; }
     .chart-wrap { max-width: 720px; margin-bottom: 1rem; }
     .table-wrap { overflow-x: auto; }
     table { border-collapse: collapse; font-size: 0.85rem; }
@@ -29,9 +29,14 @@ _CSS = """
     .legend-wrap table { font-size: 0.8rem; }
     .legend-wrap th, .legend-wrap td { padding: 3px 8px; }
     .fixed-vars { color: #555; font-size: 0.85rem; margin: 0.25rem 0 0.5rem; }
-    details { margin-bottom: 0.5rem; }
-    summary { cursor: pointer; font-weight: 500; color: #444; padding: 0.2rem 0; user-select: none; }
-    summary:hover { color: #111; }
+    h3.plot-title { font-size: 1rem; font-weight: 600; color: #333; margin: 0 0 0.75rem; }
+    details { margin-bottom: 0.75rem; border: 1px solid #e0e3e8; border-radius: 8px; overflow: hidden; }
+    summary { cursor: pointer; font-weight: 500; color: #444; padding: 0.4rem 0.75rem; background: #f3f5f8; user-select: none; list-style: none; display: flex; align-items: center; gap: 0.4rem; }
+    summary::before { content: '▶'; font-size: 0.65rem; color: #888; transition: transform 0.15s; flex-shrink: 0; }
+    details[open] > summary::before { transform: rotate(90deg); }
+    details[open] > summary { border-bottom: 1px solid #e0e3e8; }
+    summary:hover { color: #111; background: #e8ebf0; }
+    .details-body { padding: 0.75rem; }
     iframe.run-rpt { width: 100%; border: none; min-height: 400px; }
     .run-group-heading { font-size: 1rem; margin: 1rem 0 0.25rem; color: #333; }
     .report-intro { margin: 0 0 2rem; color: #333; }
@@ -111,7 +116,7 @@ def safe_id(s: str) -> str:
 
 def collapsible(label: str, content: str, *, open: bool = False) -> str:
     open_attr = " open" if open else ""
-    return f"<details{open_attr}><summary>{label}</summary>{content}</details>"
+    return f'<details{open_attr}><summary>{label}</summary><div class="details-body">{content}</div></details>'
 
 
 def fmt_value(v: Any) -> str:
