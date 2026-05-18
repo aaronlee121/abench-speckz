@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-05-17
+
+### Added
+
+- `smooth: true` on line plots — enables spline interpolation (Chart.js `tension: 0.4`) instead of straight line segments. Only valid on `type: line`; rejected with a clear error on other plot types.
+
+### Changed
+
+- Report sections are now rendered as rounded-rectangle cards (border, `border-radius`, white background against a light-grey page) so sections are visually separated.
+- Chart and Data collapsibles are styled as bordered cards with a shaded header, an animated chevron indicator, and padded content. A `.details-body` wrapper ensures consistent inner padding.
+- Plot `title` is now rendered as an `<h3>` inside each plot block in the sectioned layout, so multiple plots within one section are individually labelled without relying solely on the section heading.
+- When a `group_by` plot has only one unique series in the data (e.g. the grouped variable takes a single value), the legend table is suppressed and the variable value is folded into the "Fixed:" static-vars line instead.
+
 ## [0.4.5] - 2026-05-17
 
 ### Added

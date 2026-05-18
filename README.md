@@ -214,6 +214,7 @@ plots:
     x: concurrency                        # combo variable on x-axis
     y: requests_per_sec
     group_by: workload                    # one line per workload value
+    smooth: true                          # spline interpolation instead of straight segments
   - id: rps_vs_concurrency_multi
     type: line
     title: "Throughput scaling by workload + backend"
@@ -250,6 +251,8 @@ plots:
 ```
 
 Negation is resolved at report time against the actual variable names in `aggregates.jsonl`. Unknown excluded names are silently ignored.
+
+**Plot titles.** The optional `title` field is used as an `<h3>` heading inside each plot block when sections are present, so multiple plots within one section are individually labelled. Without sections it becomes the section heading instead.
 
 **Report layout.** By default, every plot in `plots:` is rendered automatically in the order it is defined. To control layout, interleave prose, and publish only a subset of your plots, add a `sections:` list alongside `plots:`.
 
