@@ -67,13 +67,27 @@ def build_plot_artifacts(plot, all_vars: list[str], results_dir: Path, pretty_ma
     else:
         return None
 
-    if varying_keys:
+    if varying_keys and len(series_meta) == 1:
+        single = series_meta[0]
+        extra = {k: single["vals"][k] for k in varying_keys if k in single["vals"]}
+        if multi_metric:
+            extra["metric"] = single["metric"]
+        merged_static = {**static_vars, **extra}
+        fixed_html = fixed_vars_html(merged_static, pretty_map)
+        legend_html = ""
         chart_config["options"]["plugins"]["legend"] = {"display": False}
+    elif varying_keys:
+        fixed_html = fixed_vars_html(static_vars, pretty_map)
+        legend_html = legend_table_html(series_meta, varying_keys, pretty_map, multi_metric)
+        chart_config["options"]["plugins"]["legend"] = {"display": False}
+    else:
+        fixed_html = fixed_vars_html(static_vars, pretty_map)
+        legend_html = legend_table_html(series_meta, varying_keys, pretty_map, multi_metric)
 
     return {
         "plot": plot,
-        "fixed_html": fixed_vars_html(static_vars, pretty_map),
-        "legend_html": legend_table_html(series_meta, varying_keys, pretty_map, multi_metric),
+        "fixed_html": fixed_html,
+        "legend_html": legend_html,
         "chart_config": chart_config,
         "table_html_inner": table_html(rows, list(group_by) + ["metric"] + list(STAT_COLS) if rows else []),
         "title": plot.title or plot.id,

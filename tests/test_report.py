@@ -336,6 +336,36 @@ def test_short_labels_exclude_static_vars(tmp_path):
     assert "us-east-1 / postgres" not in html
 
 
+def test_single_series_legend_folded_into_fixed_vars(tmp_path):
+    """When group_by yields only one unique series, no legend table — vars go into fixed block."""
+    store.init_results_dir(tmp_path)
+    # Only one backend value in the data
+    for i in range(3):
+        store.append_run(
+            tmp_path,
+            {
+                "run_id": f"h1-{i}",
+                "config_hash": "h1",
+                "vars": {"workload": "read", "backend": "postgres"},
+                "tags": ["bench"],
+                "exit_code": 0,
+                "results": {"rps": 1000.0},
+                "failure_reason": None,
+            },
+        )
+    store.update_aggregates_for_hash(tmp_path, "h1")
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  group_by: backend\n")
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=__import__("io").StringIO())
+    html = report_path.read_text()
+    # No legend table div (class appears in CSS but not as a DOM element)
+    assert '<div class="legend-wrap' not in html
+    # Backend value shown in the fixed-vars block instead
+    assert "postgres" in html
+    assert "Fixed:" in html
+
+
 # ---------------------------------------------------------------------------
 # Per-run HTML reports
 # ---------------------------------------------------------------------------
