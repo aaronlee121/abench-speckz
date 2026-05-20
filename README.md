@@ -189,12 +189,18 @@ setup_timeout_seconds: 120   # per-step timeout for setup/teardown/post_run (def
 post_run:
   - "prom-query.sh ${_started_at} ${_finished_at} ${_run_id}"
 
-# optional: background processes launched before the benchmark command and
-# terminated after it completes (SIGTERM, then SIGKILL after 5s).
-# Interpolates combo vars including ${_envfile} and ${_run_id}.
+# optional: background processes. Each entry is a plain string (command template)
+# or an object with 'command' and an optional 'span' field.
+# span: per_rep (default) — live from after setup until benchmark finishes
+# span: per_group         — live from after setup_per_sweep until before teardown_per_sweep
+# span: per_sweep         — live from sweep init until all groups finish
+# Each process receives SIGTERM when its span ends; SIGKILL follows after 5 s.
 monitor:
-  - "python collect-metrics.py --run-id ${_run_id}"
-  - "perf stat -p $(cat service.pid)"
+  - "python collect-metrics.py --run-id ${_run_id}"   # span: per_rep (default, string form)
+  - command: "group_monitor.sh ${workload}"
+    span: per_group    # spans all reps in the group; can reference per_sweep_var variables
+  - command: "top -b > sweep.log"
+    span: per_sweep    # spans the entire sweep; only ${_run_id} and ${env:VAR} available
 
 # optional: declarative plots used by `stats --report`
 plots:
@@ -405,7 +411,18 @@ Teardown runs in a `finally` block, so it fires even on benchmark failure or `Ct
 - Setup failure → the command is skipped, monitor is not started, teardown still runs best-effort, `post_run` is skipped, and `failure_reason` is recorded as `setup[i]: …`.
 - Teardown failure → the benchmark's `exit_code` and metrics are preserved, but `teardown[i]: …` is appended to `failure_reason`.
 - `post_run` → runs after teardown completes, always — including when the benchmark exits non-zero. In addition to combo vars, it receives `${_exit_code}`, `${_started_at}`, `${_finished_at}`, and `${_duration_ms}`. Useful for collecting time-windowed metrics from external systems (Prometheus, InfluxDB, etc.) keyed to the exact run via `${_run_id}`. `post_run` failure is appended to `failure_reason` but does not suppress the benchmark result or its metrics.
-- `monitor` → each command is launched as a background process immediately after setup succeeds. Processes receive SIGTERM once the benchmark command finishes; any that don't exit within 5 seconds receive SIGKILL. A monitor that fails to start is recorded but never aborts the run. Interpolates combo vars including `${_run_id}` and `${_envfile}`. Start and stop records are written to `raw/{run_id}.json` under `--keep-raw` or when any monitor fails to start.
+- `monitor` → each entry is a plain string or an object with `command` and an optional `span` field. The `span` controls the process lifetime and which variables are available:
+
+  | `span` | Lifetime | Variables available |
+  |---|---|---|
+  | `per_rep` (default) | After `setup`, until benchmark finishes | All combo vars + `${_run_id}`, `${_envfile}`, `${env:VAR}` |
+  | `per_group` | After `setup_per_sweep`, until before `teardown_per_sweep` | `per_sweep_var` values + `${_run_id}`, `${_envfile}`, `${env:VAR}` |
+  | `per_sweep` | After sweep init, until all groups finish | `${_run_id}` (sweep-level UUID) + `${env:VAR}` |
+
+  Each process receives SIGTERM when its span ends; SIGKILL follows after 5 seconds. A monitor that fails to start is recorded but never aborts the run. Raw records (`monitor_start`, `monitor_stop`) are written to different files by span:
+  - `per_rep` → `raw/{run_id}.json` (under `--keep-raw` or when any monitor fails to start)
+  - `per_group` → `raw/sweep.json` / `raw/sweep-{slug}.json` alongside per_sweep setup/teardown records
+  - `per_sweep` → `raw/sweep_monitors.json`
 
 **Sweep-scoped setup / teardown.** `setup_per_sweep` and `teardown_per_sweep` run *outside* the per-rep loop, useful for expensive prep like seeding a database. By default each fires exactly once for the whole sweep. Set `per_sweep_var` to group combos and fire the phases once per distinct group.
 
@@ -448,8 +465,10 @@ per_sweep_var: [backend, workload]   # concurrency varies freely within each gro
 - `stdout`, `stderr` — the tool's own streams (always present).
 - `output_file` — `{path, content}` when `output_file` is configured in the tool YAML, so the tool's stdout/stderr stay separate from the file content used for extraction.
 - `setup`, `teardown`, `post_run` — one entry per step that ran, each with `command`, `exit_code`, `stdout`, `stderr`.
-- `monitor_start` — one entry per monitor command with `command`, `pid` (or `error` if it failed to start).
-- `monitor_stop` — one entry per running monitor process with `pid`, `exit_code`, `stdout`, `stderr`.
+- `monitor_start` — one entry per `per_rep` monitor command with `command`, `pid` (or `error` if it failed to start).
+- `monitor_stop` — one entry per `per_rep` monitor process with `pid`, `exit_code`, `stdout`, `stderr`.
+
+`per_group` monitor records appear in `raw/sweep[-{slug}].json`; `per_sweep` monitor records appear in `raw/sweep_monitors.json`.
 
 ## Results directory layout
 
