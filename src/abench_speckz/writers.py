@@ -16,6 +16,7 @@ def write_manifest(path: Path, combos: list[Combo], filenames: list[str]) -> Non
         {
             "filename": fn,
             "vars": {k: v for k, v in c.vars.items()},
+            "varying_keys": list(c.varying_keys),
             "tags": sorted(c.tags),
         }
         for c, fn in zip(combos, filenames, strict=True)

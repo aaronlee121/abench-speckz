@@ -19,11 +19,22 @@ _AGGREGATE_COLUMNS = ("n", "n_failed", "mean", "stddev", "p50", "p95", "p99", "c
 
 
 def var_names(results_dir: Path) -> list[str]:
-    """Return variable names present in results, in their original order.
+    """Return variable (non-static) names present in results, in their original order.
 
-    Reads the first row of aggregates.jsonl (or runs.jsonl as fallback).
+    Prefers the manifest snapshot's ``varying_keys`` (which excludes static values).
+    Falls back to reading ``vars`` keys from aggregates.jsonl or runs.jsonl.
     Returns an empty list when no data exists yet.
     """
+    snapshot = results_dir / "manifest.snapshot.json"
+    if snapshot.exists():
+        try:
+            data = json.loads(snapshot.read_text())
+            if isinstance(data, list) and data:
+                keys = data[0].get("varying_keys")
+                if isinstance(keys, list):
+                    return keys
+        except (json.JSONDecodeError, OSError):
+            pass
     for fname in ("aggregates.jsonl", "runs.jsonl"):
         path = results_dir / fname
         if path.exists() and path.stat().st_size > 0:

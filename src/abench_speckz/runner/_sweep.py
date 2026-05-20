@@ -59,7 +59,11 @@ def execute_sweep(
     manifest_dir = actual_manifest_path.parent
     tool = tools.load_tool(tool_path)
 
-    all_var_names = sorted({k for e in manifest_entries for k in (e.get("vars") or {})})
+    all_var_names = sorted({
+        k
+        for e in manifest_entries
+        for k in (e.get("varying_keys") or e.get("vars") or {})
+    })
     per_sweep_vars = resolve_per_sweep_vars(tool.per_sweep_var, all_var_names)
 
     work = plan_sweep(

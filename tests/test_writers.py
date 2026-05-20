@@ -22,6 +22,7 @@ def test_manifest_shape(tmp_path):
     assert len(data) == 2
     assert data[0]["filename"] == "a-1__b-x.env"
     assert data[0]["vars"] == {"A": "1", "B": "x"}
+    assert data[0]["varying_keys"] == ["A", "B"]
     assert data[0]["tags"] == ["red"]
     assert data[1]["tags"] == []
 

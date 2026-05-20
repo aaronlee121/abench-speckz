@@ -166,7 +166,7 @@ monitor:
     span: per_sweep
 ```
 
-**`per_sweep_var`** controls how combos are grouped for `setup_per_sweep` / `teardown_per_sweep`. Accepts a string, a list of strings, or negation entries (prefix `!` to exclude a variable from the auto-expanded set). Negation is resolved against the full set of variable names in the manifest, mirroring the `group_by` negation in plots.
+**`per_sweep_var`** controls how combos are grouped for `setup_per_sweep` / `teardown_per_sweep`. Accepts a string, a list of strings, or negation entries (prefix `!` to exclude a variable from the auto-expanded set). Negation is resolved against the `variables` keys in the manifest (static values are excluded), mirroring the `group_by` negation in plots.
 
 ```yaml
 per_sweep_var: backend                  # one group per backend value

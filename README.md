@@ -443,7 +443,7 @@ per_sweep_var: "!concurrency"
 per_sweep_var: [backend, "!concurrency"]
 ```
 
-Negation entries (`!var`) are expanded against the full variable set in the manifest, mirroring the `group_by` negation syntax used in plots. The group slug in raw file names joins all variable values (e.g. `postgres-read_heavy`).
+Negation entries (`!var`) are expanded against the `variables` keys in the manifest (static values are excluded), mirroring the `group_by` negation syntax used in plots. The group slug in raw file names joins all variable values (e.g. `postgres-read_heavy`).
 
 ```yaml
 setup_per_sweep:
