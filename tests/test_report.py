@@ -298,6 +298,29 @@ def test_fixed_vars_shown_for_constant_group_by(tmp_path):
     assert "backend" in html  # appears in legend table header
 
 
+def test_fixed_vars_false_suppresses_block(tmp_path):
+    _seed_three_vars(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n  group_by: [backend, region]\n  fixed_vars: false\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=__import__("io").StringIO())
+    html = report_path.read_text()
+    assert 'class="fixed-vars"' not in html
+    assert "Fixed:" not in html
+
+
+def test_fixed_vars_true_is_default(tmp_path):
+    _seed_three_vars(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  group_by: [backend, region]\n")
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=__import__("io").StringIO())
+    html = report_path.read_text()
+    assert "Fixed:" in html
+
+
 def test_legend_table_rendered_for_varying_keys(tmp_path):
     _seed_three_vars(tmp_path)
     plots_path = tmp_path / "plots.yaml"

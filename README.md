@@ -291,6 +291,17 @@ Expression syntax is validated when the YAML is loaded, so malformed expressions
 
 **Plot titles.** The optional `title` field is used as an `<h3>` heading inside each plot block when sections are present, so multiple plots within one section are individually labelled. Without sections it becomes the section heading instead.
 
+**Static-variable block.** When a `group_by` variable has the same value across every series in a plot, abench-speckz collapses it out of the legend and shows it in a `Fixed: key = value` line above the chart. Set `fixed_vars: false` on a plot to suppress this block entirely:
+
+```yaml
+- id: rps_by_workload
+  type: bar
+  x: workload
+  y: rps
+  group_by: [backend, region]
+  fixed_vars: false   # hide the "Fixed: region = us-east-1" annotation
+```
+
 **Report layout.** By default, every plot in `plots:` is rendered automatically in the order it is defined. To control layout, interleave prose, and publish only a subset of your plots, add a `sections:` list alongside `plots:`.
 
 ```yaml

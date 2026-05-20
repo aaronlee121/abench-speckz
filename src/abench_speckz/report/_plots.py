@@ -141,21 +141,22 @@ def build_plot_artifacts(plot, all_vars: list[str], results_dir: Path, pretty_ma
     else:
         return None
 
+    show_fixed = getattr(plot, "fixed_vars", True)
     if varying_keys and len(series_meta) == 1:
         single = series_meta[0]
         extra = {k: single["vals"][k] for k in varying_keys if k in single["vals"]}
         if multi_metric:
             extra["metric"] = single["metric"]
         merged_static = {**static_vars, **extra}
-        fixed_html = fixed_vars_html(merged_static, pretty_map)
+        fixed_html = fixed_vars_html(merged_static, pretty_map) if show_fixed else ""
         legend_html = ""
         chart_config["options"]["plugins"]["legend"] = {"display": False}
     elif varying_keys:
-        fixed_html = fixed_vars_html(static_vars, pretty_map)
+        fixed_html = fixed_vars_html(static_vars, pretty_map) if show_fixed else ""
         legend_html = legend_table_html(series_meta, varying_keys, pretty_map, multi_metric)
         chart_config["options"]["plugins"]["legend"] = {"display": False}
     else:
-        fixed_html = fixed_vars_html(static_vars, pretty_map)
+        fixed_html = fixed_vars_html(static_vars, pretty_map) if show_fixed else ""
         legend_html = legend_table_html(series_meta, varying_keys, pretty_map, multi_metric)
 
     return {
