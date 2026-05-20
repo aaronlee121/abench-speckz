@@ -88,6 +88,7 @@ def build_bar_or_line_config(
             "backgroundColor": c,
             "borderColor": c,
             "borderWidth": 1,
+            "_colorIdx": i,
         }
         if chart_type == "line":
             ds["fill"] = False
@@ -162,6 +163,7 @@ def build_scatter_config(
                 "backgroundColor": c,
                 "borderColor": c,
                 "pointRadius": 6,
+                "_colorIdx": i,
             }
         )
         series_meta.append({"metric": y_metric, "vals": vals, "color": c})

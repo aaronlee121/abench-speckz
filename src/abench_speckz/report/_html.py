@@ -1,5 +1,6 @@
 """HTML shell + small formatting/escaping helpers shared across the report package."""
 
+import json
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -7,55 +8,89 @@ from typing import Any
 from abench_speckz import prettynames
 
 CHART_JS_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4"
-COLORS = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7"]
+
+THEMES: dict[str, list[str]] = {
+    "tableau":    ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7"],
+    "vivid":      ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#a65628", "#f781bf", "#999999"],
+    "pastel":     ["#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#80b1d3", "#fdb462", "#b3de69", "#fccde5"],
+    "paired":     ["#a6cee3", "#1f78b4", "#b2df8a", "#33a02c", "#fb9a99", "#e31a1c", "#fdbf6f", "#ff7f00"],
+    "muted":      ["#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e", "#e6ab02", "#a6761d", "#666666"],
+    "accessible": ["#0077bb", "#ee7733", "#009988", "#cc3311", "#33bbee", "#ee3377", "#bbbbbb", "#555555"],
+}
+COLORS = THEMES["tableau"]
 STAT_COLS = ("n", "n_failed", "mean", "stddev", "p50", "p95", "p99", "ci95_low", "ci95_high")
 
+_THEME_LABELS = {
+    "tableau": "Tableau", "vivid": "Vivid", "pastel": "Pastel",
+    "paired": "Paired", "muted": "Muted", "accessible": "Accessible",
+}
 
-# Page-level styles. Extracted to a module constant so the shell template below
-# stays readable; doubled braces are required because of the f-string in _html_shell.
+
+# Page-level styles. Uses CSS custom properties for dark-mode support.
 _CSS = """
-    body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 0 auto; padding: 1rem 2rem; color: #222; background: #f7f8fa; }
+    :root {
+      --bg: #f7f8fa; --surface: #fff; --surface-2: #f3f5f8; --surface-3: #f5f5f5;
+      --surface-hover: #e8ebf0; --text: #222; --text-2: #444; --text-muted: #666;
+      --text-dim: #555; --border: #ddd; --border-2: #bbb; --border-light: #eee;
+      --border-mid: #e0e3e8; --cell-odd: #eef1f6; --cell-even: #dde8f4;
+    }
+    [data-theme="dark"] {
+      --bg: #1a1b1e; --surface: #25262b; --surface-2: #2c2d33; --surface-3: #2a2b31;
+      --surface-hover: #35363d; --text: #e0e0e0; --text-2: #c0c0c0; --text-muted: #888;
+      --text-dim: #aaa; --border: #3a3b40; --border-2: #555; --border-light: #2e2f35;
+      --border-mid: #3a3b40; --cell-odd: #2e3038; --cell-even: #2a2e3a;
+    }
+    body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 0 auto; padding: 1rem 2rem; color: var(--text); background: var(--bg); }
     h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
-    .meta { color: #666; font-size: 0.875rem; margin-bottom: 2rem; }
-    section { margin-bottom: 2rem; padding: 1.5rem 1.75rem; border: 1px solid #ddd; border-radius: 10px; background: #fff; }
-    h2 { font-size: 1.2rem; margin-top: 0; padding-bottom: 0.4rem; border-bottom: 1px solid #eee; }
+    .meta { color: var(--text-muted); font-size: 0.875rem; margin-bottom: 0.75rem; }
+    section { margin-bottom: 2rem; padding: 1.5rem 1.75rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+    h2 { font-size: 1.2rem; margin-top: 0; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border-light); color: var(--text); }
     .chart-wrap { max-width: 720px; margin-bottom: 1rem; }
     .table-wrap { overflow-x: auto; }
     table { border-collapse: collapse; font-size: 0.85rem; }
-    th, td { border: 1px solid #ddd; padding: 4px 8px; text-align: right; }
-    th { background: #f5f5f5; text-align: center; }
+    th, td { border: 1px solid var(--border); padding: 4px 8px; text-align: right; color: var(--text); }
+    th { background: var(--surface-3); text-align: center; }
     td:first-child { text-align: left; }
     .legend-wrap { margin-bottom: 0.75rem; }
     .legend-wrap table { font-size: 0.8rem; }
     .legend-wrap th, .legend-wrap td { padding: 3px 8px; }
-    .fixed-vars { color: #555; font-size: 0.85rem; margin: 0.25rem 0 0.5rem; }
-    h3.plot-title { font-size: 1rem; font-weight: 600; color: #333; margin: 0 0 0.75rem; }
-    details { margin-bottom: 0.75rem; border: 1px solid #e0e3e8; border-radius: 8px; overflow: hidden; }
-    summary { cursor: pointer; font-weight: 500; color: #444; padding: 0.4rem 0.75rem; background: #f3f5f8; user-select: none; list-style: none; display: flex; align-items: center; gap: 0.4rem; }
-    summary::before { content: '▶'; font-size: 0.65rem; color: #888; transition: transform 0.15s; flex-shrink: 0; }
+    .fixed-vars { color: var(--text-dim); font-size: 0.85rem; margin: 0.25rem 0 0.5rem; }
+    h3.plot-title { font-size: 1rem; font-weight: 600; color: var(--text-2); margin: 0 0 0.75rem; }
+    details { margin-bottom: 0.75rem; border: 1px solid var(--border-mid); border-radius: 8px; overflow: hidden; }
+    summary { cursor: pointer; font-weight: 500; color: var(--text-2); padding: 0.4rem 0.75rem; background: var(--surface-2); user-select: none; list-style: none; display: flex; align-items: center; gap: 0.4rem; }
+    summary::before { content: '▶'; font-size: 0.65rem; color: var(--text-muted); transition: transform 0.15s; flex-shrink: 0; }
     details[open] > summary::before { transform: rotate(90deg); }
-    details[open] > summary { border-bottom: 1px solid #e0e3e8; }
-    summary:hover { color: #111; background: #e8ebf0; }
+    details[open] > summary { border-bottom: 1px solid var(--border-mid); }
+    summary:hover { color: var(--text); background: var(--surface-hover); }
     .details-body { padding: 0.75rem; }
     iframe.run-rpt { width: 100%; border: none; min-height: 400px; }
-    .run-group-heading { font-size: 1rem; margin: 1rem 0 0.25rem; color: #333; }
-    .report-intro { margin: 0 0 2rem; color: #333; }
+    .run-group-heading { font-size: 1rem; margin: 1rem 0 0.25rem; color: var(--text-2); }
+    .report-intro { margin: 0 0 2rem; color: var(--text-2); }
     .report-intro p:first-child { margin-top: 0; }
-    .section-description { color: #444; margin-bottom: 1rem; }
+    .section-description { color: var(--text-2); margin-bottom: 1rem; }
     .section-description p:first-child { margin-top: 0; }
     .rotated-slant { --slant-px: 25px; }
     .rotated-slant table { border-collapse: separate; border-spacing: 0; }
-    .rotated-slant td { border: 1px solid #ddd; border-left: none; min-width: 60px; padding: 3px 8px; text-align: center; }
-    .rotated-slant td:first-child { border-left: 1px solid #ddd; }
-    .rotated-slant thead th { border: 1px solid #ddd; border-top: none; border-left: none; border-right: none; background: transparent; padding: 3px 8px 6px; white-space: nowrap; vertical-align: bottom; text-align: center; min-width: 2rem; position: relative; overflow: visible; }
-    .rotated-slant thead th .cell-bg { position: absolute; top: 0; left: 0; bottom: 0; width: calc(100% + var(--slant-px)); border-top: 1px solid #bbb; clip-path: polygon(var(--slant-px) 0%, 100% 0%, calc(100% - var(--slant-px)) 100%, 0% 100%); z-index: 0; }
-    .rotated-slant thead th:nth-child(odd) .cell-bg { background: #eef1f6; }
-    .rotated-slant thead th:nth-child(even) .cell-bg { background: #dde8f4; }
+    .rotated-slant td { border: 1px solid var(--border); border-left: none; min-width: 60px; padding: 3px 8px; text-align: center; }
+    .rotated-slant td:first-child { border-left: 1px solid var(--border); }
+    .rotated-slant thead th { border: 1px solid var(--border); border-top: none; border-left: none; border-right: none; background: transparent; padding: 3px 8px 6px; white-space: nowrap; vertical-align: bottom; text-align: center; min-width: 2rem; position: relative; overflow: visible; }
+    .rotated-slant thead th .cell-bg { position: absolute; top: 0; left: 0; bottom: 0; width: calc(100% + var(--slant-px)); border-top: 1px solid var(--border-2); clip-path: polygon(var(--slant-px) 0%, 100% 0%, calc(100% - var(--slant-px)) 100%, 0% 100%); z-index: 0; }
+    .rotated-slant thead th:nth-child(odd) .cell-bg { background: var(--cell-odd); }
+    .rotated-slant thead th:nth-child(even) .cell-bg { background: var(--cell-even); }
     .rotated-slant thead th span { position: relative; z-index: 2; }
     .rotated-slant thead th:first-child::before { display: none; }
-    .rotated-slant thead th::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: #bbb; transform: rotate(10deg); transform-origin: bottom center; z-index: 1; }
-    .rotated-slant thead th:last-child::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 1px; background: #bbb; transform: rotate(10deg); transform-origin: bottom center; z-index: 1; }
+    .rotated-slant thead th::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: var(--border-2); transform: rotate(10deg); transform-origin: bottom center; z-index: 1; }
+    .rotated-slant thead th:last-child::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 1px; background: var(--border-2); transform: rotate(10deg); transform-origin: bottom center; z-index: 1; }
     .rotated-slant th.rotated-header span { writing-mode: vertical-rl; transform: rotate(190deg); display: inline-block; }
+    .toolbar { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; padding: 0.5rem 0.75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
+    .toolbar-label { font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; }
+    .swatch-group { display: flex; gap: 0.375rem; align-items: center; flex-wrap: wrap; }
+    .swatch-btn { display: flex; gap: 2px; padding: 3px 5px; border: 2px solid transparent; border-radius: 6px; cursor: pointer; background: transparent; }
+    .swatch-btn.active { border-color: var(--text); }
+    .swatch-btn:hover:not(.active) { border-color: var(--text-muted); }
+    .swatch-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .dark-toggle { padding: 0.25rem 0.625rem; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; background: var(--surface-2); color: var(--text); font-size: 0.8rem; margin-left: auto; white-space: nowrap; }
+    .dark-toggle:hover { background: var(--surface-hover); }
 """
 
 
@@ -80,12 +115,124 @@ _SLANT_SYNC_JS = """
   })();
 """
 
+# Injected in <head> before CSS to prevent flash of wrong theme.
+_ANTI_FOUC_JS = """(function(){
+  try {
+    var dm = localStorage.getItem('abench_dark');
+    var dark = dm === '1' || (dm === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+  } catch(e) {}
+})();"""
+
+# Theme-switching and chart-lifecycle helpers. _THEMES is injected inline before this block.
+_THEME_JS = """
+  var _currentTheme = (function() {
+    try { return localStorage.getItem('abench_theme') || 'tableau'; } catch(e) { return 'tableau'; }
+  })();
+  var _darkMode = (function() {
+    try {
+      var v = localStorage.getItem('abench_dark');
+      return v === '1' || (v === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    } catch(e) { return false; }
+  })();
+  var _charts = [];
+  function _themeColor(idx) {
+    var p = _THEMES[_currentTheme] || _THEMES.tableau;
+    return p[idx % p.length];
+  }
+  function _applyChartDefaults() {
+    if (_darkMode) {
+      Chart.defaults.color = '#aaa';
+      Chart.defaults.borderColor = 'rgba(255,255,255,0.12)';
+    } else {
+      Chart.defaults.color = '#555';
+      Chart.defaults.borderColor = 'rgba(0,0,0,0.1)';
+    }
+  }
+  function _resolveConfig(config) {
+    var cfg = JSON.parse(JSON.stringify(config));
+    if (cfg.data && cfg.data.datasets) {
+      cfg.data.datasets.forEach(function(ds) {
+        if (typeof ds._colorIdx === 'number') {
+          var c = _themeColor(ds._colorIdx);
+          ds.backgroundColor = c;
+          ds.borderColor = c;
+          delete ds._colorIdx;
+        }
+      });
+    }
+    return cfg;
+  }
+  function _createChart(id, config) {
+    _applyChartDefaults();
+    var cfg = _resolveConfig(config);
+    var chart = new Chart(document.getElementById(id), cfg);
+    _charts.push({id: id, config: config, chart: chart});
+  }
+  function _updateSwatches() {
+    document.querySelectorAll('[data-color-idx]').forEach(function(el) {
+      el.style.background = _themeColor(parseInt(el.getAttribute('data-color-idx'), 10));
+    });
+  }
+  function _updateToolbar() {
+    document.querySelectorAll('.swatch-btn').forEach(function(btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-theme-id') === _currentTheme);
+    });
+    var dtBtn = document.getElementById('dark-toggle-btn');
+    if (dtBtn) dtBtn.textContent = _darkMode ? 'Light mode' : 'Dark mode';
+    document.documentElement.setAttribute('data-theme', _darkMode ? 'dark' : 'light');
+  }
+  function _updateAll() {
+    _updateToolbar();
+    _updateSwatches();
+    _applyChartDefaults();
+    _charts.forEach(function(entry) {
+      entry.chart.destroy();
+      var cfg = _resolveConfig(entry.config);
+      entry.chart = new Chart(document.getElementById(entry.id), cfg);
+    });
+  }
+  function _toggleDark() {
+    _darkMode = !_darkMode;
+    try { localStorage.setItem('abench_dark', _darkMode ? '1' : '0'); } catch(e) {}
+    _updateAll();
+  }
+  function _setTheme(name) {
+    _currentTheme = name;
+    try { localStorage.setItem('abench_theme', name); } catch(e) {}
+    _updateAll();
+  }
+"""
+
+
+def _toolbar_html() -> str:
+    swatch_btns = ""
+    for tid, colors in THEMES.items():
+        dots = "".join(
+            f'<span class="swatch-dot" style="background:{c}"></span>'
+            for c in colors[:5]
+        )
+        label = _THEME_LABELS.get(tid, tid)
+        swatch_btns += (
+            f'<button class="swatch-btn" data-theme-id="{tid}" '
+            f'title="{label}" onclick="_setTheme(\'{tid}\')">{dots}</button>'
+        )
+    return (
+        f'<div class="toolbar">'
+        f'<span class="toolbar-label">Theme</span>'
+        f'<div class="swatch-group">{swatch_btns}</div>'
+        f'<button class="dark-toggle" id="dark-toggle-btn" onclick="_toggleDark()">Dark mode</button>'
+        f'</div>'
+    )
+
 
 def html_shell(sections: list[str], scripts: list[str], title: str = "abench_speckz report") -> str:
     """Render the full HTML document around pre-built section markup and Chart.js init scripts."""
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     body_sections = "".join(sections)
     chart_inits = "".join(scripts)
+    themes_json = json.dumps(THEMES)
+    toolbar = _toolbar_html()
     return (
         f"<!DOCTYPE html>\n"
         f'<html lang="en">\n'
@@ -93,15 +240,21 @@ def html_shell(sections: list[str], scripts: list[str], title: str = "abench_spe
         f'  <meta charset="utf-8">\n'
         f'  <meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"  <title>{title}</title>\n"
+        f"  <script>{_ANTI_FOUC_JS}</script>\n"
         f'  <script src="{CHART_JS_CDN}"></script>\n'
         f"  <style>{_CSS}  </style>\n"
         f"</head>\n"
         f"<body>\n"
         f"  <h1>{title}</h1>\n"
         f'  <p class="meta">Generated: {timestamp}</p>\n'
+        f"  {toolbar}\n"
         f"{body_sections}\n"
         f"  <script>\n"
+        f"  var _THEMES = {themes_json};\n"
+        f"{_THEME_JS}\n"
         f"{chart_inits}\n"
+        f"  _updateToolbar();\n"
+        f"  _updateSwatches();\n"
         f"  </script>\n"
         f"  <script>{_SLANT_SYNC_JS}  </script>\n"
         f"</body>\n"
@@ -213,10 +366,11 @@ def legend_table_html(
         label = resolve_metric(pretty_map, k)
         header_cells += f'<th class="rotated-header"><div class="cell-bg"></div><span>{label}</span></th>'
     body_rows = ""
-    for s in series_meta:
+    for i, s in enumerate(series_meta):
         swatch = (
             f'<span style="display:inline-block;width:13px;height:13px;'
-            f'border-radius:3px;background:{s["color"]};vertical-align:middle"></span>'
+            f'border-radius:3px;background:{s["color"]};vertical-align:middle" '
+            f'data-color-idx="{i}"></span>'
         )
         cells = f'<td style="text-align:center;border-right:none">{swatch}</td>'
         if multi_metric:

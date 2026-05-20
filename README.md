@@ -71,6 +71,8 @@ abench-speckz stats results/ --report report.html --plots plots.yaml  # override
 
 `--report` writes a self-contained HTML file with Chart.js plots. Plot definitions come from the tool YAML's `plots:` list (see below), or from a separate YAML file via `--plots`. When no plots are defined, a default per-metric bar chart is rendered.
 
+The report includes a toolbar with a **dark mode toggle** and **six built-in color themes** (Tableau, Vivid, Pastel, Paired, Muted, Accessible). The selected theme and dark/light preference are persisted in `localStorage`, so the report remembers your choice across sessions. Switching a theme or toggling dark mode instantly updates all charts and legend swatches without a page reload.
+
 ### `rebuild-aggregates` — regenerate aggregates from raw runs
 
 ```sh

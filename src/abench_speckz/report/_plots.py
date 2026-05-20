@@ -182,5 +182,5 @@ def render_plot_block(art: dict, occurrence: int) -> tuple[str, str]:
     chart_html = collapsible("Chart", chart_inner, open=True)
     data_html = collapsible("Data", art["table_html_inner"])
     inner = f"{title_html}{art['fixed_html']}\n    {chart_html}\n    {data_html}"
-    script = f"\n  new Chart(document.getElementById('{canvas_id}'), {json.dumps(art['chart_config'])});"
+    script = f"\n  _createChart('{canvas_id}', {json.dumps(art['chart_config'])});"
     return inner, script

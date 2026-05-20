@@ -185,13 +185,23 @@ def _render_metric_section(
         {
             "label": stat_key,
             "data": [r.get(stat_key) for r in metric_rows],
-            "backgroundColor": c,
-            "borderColor": c,
+            "backgroundColor": COLORS[i % len(COLORS)],
+            "borderColor": COLORS[i % len(COLORS)],
             "borderWidth": 1,
+            "_colorIdx": i,
         }
-        for stat_key, c in zip(["mean", "p50", "p95", "p99"], COLORS, strict=False)
+        for i, stat_key in enumerate(["mean", "p50", "p95", "p99"])
     ]
 
+    config = {
+        "type": "bar",
+        "data": {"labels": labels, "datasets": datasets},
+        "options": {
+            "responsive": True,
+            "plugins": {"legend": {"position": "top"}},
+            "scales": {"y": {"beginAtZero": False}},
+        },
+    }
     all_headers = list(group_by) + list(STAT_COLS)
     chart_html = collapsible(
         "Chart",
@@ -207,20 +217,7 @@ def _render_metric_section(
         f"    {data_html}\n"
         f"  </section>"
     )
-    script = (
-        f"\n  new Chart(document.getElementById('chart-{safe}'), {{\n"
-        f"    type: 'bar',\n"
-        f"    data: {{\n"
-        f"      labels: {json.dumps(labels)},\n"
-        f"      datasets: {json.dumps(datasets)}\n"
-        f"    }},\n"
-        f"    options: {{\n"
-        f"      responsive: true,\n"
-        f"      plugins: {{ legend: {{ position: 'top' }} }},\n"
-        f"      scales: {{ y: {{ beginAtZero: false }} }}\n"
-        f"    }}\n"
-        f"  }});"
-    )
+    script = f"\n  _createChart('chart-{safe}', {json.dumps(config)});"
     return section, script
 
 
