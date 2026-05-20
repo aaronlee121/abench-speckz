@@ -180,7 +180,8 @@ def render_plot_block(art: dict, occurrence: int) -> tuple[str, str]:
     title_html = f'<h3 class="plot-title">{art["plot"].title}</h3>\n    ' if art["plot"].title else ""
     chart_inner = f'{art["legend_html"]}<div class="chart-wrap"><canvas id="{canvas_id}"></canvas></div>'
     chart_html = collapsible("Chart", chart_inner, open=True)
-    data_html = collapsible("Data", art["table_html_inner"])
+    show_data = getattr(art["plot"], "data_table", True)
+    data_html = collapsible("Data", art["table_html_inner"]) if show_data else ""
     inner = f"{title_html}{art['fixed_html']}\n    {chart_html}\n    {data_html}"
     script = f"\n  _createChart('{canvas_id}', {json.dumps(art['chart_config'])});"
     return inner, script
