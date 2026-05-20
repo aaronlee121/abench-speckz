@@ -22,6 +22,7 @@ class ToolSpec:
     output_file: str | None = None
     output_format: str = "json"
     pretty_names: dict[str, str] = field(default_factory=dict)
+    var_values: dict[str, dict[str, str]] = field(default_factory=dict)
     units: dict[str, str] = field(default_factory=dict)
     higher_is_better: dict[str, bool] = field(default_factory=dict)
     plots: list[dict] = field(default_factory=list)

@@ -136,6 +136,10 @@ def resolve_metric(pretty_map: dict, metric: str) -> str:
     return prettynames.resolve(pretty_map, metric)
 
 
+def resolve_var_value(pretty_map: dict, var: str, value: str) -> str:
+    return prettynames.resolve_var_value(pretty_map, var, value)
+
+
 def try_numeric_sort(values: list[str]) -> list[str]:
     """Sort numerically when every value parses as float, otherwise lexicographically."""
     try:
@@ -187,7 +191,8 @@ def fixed_vars_html(static_vars: dict[str, str], pretty_map: dict) -> str:
     if not static_vars:
         return ""
     parts = ", ".join(
-        f"<b>{resolve_metric(pretty_map, k)}</b>&nbsp;=&nbsp;{v}" for k, v in static_vars.items()
+        f"<b>{resolve_metric(pretty_map, k)}</b>&nbsp;=&nbsp;{resolve_var_value(pretty_map, k, v)}"
+        for k, v in static_vars.items()
     )
     return f'<p class="fixed-vars">Fixed: {parts}</p>'
 
@@ -217,7 +222,8 @@ def legend_table_html(
         if multi_metric:
             cells += f"<td>{resolve_metric(pretty_map, s['metric'])}</td>"
         for k in varying_keys:
-            cells += f"<td>{s['vals'].get(k, '')}</td>"
+            raw_val = s['vals'].get(k, '')
+            cells += f"<td>{resolve_var_value(pretty_map, k, raw_val)}</td>"
         body_rows += f"<tr>{cells}</tr>"
     return (
         f'<div class="legend-wrap table-wrap rotated-slant">'

@@ -56,16 +56,24 @@ def _latencies(rps_val: float) -> dict[str, float]:
 shutil.rmtree(OUT, ignore_errors=True)
 store.init_results_dir(OUT)
 
-# Write pretty_names so the report shows human-friendly metric labels
+# Write pretty_names so the report shows human-friendly metric and variable labels
 (OUT / "pretty_names.json").write_text(json.dumps({
-    "rps": "Requests/s",
-    "mean_ms": "Mean latency (ms)",
-    "p50_ms": "P50 latency (ms)",
-    "p95_ms": "P95 latency (ms)",
-    "p99_ms": "P99 latency (ms)",
-    "workload": "Workload",
-    "backend": "Backend",
-    "concurrency": "Concurrency",
+    "preview": {
+        "rps": "Requests/s",
+        "mean_ms": "Mean latency (ms)",
+        "p50_ms": "P50 latency (ms)",
+        "p95_ms": "P95 latency (ms)",
+        "p99_ms": "P99 latency (ms)",
+    },
+    "vars": {
+        "workload": "Workload",
+        "backend": "Backend",
+        "concurrency": "Concurrency",
+    },
+    "var_values": {
+        "workload": {"read": "Read-heavy", "write": "Write-heavy", "mixed": "Mixed"},
+        "backend": {"postgres": "PostgreSQL 16", "mysql": "MySQL 8.0", "sqlite": "SQLite 3"},
+    },
 }))
 
 for workload in WORKLOADS:
@@ -149,6 +157,31 @@ sections:
       - text: "**`group_by: workload`** — one labelled point per workload."
       - plot_id: scatter_grouped
 
+  - title: "var_values — friendly value labels"
+    description: |
+      `var_values` in `pretty_names.json` maps raw combo variable values to
+      display strings. Labels appear in chart x-axis ticks, dataset legend
+      labels, the colour-coded legend table, and the fixed-vars annotation.
+    blocks:
+      - text: "x-axis ticks and dataset labels use the mapped names."
+      - plot_id: var_values_bar
+      - text: "Legend table cells also show the mapped names."
+      - plot_id: var_values_line
+
+  - title: "series_label — compact one-line legend"
+    description: |
+      `series_label` replaces the multi-column table legend with Chart.js's
+      built-in one-line legend. The value is a template string rendered per
+      series using each series's variable values; `var_values` mapping is
+      applied automatically.
+    blocks:
+      - text: "Without `series_label` — full table legend (default)."
+      - plot_id: no_series_label
+      - text: "With `series_label` set to a single-variable template — compact inline legend."
+      - plot_id: with_series_label
+      - text: "Multi-variable template joining two group_by keys."
+      - plot_id: multi_series_label
+
 plots:
   # ── Bar ──────────────────────────────────────────────────────────────────
   - id: bar_simple
@@ -213,6 +246,44 @@ plots:
     x: rps
     y: [p95_ms]
     group_by: workload
+
+  # ── var_values demo ───────────────────────────────────────────────────────
+  - id: var_values_bar
+    type: bar
+    title: "Throughput by workload (var_values on x-axis)"
+    x: workload
+    y: rps
+
+  - id: var_values_line
+    type: line
+    title: "Throughput vs concurrency, per backend (var_values in legend)"
+    x: concurrency
+    y: rps
+    group_by: backend
+
+  # ── series_label demo ─────────────────────────────────────────────────────
+  - id: no_series_label
+    type: line
+    title: "Per-backend throughput — table legend (default)"
+    x: concurrency
+    y: rps
+    group_by: backend
+
+  - id: with_series_label
+    type: line
+    title: "Per-backend throughput (compact legend)"
+    x: concurrency
+    y: rps
+    group_by: backend
+    series_label: "${backend}"
+
+  - id: multi_series_label
+    type: line
+    title: "Per workload × backend (multi-variable template label)"
+    x: concurrency
+    y: rps
+    group_by: [workload, backend]
+    series_label: "${workload} / ${backend}"
 """
 )
 

@@ -347,3 +347,24 @@ def test_fixed_vars_non_bool_rejected(tmp_path):
     p.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  fixed_vars: yes_please\n")
     with pytest.raises(RunError, match="fixed_vars must be a boolean"):
         plots.load_plots_file(p)
+
+
+def test_series_label_parsed(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text("- id: p1\n  type: line\n  x: concurrency\n  y: rps\n  group_by: backend\n  series_label: '${backend}'\n")
+    doc = plots.load_plots_file(p)
+    assert doc.plots[0].series_label == "${backend}"
+
+
+def test_series_label_defaults_to_none(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n")
+    doc = plots.load_plots_file(p)
+    assert doc.plots[0].series_label is None
+
+
+def test_series_label_non_string_rejected(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  series_label: 42\n")
+    with pytest.raises(RunError, match="series_label must be a string"):
+        plots.load_plots_file(p)

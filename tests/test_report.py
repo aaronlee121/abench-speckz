@@ -900,3 +900,165 @@ def test_interp_report_description(tmp_path, monkeypatch):
     html = report_path.read_text()
     assert "abc123" in html
     assert "postgres" in html
+
+
+# ---------------------------------------------------------------------------
+# var_values: friendly labels for combo variable values in legends
+# ---------------------------------------------------------------------------
+
+
+def _seed_var_values(results_dir):
+    store.init_results_dir(results_dir)
+    combos = [
+        ("h1", {"workload": "read", "backend": "postgres"}, {"rps": 1000.0}),
+        ("h2", {"workload": "write", "backend": "mysql"}, {"rps": 800.0}),
+    ]
+    for hash_, vars_, results in combos:
+        store.append_run(
+            results_dir,
+            {
+                "run_id": f"{hash_}-0",
+                "config_hash": hash_,
+                "vars": vars_,
+                "tags": ["bench"],
+                "exit_code": 0,
+                "results": results,
+                "failure_reason": None,
+            },
+        )
+        store.update_aggregates_for_hash(results_dir, hash_)
+    from abench_speckz import prettynames
+    prettynames.write(
+        results_dir / "pretty_names.json",
+        {
+            "var_values": {
+                "workload": {"read": "Read-heavy", "write": "Write-heavy"},
+                "backend": {"postgres": "PostgreSQL 16", "mysql": "MySQL 8.0"},
+            }
+        },
+    )
+
+
+def test_var_values_in_bar_chart_labels(tmp_path):
+    _seed_var_values(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n")
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Read-heavy" in html
+    assert "Write-heavy" in html
+    assert '"read"' not in html  # raw value should not appear as a chart label
+
+
+def test_var_values_in_legend_table(tmp_path):
+    _seed_var_values(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  group_by: backend\n")
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "PostgreSQL 16" in html
+    assert "MySQL 8.0" in html
+
+
+def test_var_values_in_fixed_vars_block(tmp_path):
+    # Single backend value → collapses into the "Fixed:" block
+    from abench_speckz import prettynames
+    store.init_results_dir(tmp_path)
+    store.append_run(
+        tmp_path,
+        {
+            "run_id": "hx-0",
+            "config_hash": "hx",
+            "vars": {"workload": "read", "backend": "postgres"},
+            "tags": ["bench"],
+            "exit_code": 0,
+            "results": {"rps": 1000.0},
+            "failure_reason": None,
+        },
+    )
+    store.update_aggregates_for_hash(tmp_path, "hx")
+    prettynames.write(
+        tmp_path / "pretty_names.json",
+        {"var_values": {"backend": {"postgres": "PostgreSQL 16"}}},
+    )
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  group_by: backend\n")
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "PostgreSQL 16" in html
+    assert "Fixed:" in html
+
+
+def test_var_values_in_scatter_labels(tmp_path):
+    _seed_var_values(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "- id: sc\n  type: scatter\n  x: rps\n  y: rps\n  group_by: workload\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Read-heavy" in html or "Write-heavy" in html
+
+
+# ---------------------------------------------------------------------------
+# series_label — compact one-line Chart.js legend
+# ---------------------------------------------------------------------------
+
+
+def test_series_label_uses_template_in_dataset_label(tmp_path):
+    _seed_three_vars(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n"
+        "  group_by: backend\n  series_label: 'db=${backend}'\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "db=postgres" in html
+    assert "db=mysql" in html
+
+
+def test_series_label_no_legend_table(tmp_path):
+    _seed_three_vars(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n"
+        "  group_by: backend\n  series_label: '${backend}'\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert '<div class="legend-wrap' not in html
+    # Chart.js legend is NOT suppressed
+    assert '"display": false' not in html
+
+
+def test_series_label_applies_var_values(tmp_path):
+    _seed_var_values(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n"
+        "  group_by: backend\n  series_label: '${backend}'\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "PostgreSQL 16" in html or "MySQL 8.0" in html
+
+
+def test_series_label_line_chart(tmp_path):
+    _seed_three_vars(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "- id: p1\n  type: line\n  x: workload\n  y: rps\n"
+        "  group_by: backend\n  series_label: '${backend} db'\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "postgres db" in html

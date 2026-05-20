@@ -60,3 +60,46 @@ def test_load_missing_returns_empty():
     from pathlib import Path
 
     assert prettynames.load(Path("/nonexistent/path/pn.json")) == {}
+
+
+def test_resolve_var_value_mapped():
+    m = {"var_values": {"backend": {"postgres": "PostgreSQL 16", "mysql": "MySQL 8.0"}}}
+    assert prettynames.resolve_var_value(m, "backend", "postgres") == "PostgreSQL 16"
+    assert prettynames.resolve_var_value(m, "backend", "mysql") == "MySQL 8.0"
+
+
+def test_resolve_var_value_fallback():
+    m = {"var_values": {"backend": {"postgres": "PostgreSQL 16"}}}
+    assert prettynames.resolve_var_value(m, "backend", "unknown") == "unknown"
+    assert prettynames.resolve_var_value(m, "no_such_var", "x") == "x"
+    assert prettynames.resolve_var_value({}, "backend", "postgres") == "postgres"
+
+
+def test_merge_var_values():
+    a = {"var_values": {"backend": {"postgres": "PostgreSQL 16"}}}
+    b = {"var_values": {"backend": {"mysql": "MySQL 8.0"}, "workload": {"read": "Read-heavy"}}}
+    merged = prettynames.merge(a, b)
+    assert merged["var_values"] == {
+        "backend": {"postgres": "PostgreSQL 16", "mysql": "MySQL 8.0"},
+        "workload": {"read": "Read-heavy"},
+    }
+
+
+def test_from_tool_includes_var_values():
+    t = ToolSpec(
+        name="mytool",
+        command="x",
+        pretty_names={"rps": "RPS"},
+        var_values={"backend": {"postgres": "PostgreSQL 16"}},
+    )
+    result = prettynames.from_tool(t)
+    assert result == {
+        "mytool": {"rps": "RPS"},
+        "var_values": {"backend": {"postgres": "PostgreSQL 16"}},
+    }
+
+
+def test_from_tool_omits_var_values_when_empty():
+    t = ToolSpec(name="mytool", command="x", pretty_names={"rps": "RPS"})
+    result = prettynames.from_tool(t)
+    assert "var_values" not in result

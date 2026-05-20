@@ -142,6 +142,7 @@ def build_plot_artifacts(plot, all_vars: list[str], results_dir: Path, pretty_ma
         return None
 
     show_fixed = getattr(plot, "fixed_vars", True)
+    use_series_label = bool(getattr(plot, "series_label", None))
     if varying_keys and len(series_meta) == 1:
         single = series_meta[0]
         extra = {k: single["vals"][k] for k in varying_keys if k in single["vals"]}
@@ -153,8 +154,12 @@ def build_plot_artifacts(plot, all_vars: list[str], results_dir: Path, pretty_ma
         chart_config["options"]["plugins"]["legend"] = {"display": False}
     elif varying_keys:
         fixed_html = fixed_vars_html(static_vars, pretty_map) if show_fixed else ""
-        legend_html = legend_table_html(series_meta, varying_keys, pretty_map, multi_metric)
-        chart_config["options"]["plugins"]["legend"] = {"display": False}
+        if use_series_label:
+            legend_html = ""
+            # Chart.js built-in legend shows the template-formatted labels inline
+        else:
+            legend_html = legend_table_html(series_meta, varying_keys, pretty_map, multi_metric)
+            chart_config["options"]["plugins"]["legend"] = {"display": False}
     else:
         fixed_html = fixed_vars_html(static_vars, pretty_map) if show_fixed else ""
         legend_html = legend_table_html(series_meta, varying_keys, pretty_map, multi_metric)

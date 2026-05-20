@@ -2,8 +2,17 @@
 
 from typing import Any
 
+from abench_speckz import interpolate
 from abench_speckz.expr import eval_expr, extract_names, is_expr
-from abench_speckz.report._html import color, resolve_metric, try_numeric_sort
+from abench_speckz.report._html import color, resolve_metric, resolve_var_value, try_numeric_sort
+
+
+def _apply_series_label(template: str, mapped_vals: dict[str, str]) -> str:
+    """Substitute ${var} in a series_label template using pre-mapped variable values."""
+    try:
+        return interpolate.resolve_string(template, mapped_vals)
+    except Exception:
+        return template
 
 
 def _make_x_getter(x_spec: str):
@@ -44,9 +53,14 @@ def build_bar_or_line_config(
     get_x = _make_x_getter(plot.x)
     x_values_raw = sorted({get_x(r) for r in rows})
     x_values = try_numeric_sort(x_values_raw) if chart_type == "line" else x_values_raw
+    if not is_expr(plot.x):
+        x_labels = [resolve_var_value(pretty_map, plot.x, v) for v in x_values]
+    else:
+        x_labels = list(x_values)
 
     # Label uses only varying keys (omits static ones); falls back to all group_by if none vary.
     label_keys = varying_keys if varying_keys else group_by
+    series_label_tpl = getattr(plot, "series_label", None)
 
     indexed, series_keys = _index_series(rows, get_x, group_by)
 
@@ -55,11 +69,17 @@ def build_bar_or_line_config(
     for i, (metric, gb_tuple) in enumerate(series_keys):
         c = color(i)
         vals = dict(zip(group_by, gb_tuple, strict=True)) if group_by else {}
-        varying_parts = [str(vals[k]) for k in label_keys if k in vals]
-        label_parts = [resolve_metric(pretty_map, metric)]
-        if varying_parts:
-            label_parts.append(" / ".join(varying_parts))
-        label = " / ".join(label_parts)
+        if series_label_tpl:
+            mapped_vals = {k: resolve_var_value(pretty_map, k, str(v)) for k, v in vals.items()}
+            group_label = _apply_series_label(series_label_tpl, mapped_vals)
+            metric_display = resolve_metric(pretty_map, metric)
+            label = f"{metric_display} / {group_label}" if len(set(m for m, _ in series_keys)) > 1 else group_label
+        else:
+            varying_parts = [resolve_var_value(pretty_map, k, str(vals[k])) for k in label_keys if k in vals]
+            label_parts = [resolve_metric(pretty_map, metric)]
+            if varying_parts:
+                label_parts.append(" / ".join(varying_parts))
+            label = " / ".join(label_parts)
 
         data = [indexed.get((x, metric, gb_tuple)) for x in x_values]
         ds: dict[str, Any] = {
@@ -89,7 +109,7 @@ def build_bar_or_line_config(
 
     config = {
         "type": chart_type,
-        "data": {"labels": x_values, "datasets": datasets},
+        "data": {"labels": x_labels, "datasets": datasets},
         "options": options,
     }
     return config, series_meta
@@ -109,6 +129,7 @@ def build_scatter_config(
     combination of group_by values becomes its own named point.
     """
     label_keys = varying_keys if varying_keys else group_by
+    series_label_tpl = getattr(plot, "series_label", None)
 
     groups: dict[tuple, dict[str, float | None]] = {}
     group_vals: dict[tuple, dict[str, str]] = {}
@@ -128,8 +149,12 @@ def build_scatter_config(
             continue
         c = color(i)
         vals = group_vals.get(gb_tuple, {})
-        varying_parts = [str(vals[k]) for k in label_keys if k in vals]
-        label = " / ".join(varying_parts) if varying_parts else "all"
+        if series_label_tpl:
+            mapped_vals = {k: resolve_var_value(pretty_map, k, str(v)) for k, v in vals.items()}
+            label = _apply_series_label(series_label_tpl, mapped_vals)
+        else:
+            varying_parts = [resolve_var_value(pretty_map, k, str(vals[k])) for k in label_keys if k in vals]
+            label = " / ".join(varying_parts) if varying_parts else "all"
         datasets.append(
             {
                 "label": label,

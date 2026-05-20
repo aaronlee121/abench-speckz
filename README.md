@@ -156,6 +156,13 @@ capture:
 pretty_names:
   requests_per_sec: "Requests/s"
   p50_ms: "p50 latency"
+var_values:                     # friendly labels for combo variable values in legends / charts
+  backend:
+    postgres: "PostgreSQL 16"
+    mysql:    "MySQL 8.0"
+  workload:
+    read:  "Read-heavy"
+    write: "Write-heavy"
 units:
   p50_ms: ms
 higher_is_better:
@@ -240,6 +247,8 @@ plots:
 - `bar` / `stacked-bar` / `line`: without `group_by`, each `y` metric becomes one series. With `group_by`, you get one series per (metric, group-value) pair.
 - `scatter`: `x` and `y` are both metric names (not variables). Each unique combination of `group_by` values becomes its own labeled point. Without `group_by`, all points collapse into a single `"all"` series.
 
+Variable values in chart labels, the legend table, the fixed-vars annotation, and x-axis tick labels are mapped through `var_values` (defined in the tool YAML — see above) when a matching entry exists.
+
 **Negation in `group_by`.** Prefix a variable name with `!` to mean "all variables *except* this one". Useful when you have many variables and don't want to list them all:
 
 ```yaml
@@ -300,6 +309,33 @@ Expression syntax is validated when the YAML is loaded, so malformed expressions
   y: rps
   group_by: [backend, region]
   fixed_vars: false   # hide the "Fixed: region = us-east-1" annotation
+```
+
+**`series_label` — compact one-line legend.** By default, plots with `group_by` render a multi-column colour-coded table (one row per series, one column per variable). Set `series_label` to a `${var}` template to replace the table with Chart.js's compact built-in legend — one coloured entry per series, formatted by the template. `var_values` mapping is applied automatically to substituted values.
+
+```yaml
+# Default: table legend with columns for each group_by variable
+- id: rps_by_backend_table
+  type: line
+  x: concurrency
+  y: rps
+  group_by: backend
+
+# Compact: one-line legend using a template
+- id: rps_by_backend_compact
+  type: line
+  x: concurrency
+  y: rps
+  group_by: backend
+  series_label: "${backend}"          # e.g. "PostgreSQL 16" with var_values
+
+# Multi-variable template
+- id: rps_workload_backend
+  type: line
+  x: concurrency
+  y: rps
+  group_by: [workload, backend]
+  series_label: "${workload} / ${backend}"
 ```
 
 **Report layout.** By default, every plot in `plots:` is rendered automatically in the order it is defined. To control layout, interleave prose, and publish only a subset of your plots, add a `sections:` list alongside `plots:`.
@@ -370,7 +406,7 @@ Each block has exactly one key:
 | `html` | Raw HTML string | Inlined verbatim |
 | `include_html` | File path relative to the YAML file | Contents of that file, inlined verbatim |
 
-**Variable interpolation in text fields.** `report_title`, `report_description`, section `title`, section `description`, `text` blocks, `html` blocks, and plot `title` all support `${env:VAR}` (current environment variable) and `${var}` (combo variable that has exactly one unique value across all results). Multi-valued variables are not available — referencing one raises an error.
+**Variable interpolation in text fields.** `report_title`, `report_description`, section `title`, section `description`, `text` blocks, `html` blocks, and plot `title` all support `${env:VAR}` (current environment variable) and `${var}` (combo variable that has exactly one unique value across all results). Multi-valued variables are not available — referencing one raises an error. Use `$$` to write a literal `$` when you need `${...}` to appear verbatim in display text (e.g. `$$${backend}` renders as `${backend}`). Note: `series_label` is a per-series render-time template and is intentionally excluded from this doc-level interpolation.
 
 ```yaml
 report_title: "Results for ${env:BUILD_VERSION}"

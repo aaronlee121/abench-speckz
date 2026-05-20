@@ -19,6 +19,7 @@ _FIELDS = {
     "output_file",
     "output_format",
     "pretty_names",
+    "var_values",
     "units",
     "higher_is_better",
     "plots",
@@ -77,6 +78,19 @@ def _load_phase(raw: dict, path, key: str) -> list[str]:
             raise RunError(f"{path}: tool.{key}[{i}] must be a string, got {type(step).__name__}")
         steps.append(step)
     return steps
+
+
+def _parse_var_values(raw, path) -> dict[str, dict[str, str]]:
+    if not raw:
+        return {}
+    if not isinstance(raw, dict):
+        raise RunError(f"{path}: tool.var_values must be a mapping")
+    out: dict[str, dict[str, str]] = {}
+    for var, val_map in raw.items():
+        if not isinstance(val_map, dict):
+            raise RunError(f"{path}: tool.var_values.{var} must be a mapping")
+        out[var] = {str(k): str(v) for k, v in val_map.items()}
+    return out
 
 
 def load_tool(path: str | Path) -> ToolSpec:
@@ -167,6 +181,7 @@ def load_tool(path: str | Path) -> ToolSpec:
         output_file=output_file,
         output_format=output_format,
         pretty_names=dict(raw.get("pretty_names") or {}),
+        var_values=_parse_var_values(raw.get("var_values"), path),
         units=dict(raw.get("units") or {}),
         higher_is_better=dict(raw.get("higher_is_better") or {}),
         plots=list(plots or []),

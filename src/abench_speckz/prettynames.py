@@ -6,8 +6,11 @@ from pathlib import Path
 from abench_speckz.runspec import ToolSpec
 
 
-def from_tool(tool: ToolSpec) -> dict[str, dict[str, str]]:
-    return {tool.name: dict(tool.pretty_names)}
+def from_tool(tool: ToolSpec) -> dict:
+    out: dict = {tool.name: dict(tool.pretty_names)}
+    if tool.var_values:
+        out["var_values"] = {k: dict(v) for k, v in tool.var_values.items()}
+    return out
 
 
 def merge(existing: dict, incoming: dict) -> dict:
@@ -15,6 +18,11 @@ def merge(existing: dict, incoming: dict) -> dict:
     for k, v in incoming.items():
         if k == "vars":
             out.setdefault("vars", {}).update(v)
+        elif k == "var_values":
+            existing_vv = out.setdefault("var_values", {})
+            if isinstance(v, dict):
+                for var_name, val_map in v.items():
+                    existing_vv.setdefault(var_name, {}).update(val_map if isinstance(val_map, dict) else {})
         elif isinstance(v, dict):
             out.setdefault(k, {}).update(v)
         else:
@@ -30,6 +38,16 @@ def load(path: Path) -> dict:
 
 def write(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+
+
+def resolve_var_value(mapping: dict, var: str, value: str) -> str:
+    """Return the display label for a combo variable value, or the raw value if no mapping exists."""
+    var_values = mapping.get("var_values", {})
+    if isinstance(var_values, dict):
+        val_map = var_values.get(var, {})
+        if isinstance(val_map, dict) and value in val_map:
+            return val_map[value]
+    return value
 
 
 def resolve(mapping: dict, key: str, *, tool: str | None = None) -> str:
