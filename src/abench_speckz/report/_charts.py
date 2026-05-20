@@ -2,7 +2,31 @@
 
 from typing import Any
 
+from abench_speckz.expr import eval_expr, extract_names, is_expr
 from abench_speckz.report._html import color, resolve_metric, try_numeric_sort
+
+
+def _make_x_getter(x_spec: str):
+    """Return a callable that extracts or computes the x-axis value from a row."""
+    if not is_expr(x_spec):
+        return lambda r: str(r.get(x_spec, ""))
+    x_vars = sorted(extract_names(x_spec))
+
+    def getter(r: dict) -> str:
+        ns: dict[str, float] = {}
+        for v in x_vars:
+            raw = r.get(v)
+            try:
+                ns[v] = float(raw) if raw is not None else 0.0
+            except (TypeError, ValueError):
+                ns[v] = 0.0
+        try:
+            result = eval_expr(x_spec, ns)
+            return str(int(result)) if result == int(result) else str(result)
+        except (ValueError, ZeroDivisionError, OverflowError):
+            return ""
+
+    return getter
 
 
 def build_bar_or_line_config(
@@ -17,13 +41,14 @@ def build_bar_or_line_config(
     smooth: bool = False,
 ) -> tuple[dict, list[dict]]:
     """Return (chart_config, series_meta) for a bar/line/stacked-bar plot."""
-    x_values_raw = sorted({str(r.get(plot.x, "")) for r in rows})
+    get_x = _make_x_getter(plot.x)
+    x_values_raw = sorted({get_x(r) for r in rows})
     x_values = try_numeric_sort(x_values_raw) if chart_type == "line" else x_values_raw
 
     # Label uses only varying keys (omits static ones); falls back to all group_by if none vary.
     label_keys = varying_keys if varying_keys else group_by
 
-    indexed, series_keys = _index_series(rows, plot.x, group_by)
+    indexed, series_keys = _index_series(rows, get_x, group_by)
 
     datasets: list[dict] = []
     series_meta: list[dict] = []
@@ -133,7 +158,7 @@ def build_scatter_config(
 
 def _index_series(
     rows: list[dict],
-    x_key: str,
+    get_x,
     group_by: list[str],
 ) -> tuple[dict[tuple, float | None], list[tuple]]:
     """Build (x, metric, gb_tuple) → mean lookup and ordered list of (metric, gb_tuple) keys."""
@@ -141,7 +166,7 @@ def _index_series(
     series_keys: list[tuple] = []
     seen: set[tuple] = set()
     for r in rows:
-        x_val = str(r.get(x_key, ""))
+        x_val = get_x(r)
         gb_tuple = tuple(str(r.get(k, "")) for k in group_by) if group_by else ()
         metric = r.get("metric")
         key = (metric, gb_tuple)

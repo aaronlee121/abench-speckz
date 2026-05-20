@@ -6,6 +6,7 @@ from typing import Any
 
 import yaml
 
+from abench_speckz.expr import is_expr, validate_expr_syntax
 from abench_speckz.model import RunError
 
 ALLOWED_TYPES = {"bar", "stacked-bar", "line", "scatter"}
@@ -72,6 +73,8 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
         x = item.get("x")
         if not isinstance(x, str) or not x:
             raise RunError(f"{source}: plot {plot_id!r}: x is required (string)")
+        if not x.strip().isidentifier():
+            validate_expr_syntax(x, f"{source}: plot {plot_id!r}: x")
 
         y_raw = item.get("y")
         if y_raw is None:
@@ -84,6 +87,9 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
             raise RunError(f"{source}: plot {plot_id!r}: y must be a string or list of strings")
         if not y:
             raise RunError(f"{source}: plot {plot_id!r}: y must not be empty")
+        for j, yi in enumerate(y):
+            if not yi.strip().isidentifier():
+                validate_expr_syntax(yi, f"{source}: plot {plot_id!r}: y[{j}]")
 
         if ptype == "scatter" and len(y) != 1:
             raise RunError(f"{source}: plot {plot_id!r}: scatter requires exactly one y metric")

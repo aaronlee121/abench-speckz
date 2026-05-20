@@ -252,6 +252,37 @@ plots:
 
 Negation is resolved at report time against the actual variable names in `aggregates.jsonl`. Unknown excluded names are silently ignored.
 
+**Axis expressions.** The `x` and `y` fields accept arithmetic expressions as well as plain names. Supported operators are `+`, `-`, `*`, `/`, `**`, `//`, and `%`; parentheses are allowed; function calls are not.
+
+Use an `x` expression to derive an axis from multiple variables:
+
+```yaml
+- id: total_conns
+  type: line
+  x: "workers * connections_per_worker"   # computed x-axis label
+  y: requests_per_sec
+  group_by: backend
+```
+
+Use a `y` expression for unit conversion or to normalize a metric by a variable:
+
+```yaml
+- id: latency_ms
+  type: bar
+  x: concurrency
+  y: "latency_us / 1000"          # convert µs → ms; expression becomes the series label
+
+- id: rps_per_worker
+  type: line
+  x: concurrency
+  y: "rps / workers"              # normalize throughput by worker count
+  group_by: backend
+```
+
+For `y` expressions every identifier is classified at report time: names that match a combo variable are treated as variable references (their per-row value is substituted); all other names are expected to be metric names (their aggregated `mean`/`p50`/… values are substituted). Exactly one metric name per expression is required. Multiple metrics in one expression (e.g. `rps / p95_ms`) are not supported.
+
+Expression syntax is validated when the YAML is loaded, so malformed expressions are caught early.
+
 **Plot titles.** The optional `title` field is used as an `<h3>` heading inside each plot block when sections are present, so multiple plots within one section are individually labelled. Without sections it becomes the section heading instead.
 
 **Report layout.** By default, every plot in `plots:` is rendered automatically in the order it is defined. To control layout, interleave prose, and publish only a subset of your plots, add a `sections:` list alongside `plots:`.

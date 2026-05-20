@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+from abench_speckz.expr import eval_expr, extract_names, is_expr
 from abench_speckz.report._charts import build_bar_or_line_config, build_scatter_config
 from abench_speckz.report._html import (
     STAT_COLS,
@@ -15,6 +16,70 @@ from abench_speckz.report._html import (
     table_html,
 )
 
+_EXPR_STAT_COLS = ("mean", "stddev", "p50", "p95", "p99", "ci95_low", "ci95_high")
+
+
+def _resolve_y_axes(
+    y_list: list[str], all_vars_set: set[str]
+) -> tuple[list[str], dict[str, str]]:
+    """Return (query_metrics, expr_map) separating plain metric names from expressions.
+
+    expr_map maps base_metric_name → expression string for any y entry that is an
+    arithmetic expression.  Plain entries pass through unchanged.
+    """
+    from abench_speckz.model import RunError
+
+    query_metrics: list[str] = []
+    expr_map: dict[str, str] = {}
+    for yi in y_list:
+        if not is_expr(yi):
+            query_metrics.append(yi)
+            continue
+        names = extract_names(yi)
+        metric_names = names - all_vars_set
+        if len(metric_names) != 1:
+            raise RunError(
+                f"y expression {yi!r} must reference exactly one metric name "
+                f"(found: {sorted(metric_names) if metric_names else 'none'})"
+            )
+        base = next(iter(metric_names))
+        query_metrics.append(base)
+        expr_map[base] = yi
+    return query_metrics, expr_map
+
+
+def _apply_y_exprs(
+    rows: list[dict], expr_map: dict[str, str], all_vars_set: set[str]
+) -> list[dict]:
+    """Rename expression metrics and apply the expression to every stat column."""
+    result: list[dict] = []
+    for r in rows:
+        metric = r.get("metric")
+        if metric not in expr_map:
+            result.append(r)
+            continue
+        expr = expr_map[metric]
+        var_ns: dict[str, float] = {}
+        for k, v in r.items():
+            if k in all_vars_set and v is not None:
+                try:
+                    var_ns[k] = float(v)
+                except (TypeError, ValueError):
+                    pass
+        new_row = dict(r)
+        new_row["metric"] = expr
+        for col in _EXPR_STAT_COLS:
+            raw = r.get(col)
+            if raw is None:
+                continue
+            ns = {metric: float(raw), **var_ns}
+            try:
+                new_row[col] = eval_expr(expr, ns)
+            except (ValueError, ZeroDivisionError, OverflowError):
+                new_row[col] = None
+        result.append(new_row)
+    return result
+
 
 def build_plot_artifacts(plot, all_vars: list[str], results_dir: Path, pretty_map: dict):
     """Compute everything needed to render a plot, independent of where it lands in the page.
@@ -24,15 +89,22 @@ def build_plot_artifacts(plot, all_vars: list[str], results_dir: Path, pretty_ma
     from abench_speckz import query
 
     gb_keys = resolve_group_by(list(plot.group_by or []), all_vars)
+    all_vars_set = set(all_vars)
 
     if plot.type == "scatter":
         group_by = gb_keys
-        metrics = [plot.x] + plot.y
+        metrics, y_expr_map = _resolve_y_axes([plot.x] + plot.y, all_vars_set)
     else:
-        group_by = [plot.x] + gb_keys
-        metrics = plot.y
+        if is_expr(plot.x):
+            x_vars = sorted(extract_names(plot.x))
+            group_by = x_vars + gb_keys
+        else:
+            group_by = [plot.x] + gb_keys
+        metrics, y_expr_map = _resolve_y_axes(plot.y, all_vars_set)
 
     rows = query.compute_rows(results_dir, group_by=group_by, metrics=metrics)
+    if y_expr_map:
+        rows = _apply_y_exprs(rows, y_expr_map, all_vars_set)
     static_vars, varying_keys = split_group_by_vars(rows, gb_keys)
     multi_metric = len(plot.y) > 1
 
