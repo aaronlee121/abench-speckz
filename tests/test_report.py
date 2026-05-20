@@ -1,4 +1,5 @@
 import io
+import os
 
 from abench_speckz import query, store
 
@@ -745,3 +746,134 @@ def test_report_back_compat_no_sections(tmp_path):
     # Type meta shown next to each plot in back-compat layout
     assert "type: bar" in html
     assert "type: line" in html
+
+
+# ---------------------------------------------------------------------------
+# Text interpolation in plots doc fields
+# ---------------------------------------------------------------------------
+
+
+def _seed_static(results_dir):
+    """Seed with a single backend (static) and two workloads (varying)."""
+    store.init_results_dir(results_dir)
+    for hash_, workload in [("h1", "read"), ("h2", "write")]:
+        store.append_run(
+            results_dir,
+            {
+                "run_id": f"{hash_}-0",
+                "config_hash": hash_,
+                "vars": {"workload": workload, "backend": "postgres"},
+                "tags": ["bench"],
+                "exit_code": 0,
+                "results": {"rps": 1000.0},
+                "failure_reason": None,
+            },
+        )
+        store.update_aggregates_for_hash(results_dir, hash_)
+
+
+def test_interp_env_var_in_report_title(tmp_path, monkeypatch):
+    _seed_static(tmp_path)
+    monkeypatch.setenv("MY_BUILD", "v1.2.3")
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "report_title: 'Results for ${env:MY_BUILD}'\n"
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+        "sections:\n  - title: S\n    blocks:\n      - plot_id: p1\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Results for v1.2.3" in html
+
+
+def test_interp_static_combo_var_in_section_title(tmp_path):
+    _seed_static(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+        "sections:\n  - title: 'Backend: ${backend}'\n    blocks:\n      - plot_id: p1\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Backend: postgres" in html
+
+
+def test_interp_static_var_in_section_description(tmp_path):
+    _seed_static(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+        "sections:\n"
+        "  - title: S\n"
+        "    description: 'Running on ${backend}.'\n"
+        "    blocks:\n      - plot_id: p1\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Running on postgres." in html
+
+
+def test_interp_env_var_in_text_block(tmp_path, monkeypatch):
+    _seed_static(tmp_path)
+    monkeypatch.setenv("SUITE_NAME", "nightly")
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+        "sections:\n"
+        "  - title: S\n"
+        "    blocks:\n"
+        "      - text: 'Suite: ${env:SUITE_NAME}'\n"
+        "      - plot_id: p1\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Suite: nightly" in html
+
+
+def test_interp_env_var_in_plot_title(tmp_path, monkeypatch):
+    _seed_static(tmp_path)
+    monkeypatch.setenv("BACKEND_LABEL", "PostgreSQL")
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+        "    title: 'Throughput (${env:BACKEND_LABEL})'\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Throughput (PostgreSQL)" in html
+
+
+def test_interp_varying_var_not_substituted(tmp_path):
+    """A var with multiple values is NOT in the text vars dict, so ${var} is rejected."""
+    _seed_static(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+        "sections:\n  - title: 'Workload: ${workload}'\n    blocks:\n      - plot_id: p1\n"
+    )
+    report_path = tmp_path / "r.html"
+    import pytest
+    with pytest.raises(Exception, match="interpolation|unknown"):
+        query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+
+
+def test_interp_report_description(tmp_path, monkeypatch):
+    _seed_static(tmp_path)
+    monkeypatch.setenv("BUILD_ID", "abc123")
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "report_title: My Report\n"
+        "report_description: 'Build **${env:BUILD_ID}** on ${backend}.'\n"
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+        "sections:\n  - title: S\n    blocks:\n      - plot_id: p1\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "abc123" in html
+    assert "postgres" in html

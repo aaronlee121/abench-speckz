@@ -359,6 +359,26 @@ Each block has exactly one key:
 | `html` | Raw HTML string | Inlined verbatim |
 | `include_html` | File path relative to the YAML file | Contents of that file, inlined verbatim |
 
+**Variable interpolation in text fields.** `report_title`, `report_description`, section `title`, section `description`, `text` blocks, `html` blocks, and plot `title` all support `${env:VAR}` (current environment variable) and `${var}` (combo variable that has exactly one unique value across all results). Multi-valued variables are not available — referencing one raises an error.
+
+```yaml
+report_title: "Results for ${env:BUILD_VERSION}"
+report_description: "Backend: **${backend}**, commit ${env:GIT_SHA}"
+
+sections:
+  - title: "Throughput on ${backend}"
+    blocks:
+      - text: "Suite run: ${env:SUITE_NAME}"
+      - plot_id: rps_chart
+
+plots:
+  - id: rps_chart
+    type: bar
+    x: concurrency
+    y: rps
+    title: "RPS (${env:BACKEND_LABEL})"
+```
+
 **Using a separate plots file.** Pass `--plots plots.yaml` to supply plot definitions from a standalone file instead of the tool YAML. The standalone file uses the same format — a mapping with `plots:`, `sections:`, `report_title:`, `report_description:` — or just a bare list of plot entries for the minimal case:
 
 ```sh

@@ -1,10 +1,13 @@
 """Top-level report entry points: render aggregate rows or a PlotsDoc to a self-contained HTML file."""
 
+import dataclasses
 import json
+import os
 from pathlib import Path
 from typing import Any
 
-from abench_speckz import store
+from abench_speckz import interpolate, store
+from abench_speckz.model import RunError
 from abench_speckz.report._html import (
     COLORS,
     STAT_COLS,
@@ -19,6 +22,65 @@ from abench_speckz.report._html import (
 )
 from abench_speckz.report._plots import build_plot_artifacts, render_plot_block
 from abench_speckz.report._runs import discover_run_reports, runs_section
+
+
+def _gather_text_vars(results_dir: Path) -> dict[str, str]:
+    """Return combo vars with exactly one unique value across all results (safe to embed in text)."""
+    unique: dict[str, set] = {}
+    for fname in ("aggregates.jsonl", "runs.jsonl"):
+        path = results_dir / fname
+        if not path.exists() or path.stat().st_size == 0:
+            continue
+        with path.open() as f:
+            for line in f:
+                try:
+                    row = json.loads(line)
+                    vars_ = row.get("vars", {})
+                    if isinstance(vars_, dict):
+                        for k, v in vars_.items():
+                            unique.setdefault(k, set()).add(str(v))
+                except json.JSONDecodeError:
+                    pass
+        break
+    return {k: next(iter(v)) for k, v in unique.items() if len(v) == 1}
+
+
+def _interp(s: str | None, vars_: dict[str, str], env: dict[str, str]) -> str | None:
+    if s is None:
+        return None
+    try:
+        return interpolate.resolve_string(s, vars_, env=env)
+    except Exception as e:
+        raise RunError(f"text interpolation failed: {e}") from e
+
+
+def _interpolate_doc(doc, vars_: dict[str, str], env: dict[str, str]):
+    """Return a new PlotsDoc with ${var}/${env:VAR} substituted in all text fields."""
+    new_plots = [
+        dataclasses.replace(p, title=_interp(p.title, vars_, env))
+        for p in doc.plots
+    ]
+    new_sections = []
+    for sec in doc.sections:
+        new_blocks = [
+            dataclasses.replace(blk, value=_interp(blk.value, vars_, env))
+            if blk.kind in ("text", "html")
+            else blk
+            for blk in sec.blocks
+        ]
+        new_sections.append(dataclasses.replace(
+            sec,
+            title=_interp(sec.title, vars_, env),
+            description=_interp(sec.description, vars_, env),
+            blocks=new_blocks,
+        ))
+    return dataclasses.replace(
+        doc,
+        plots=new_plots,
+        sections=new_sections,
+        report_title=_interp(doc.report_title, vars_, env),
+        report_description=_interp(doc.report_description, vars_, env),
+    )
 
 
 def generate_html(
@@ -66,6 +128,9 @@ def generate_plots_html(
     from abench_speckz import query
 
     all_vars = query.var_names(results_dir)
+    text_vars = _gather_text_vars(results_dir)
+    doc = _interpolate_doc(doc, text_vars, dict(os.environ))
+
     sections: list[str] = []
     scripts: list[str] = []
 
