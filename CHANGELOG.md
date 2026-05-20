@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-05-19
+
+### Added
+
+- `data_table: false` plot field — set to `false` to suppress the collapsible "Data" table rendered below each chart in the HTML report. Default is `true` (existing behavior). Mirrors the `fixed_vars` boolean field.
+- `dark mode` and color theme switcher in HTML reports — a theme picker in the top-right corner lets users choose between Tableau, Vivid, and Pastel color palettes. The selected theme persists in `localStorage` across page loads, and chart colors update live without re-rendering.
+- `var_values` tool YAML field — a mapping of variable name → `{raw_value: display_label}` used to substitute friendly labels for raw variable values in plot legends and axis labels (e.g. map `"pg16"` → `"PostgreSQL 16"`).
+- `series_label` plot field — an optional `${var}` template string that replaces the multi-column legend table with Chart.js's compact single-line legend. Values are automatically mapped through `var_values`.
+- `fixed_vars: false` plot field — set to `false` to suppress the "Fixed: k = v" static-variable annotation above a chart. Default is `true`.
+- `${var}` and `${env:VAR}` interpolation in plot `title` and report `report_title` / `report_description` / section `title` / section `description` / `text` block values. Substitution uses variables that take a single unique value across the result set.
+- Arithmetic expression support for plot `x` and `y` fields — supports `+`, `-`, `*`, `/`, `**`, `//`, `%` over variable names, metric names, and numeric literals. For `y` expressions exactly one identifier must be a metric name; the rest are treated as combo variables. Syntax is validated at YAML load time.
+
+### Fixed
+
+- `per_sweep_var` negation expansion and `group_by` negation now correctly exclude variables whose value is the same across all combos (static values), matching the documented behavior.
+
 ## [0.4.6] - 2026-05-17
 
 ### Added
