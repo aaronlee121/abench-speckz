@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.9] - 2026-05-21
+
+### Added
+
+- `theme` top-level field in the plots/tool YAML — controls the report's visual appearance without the interactive switcher:
+  - `palette` — color palette: `tableau` (default), `vivid`, `pastel`, `paired`, `muted`, `accessible`.
+  - `dark_mode` — `true` (always dark), `false` (always light), or `auto` (default, follows OS preference).
+  - `switcher` — `true` shows the interactive palette picker and dark-mode toggle in the report header; `false` (default) hides it. When the switcher is shown, `palette` and `dark_mode` serve as initial defaults overridable by the reader.
+
+### Changed
+
+- The interactive theme toolbar (palette picker + dark-mode toggle) is now **hidden by default**. Set `theme.switcher: true` in the plots YAML to restore it.
+
 ## [0.4.8] - 2026-05-20
 
 ### Added
