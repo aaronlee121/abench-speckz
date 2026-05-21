@@ -1102,6 +1102,58 @@ setup:
     assert Path(written).exists()
 
 
+def test_results_dir_variable_available_in_setup(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    out_file = tmp_path / "results_dir_path.txt"
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+setup:
+  - "python -c \\"import sys; open('{out_file}', 'w').write(sys.argv[1])\\" ${{_results_dir}}"
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+    )
+    written = out_file.read_text().strip()
+    assert written == str(results.resolve())
+
+
+def test_results_dir_variable_available_in_post_run(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    out_file = tmp_path / "post_run_results_dir.txt"
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+post_run:
+  - "python -c \\"import sys; open('{out_file}', 'w').write(sys.argv[1])\\" ${{_results_dir}}"
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+    )
+    written = out_file.read_text().strip()
+    assert written == str(results.resolve())
+
+
 # ---------------------------------------------------------------------------
 # post_run phase
 # ---------------------------------------------------------------------------

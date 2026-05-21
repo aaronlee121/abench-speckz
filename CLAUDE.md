@@ -134,21 +134,22 @@ results/
 Built-in synthetic variables (injected per-rep, not user-definable):
 - `${_envfile}` — absolute path to the current combo's env file. Available in `command`, `setup`, `teardown`, `post_run`, `output_file`, `setup_per_sweep`, and `teardown_per_sweep`. For per_sweep phases, resolves to the first entry's env file in the group.
 - `${_run_id}` — UUID for this rep (same value written to `runs.jsonl`). Available in `command`, `setup`, `teardown`, `post_run`, `setup_per_sweep`, and `teardown_per_sweep`. For per_sweep phases, a single UUID is generated per group and shared between `setup_per_sweep` and `teardown_per_sweep`.
+- `${_results_dir}` — absolute path to the results directory. Available in `command`, `setup`, `teardown`, `post_run`, `output_file`, `setup_per_sweep`, `teardown_per_sweep`, `combo_probes`, and all `monitor` spans.
 - `${_exit_code}`, `${_started_at}`, `${_finished_at}`, `${_duration_ms}` — benchmark result fields. Available in `post_run` only (result isn't known earlier).
 
 Variable names starting with `_` are reserved and rejected in spec YAML.
 
 **`post_run`** steps run after `teardown` completes, always — including when the benchmark exits non-zero. The extra synthetic vars let scripts collect time-windowed metrics from external systems (Prometheus, InfluxDB, etc.) keyed to the exact run. `post_run` failure is folded into `failure_reason` but does not suppress the benchmark result. Step records are stored in `raw/{run_id}.json` under `"post_run"`.
 
-**`combo_probes`** runs each command template once per unique config hash (before the first rep for that hash). Commands interpolate combo vars (`${var}`, `${_envfile}`, `${env:VAR}`). Trimmed stdout is the value; non-zero exit, missing command, timeout, or interpolation error stores `null` — probes never abort a sweep. Results are written to `combo_probes.json` (keyed by config hash) and embedded in every `runs.jsonl` row under `"combo_probes"`. Useful for capturing system or service state that varies per combo (e.g. effective DB config, kernel parameters after per-sweep setup).
+**`combo_probes`** runs each command template once per unique config hash (before the first rep for that hash). Commands interpolate combo vars (`${var}`, `${_envfile}`, `${_results_dir}`, `${env:VAR}`). Trimmed stdout is the value; non-zero exit, missing command, timeout, or interpolation error stores `null` — probes never abort a sweep. Results are written to `combo_probes.json` (keyed by config hash) and embedded in every `runs.jsonl` row under `"combo_probes"`. Useful for capturing system or service state that varies per combo (e.g. effective DB config, kernel parameters after per-sweep setup).
 
 **`monitor`** is a list of background-process definitions. Each entry is either a plain string (command template) or an object with `command` and an optional `span` field. The `span` controls how long the monitor lives:
 
 | `span` | Lifetime | Variables available |
 |---|---|---|
-| `per_rep` (default) | After `setup`, until benchmark finishes | Full combo vars + `${_run_id}`, `${_envfile}`, `${env:VAR}` |
-| `per_group` | After `setup_per_sweep`, until before `teardown_per_sweep` (spans all reps of a group) | Group phase vars: all per_sweep_var values + `${_run_id}`, `${_envfile}`, `${env:VAR}` |
-| `per_sweep` | After sweep init, until all groups finish | `${_run_id}` (sweep-level UUID) + `${env:VAR}` |
+| `per_rep` (default) | After `setup`, until benchmark finishes | Full combo vars + `${_run_id}`, `${_envfile}`, `${_results_dir}`, `${env:VAR}` |
+| `per_group` | After `setup_per_sweep`, until before `teardown_per_sweep` (spans all reps of a group) | Group phase vars: all per_sweep_var values + `${_run_id}`, `${_envfile}`, `${_results_dir}`, `${env:VAR}` |
+| `per_sweep` | After sweep init, until all groups finish | `${_run_id}` (sweep-level UUID) + `${_results_dir}`, `${env:VAR}` |
 
 Each process receives SIGTERM when its span ends; SIGKILL follows after 5 seconds if it has not exited. A monitor that fails to start is recorded but never aborts the run.
 
@@ -175,4 +176,4 @@ per_sweep_var: "!concurrency"           # one group per unique combo of all vars
 per_sweep_var: [backend, "!concurrency"] # include backend explicitly, exclude concurrency
 ```
 
-`setup_per_sweep` / `teardown_per_sweep` steps may only reference variables listed in `per_sweep_var` (after negation expansion), plus `${_envfile}`, `${_run_id}`, and `${env:VAR}`. The group slug in raw file names joins all group variable values with `-`.
+`setup_per_sweep` / `teardown_per_sweep` steps may only reference variables listed in `per_sweep_var` (after negation expansion), plus `${_envfile}`, `${_run_id}`, `${_results_dir}`, and `${env:VAR}`. The group slug in raw file names joins all group variable values with `-`.

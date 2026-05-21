@@ -40,7 +40,12 @@ def execute_one_rep(
         tags.append("warmup")
 
     env_file = manifest_dir / entry["filename"]
-    combo_vars = {**entry["vars"], "_envfile": str(env_file.resolve()), "_run_id": run_id}
+    combo_vars = {
+        **entry["vars"],
+        "_envfile": str(env_file.resolve()),
+        "_run_id": run_id,
+        "_results_dir": str(results_dir.resolve()),
+    }
 
     try:
         cmd = interpolate.resolve_string(tool.command, combo_vars, env=os.environ)

@@ -83,7 +83,7 @@ def execute_sweep(
     groups = group_work(work, per_sweep_vars)
 
     if dry_run:
-        _dry_run_preview(groups, tool, per_sweep_vars, progress_stream, manifest_dir)
+        _dry_run_preview(groups, tool, per_sweep_vars, progress_stream, manifest_dir, results_dir)
         return _empty_summary()
 
     with store.lock_results_dir(results_dir):
@@ -98,7 +98,9 @@ def execute_sweep(
         if per_sweep_cmds:
             sweep_run_id = str(uuid.uuid4())
             sweep_monitor_procs, sweep_monitor_start_records = run_monitors(
-                per_sweep_cmds, {"_run_id": sweep_run_id}, dict(os.environ)
+                per_sweep_cmds,
+                {"_run_id": sweep_run_id, "_results_dir": str(results_dir.resolve())},
+                dict(os.environ),
             )
 
         try:
@@ -185,6 +187,7 @@ def _run_groups(
             **(dict(zip(per_sweep_vars, group_key)) if per_sweep_vars else {}),
             "_run_id": str(uuid.uuid4()),
             "_envfile": str(first_env_file.resolve()),
+            "_results_dir": str(results_dir.resolve()),
         }
 
         runnable_idx = [
@@ -361,7 +364,7 @@ def _maybe_collect_combo_probes(
     if not tool.combo_probes or ch in probed_hashes:
         return
     env_file = manifest_dir / entry["filename"]
-    probe_vars = {**entry["vars"], "_envfile": str(env_file.resolve())}
+    probe_vars = {**entry["vars"], "_envfile": str(env_file.resolve()), "_results_dir": str(results_dir.resolve())}
     probe_env = (
         {**os.environ, **load_envfile(env_file)}
         if env_file.exists()
@@ -456,6 +459,7 @@ def _dry_run_preview(
     per_sweep_vars: list[str] | None,
     stream,
     manifest_dir: Path,
+    results_dir: Path | None = None,
 ) -> None:
     for group_key, items in groups:
         first_env_file = manifest_dir / items[0][0]["filename"]
@@ -463,6 +467,7 @@ def _dry_run_preview(
             **(dict(zip(per_sweep_vars, group_key)) if per_sweep_vars else {}),
             "_run_id": str(uuid.uuid4()),
             "_envfile": str(first_env_file.resolve()),
+            "_results_dir": str(results_dir.resolve()) if results_dir else "<results_dir>",
         }
         label = (
             ", " + ", ".join(f"{v}={group_key[i]}" for i, v in enumerate(per_sweep_vars))
