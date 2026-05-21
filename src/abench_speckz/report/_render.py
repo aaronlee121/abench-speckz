@@ -123,6 +123,9 @@ def generate_plots_html(
     pretty_map: dict,
     *,
     run_reports_mode: str = "embedded",
+    where: list[str] | None = None,
+    require_tags: list[str] | None = None,
+    exclude_tags: list[str] | None = None,
 ) -> None:
     """Render a PlotsDoc (declarative plots ± editorial sections) to HTML."""
     from abench_speckz import query
@@ -136,7 +139,15 @@ def generate_plots_html(
 
     artifacts_by_id: dict[str, dict] = {}
     for plot in doc.plots:
-        art = build_plot_artifacts(plot, all_vars, results_dir, pretty_map)
+        art = build_plot_artifacts(
+            plot,
+            all_vars,
+            results_dir,
+            pretty_map,
+            where=where,
+            require_tags=require_tags,
+            exclude_tags=exclude_tags,
+        )
         if art is not None:
             artifacts_by_id[plot.id] = art
 

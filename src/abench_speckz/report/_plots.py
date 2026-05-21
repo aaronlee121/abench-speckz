@@ -81,7 +81,16 @@ def _apply_y_exprs(
     return result
 
 
-def build_plot_artifacts(plot, all_vars: list[str], results_dir: Path, pretty_map: dict):
+def build_plot_artifacts(
+    plot,
+    all_vars: list[str],
+    results_dir: Path,
+    pretty_map: dict,
+    *,
+    where: list[str] | None = None,
+    require_tags: list[str] | None = None,
+    exclude_tags: list[str] | None = None,
+):
     """Compute everything needed to render a plot, independent of where it lands in the page.
 
     Returns ``None`` for unknown plot types so the caller can skip them.
@@ -102,7 +111,14 @@ def build_plot_artifacts(plot, all_vars: list[str], results_dir: Path, pretty_ma
             group_by = [plot.x] + gb_keys
         metrics, y_expr_map = _resolve_y_axes(plot.y, all_vars_set)
 
-    rows = query.compute_rows(results_dir, group_by=group_by, metrics=metrics)
+    rows = query.compute_rows(
+        results_dir,
+        group_by=group_by,
+        metrics=metrics,
+        where=where,
+        require_tags=require_tags,
+        exclude_tags=exclude_tags,
+    )
     if y_expr_map:
         rows = _apply_y_exprs(rows, y_expr_map, all_vars_set)
     static_vars, varying_keys = split_group_by_vars(rows, gb_keys)

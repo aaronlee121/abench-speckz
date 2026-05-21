@@ -122,7 +122,16 @@ def stats(
         else:
             doc = _plots.discover_from_tool_snapshots(results_dir)
         if doc.plots or doc.sections:
-            _report.generate_plots_html(results_dir, doc, report, pm, run_reports_mode=run_reports_mode)
+            _report.generate_plots_html(
+                results_dir,
+                doc,
+                report,
+                pm,
+                run_reports_mode=run_reports_mode,
+                where=where,
+                require_tags=require_tags,
+                exclude_tags=exclude_tags,
+            )
         else:
             _report.generate_html(
                 rows, report, group_by, pm, results_dir=results_dir, run_reports_mode=run_reports_mode

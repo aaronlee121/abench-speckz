@@ -1062,3 +1062,63 @@ def test_series_label_line_chart(tmp_path):
     query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
     html = report_path.read_text()
     assert "postgres db" in html
+
+
+# ---------------------------------------------------------------------------
+# Filters passed to plots (--where / --filter-tag / --filter-exclude-tag)
+# ---------------------------------------------------------------------------
+
+
+def test_where_filter_applied_to_plots(tmp_path):
+    """--where filters must exclude data from plot charts, not just the table output."""
+    _seed(tmp_path)  # seeds read/write workloads, both with rps 1000/800
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n")
+    report_path = tmp_path / "r.html"
+    query.stats(
+        tmp_path,
+        where=["workload=read"],
+        report=report_path,
+        plots=plots_path,
+        out=io.StringIO(),
+    )
+    html = report_path.read_text()
+    # Only "read" data should be in the plot; "write" value 800 should be absent
+    assert "1000" in html
+    assert "800" not in html
+
+
+def test_filter_tag_applied_to_plots(tmp_path):
+    """--filter-tag must exclude untagged combos from plot charts."""
+    store.init_results_dir(tmp_path)
+    combos = [
+        ("h1", {"workload": "read"}, ["slow"], {"rps": 317.0}),
+        ("h2", {"workload": "write"}, ["fast"], {"rps": 999.0}),
+    ]
+    for hash_, vars_, tags, results in combos:
+        store.append_run(
+            tmp_path,
+            {
+                "run_id": f"{hash_}-0",
+                "config_hash": hash_,
+                "vars": vars_,
+                "tags": tags,
+                "exit_code": 0,
+                "results": results,
+                "failure_reason": None,
+            },
+        )
+        store.update_aggregates_for_hash(tmp_path, hash_)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n")
+    report_path = tmp_path / "r.html"
+    query.stats(
+        tmp_path,
+        require_tags=["fast"],
+        report=report_path,
+        plots=plots_path,
+        out=io.StringIO(),
+    )
+    html = report_path.read_text()
+    assert "999" in html
+    assert "317" not in html
