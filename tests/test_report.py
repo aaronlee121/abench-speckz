@@ -1122,3 +1122,72 @@ def test_filter_tag_applied_to_plots(tmp_path):
     html = report_path.read_text()
     assert "999" in html
     assert "317" not in html
+
+
+# ---------------------------------------------------------------------------
+# theme config in reports
+# ---------------------------------------------------------------------------
+
+
+def test_theme_switcher_off_by_default(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n")
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert 'class="toolbar"' not in html
+    assert "_toggleDark" not in html
+    assert "_setTheme" not in html
+
+
+def test_theme_switcher_on_renders_toolbar(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "theme:\n  switcher: true\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert 'class="toolbar"' in html
+    assert "_toggleDark" in html
+    assert "_setTheme" in html
+
+
+def test_theme_palette_applied(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "theme:\n  palette: vivid\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "_currentTheme = 'vivid'" in html
+
+
+def test_theme_dark_mode_false_sets_light(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "theme:\n  dark_mode: false\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "var _darkMode = false" in html
+    assert "data-theme', 'light'" in html
+
+
+def test_theme_dark_mode_true_sets_dark(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "theme:\n  dark_mode: true\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "var _darkMode = true" in html
+    assert "data-theme', 'dark'" in html

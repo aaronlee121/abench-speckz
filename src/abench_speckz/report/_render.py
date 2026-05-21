@@ -164,7 +164,14 @@ def generate_plots_html(
     )
 
     title = doc.report_title or "abench_speckz report"
-    output_path.write_text(html_shell(sections, scripts, title=title))
+    output_path.write_text(html_shell(
+        sections,
+        scripts,
+        title=title,
+        palette=doc.theme.palette,
+        dark_mode=doc.theme.dark_mode,
+        switcher=doc.theme.switcher,
+    ))
 
 
 def _group_rows_by_metric(rows: list[dict[str, Any]]) -> dict[str, list[dict]]:

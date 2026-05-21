@@ -368,3 +368,83 @@ def test_series_label_non_string_rejected(tmp_path):
     p.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  series_label: 42\n")
     with pytest.raises(RunError, match="series_label must be a string"):
         plots.load_plots_file(p)
+
+
+# ---------------------------------------------------------------------------
+# theme config
+# ---------------------------------------------------------------------------
+
+
+def test_theme_defaults(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text("plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n")
+    doc = plots.load_plots_file(p)
+    assert doc.theme.palette == "tableau"
+    assert doc.theme.dark_mode == "auto"
+    assert doc.theme.switcher is False
+
+
+def test_theme_explicit_palette(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        "theme:\n  palette: vivid\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+    )
+    doc = plots.load_plots_file(p)
+    assert doc.theme.palette == "vivid"
+
+
+def test_theme_dark_mode_true(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        "theme:\n  dark_mode: true\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+    )
+    doc = plots.load_plots_file(p)
+    assert doc.theme.dark_mode is True
+
+
+def test_theme_dark_mode_false(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        "theme:\n  dark_mode: false\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+    )
+    doc = plots.load_plots_file(p)
+    assert doc.theme.dark_mode is False
+
+
+def test_theme_switcher_true(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        "theme:\n  switcher: true\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+    )
+    doc = plots.load_plots_file(p)
+    assert doc.theme.switcher is True
+
+
+def test_theme_invalid_palette_rejected(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text("theme:\n  palette: neon\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n")
+    with pytest.raises(RunError, match="theme.palette"):
+        plots.load_plots_file(p)
+
+
+def test_theme_invalid_dark_mode_rejected(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text(
+        "theme:\n  dark_mode: maybe\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+    )
+    with pytest.raises(RunError, match="theme.dark_mode"):
+        plots.load_plots_file(p)
+
+
+def test_theme_unknown_field_rejected(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text("theme:\n  bogus: x\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n")
+    with pytest.raises(RunError, match="theme: unknown fields"):
+        plots.load_plots_file(p)
+
+
+def test_theme_not_dict_rejected(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text("theme: vivid\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n")
+    with pytest.raises(RunError, match="theme must be a mapping"):
+        plots.load_plots_file(p)

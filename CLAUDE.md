@@ -61,6 +61,10 @@ Profiles overlay the base spec (variables, static, when, exclude are merged); `d
 - `report_title` — string used as the HTML `<title>` and H1.
 - `report_description` — Markdown rendered as a `.report-intro` block under the H1 (only when `sections` is present).
 - `sections` — list of editorial sections. When present, plots are no longer rendered automatically; instead each section's `blocks` reference plots by id. Plots not referenced by any block are silently omitted (lets you keep a plot library and use a subset).
+- `theme` — optional mapping controlling the visual theme of the report. All sub-fields are optional:
+  - `palette` — color palette name: `tableau` (default), `vivid`, `pastel`, `paired`, `muted`, `accessible`.
+  - `dark_mode` — `true` (always dark), `false` (always light), or `auto` (default — follows OS preference).
+  - `switcher` — `false` (default) hides the interactive theme toolbar; `true` shows a palette picker and dark-mode toggle in the report header. When the switcher is shown, `palette` and `dark_mode` serve as the initial defaults (overridable by the reader via localStorage).
 
 Each section entry has:
 - `title` (required) — H2 heading.

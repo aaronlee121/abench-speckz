@@ -115,60 +115,103 @@ _SLANT_SYNC_JS = """
   })();
 """
 
-# Injected in <head> before CSS to prevent flash of wrong theme.
-_ANTI_FOUC_JS = """(function(){
-  try {
-    var dm = localStorage.getItem('abench_dark');
-    var dark = dm === '1' || (dm === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    if (dark) document.documentElement.setAttribute('data-theme', 'dark');
-  } catch(e) {}
-})();"""
+def _anti_fouc_js(dark_mode: bool | str, switcher: bool) -> str:
+    """Return inline script that sets data-theme before CSS loads to prevent flash."""
+    if dark_mode is True:
+        return "(function(){ document.documentElement.setAttribute('data-theme', 'dark'); })();"
+    if dark_mode is False:
+        return "(function(){ document.documentElement.setAttribute('data-theme', 'light'); })();"
+    # "auto"
+    if switcher:
+        return (
+            "(function(){"
+            "try {"
+            "var dm = localStorage.getItem('abench_dark');"
+            "var dark = dm === '1' || (dm === null && window.matchMedia('(prefers-color-scheme: dark)').matches);"
+            "if (dark) document.documentElement.setAttribute('data-theme', 'dark');"
+            "} catch(e) {}"
+            "})();"
+        )
+    return (
+        "(function(){"
+        "if (window.matchMedia('(prefers-color-scheme: dark)').matches)"
+        " document.documentElement.setAttribute('data-theme', 'dark');"
+        "})();"
+    )
 
-# Theme-switching and chart-lifecycle helpers. _THEMES is injected inline before this block.
-_THEME_JS = """
-  var _currentTheme = (function() {
-    try { return localStorage.getItem('abench_theme') || 'tableau'; } catch(e) { return 'tableau'; }
-  })();
-  var _darkMode = (function() {
-    try {
-      var v = localStorage.getItem('abench_dark');
-      return v === '1' || (v === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    } catch(e) { return false; }
-  })();
+
+def _theme_js(palette: str, dark_mode: bool | str, switcher: bool) -> str:
+    """Return the chart-lifecycle + theme JS block."""
+    themes_json = json.dumps(THEMES)
+
+    if dark_mode is True:
+        dark_init = "  var _darkMode = true;"
+    elif dark_mode is False:
+        dark_init = "  var _darkMode = false;"
+    elif switcher:
+        dark_init = (
+            "  var _darkMode = (function() {\n"
+            "    try {\n"
+            "      var v = localStorage.getItem('abench_dark');\n"
+            "      return v === '1' || (v === null && window.matchMedia('(prefers-color-scheme: dark)').matches);\n"
+            "    } catch(e) { return false; }\n"
+            "  })();"
+        )
+    else:
+        dark_init = "  var _darkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;"
+
+    if switcher:
+        theme_init = (
+            "  var _currentTheme = (function() {\n"
+            f"    try {{ return localStorage.getItem('abench_theme') || '{palette}'; }} catch(e) {{ return '{palette}'; }}\n"
+            "  })();"
+        )
+    else:
+        theme_init = f"  var _currentTheme = '{palette}';"
+
+    core = f"""
+  var _THEMES = {themes_json};
+{theme_init}
+{dark_init}
   var _charts = [];
-  function _themeColor(idx) {
+  function _themeColor(idx) {{
     var p = _THEMES[_currentTheme] || _THEMES.tableau;
     return p[idx % p.length];
-  }
-  function _applyChartDefaults() {
-    if (_darkMode) {
+  }}
+  function _applyChartDefaults() {{
+    if (_darkMode) {{
       Chart.defaults.color = '#aaa';
       Chart.defaults.borderColor = 'rgba(255,255,255,0.12)';
-    } else {
+    }} else {{
       Chart.defaults.color = '#555';
       Chart.defaults.borderColor = 'rgba(0,0,0,0.1)';
-    }
-  }
-  function _resolveConfig(config) {
+    }}
+  }}
+  function _resolveConfig(config) {{
     var cfg = JSON.parse(JSON.stringify(config));
-    if (cfg.data && cfg.data.datasets) {
-      cfg.data.datasets.forEach(function(ds) {
-        if (typeof ds._colorIdx === 'number') {
+    if (cfg.data && cfg.data.datasets) {{
+      cfg.data.datasets.forEach(function(ds) {{
+        if (typeof ds._colorIdx === 'number') {{
           var c = _themeColor(ds._colorIdx);
           ds.backgroundColor = c;
           ds.borderColor = c;
           delete ds._colorIdx;
-        }
-      });
-    }
+        }}
+      }});
+    }}
     return cfg;
-  }
-  function _createChart(id, config) {
+  }}
+  function _createChart(id, config) {{
     _applyChartDefaults();
     var cfg = _resolveConfig(config);
     var chart = new Chart(document.getElementById(id), cfg);
-    _charts.push({id: id, config: config, chart: chart});
-  }
+    _charts.push({{id: id, config: config, chart: chart}});
+  }}"""
+
+    if not switcher:
+        return core
+
+    interactive = """
   function _updateSwatches() {
     document.querySelectorAll('[data-color-idx]').forEach(function(el) {
       el.style.background = _themeColor(parseInt(el.getAttribute('data-color-idx'), 10));
@@ -201,11 +244,11 @@ _THEME_JS = """
     _currentTheme = name;
     try { localStorage.setItem('abench_theme', name); } catch(e) {}
     _updateAll();
-  }
-"""
+  }"""
+    return core + interactive
 
 
-def _toolbar_html() -> str:
+def _toolbar_html(active_palette: str) -> str:
     swatch_btns = ""
     for tid, colors in THEMES.items():
         dots = "".join(
@@ -213,8 +256,9 @@ def _toolbar_html() -> str:
             for c in colors[:5]
         )
         label = _THEME_LABELS.get(tid, tid)
+        active_cls = ' class="swatch-btn active"' if tid == active_palette else ' class="swatch-btn"'
         swatch_btns += (
-            f'<button class="swatch-btn" data-theme-id="{tid}" '
+            f'<button{active_cls} data-theme-id="{tid}" '
             f'title="{label}" onclick="_setTheme(\'{tid}\')">{dots}</button>'
         )
     return (
@@ -226,13 +270,36 @@ def _toolbar_html() -> str:
     )
 
 
-def html_shell(sections: list[str], scripts: list[str], title: str = "abench_speckz report") -> str:
+def html_shell(
+    sections: list[str],
+    scripts: list[str],
+    title: str = "abench_speckz report",
+    *,
+    palette: str = "tableau",
+    dark_mode: bool | str = "auto",
+    switcher: bool = False,
+) -> str:
     """Render the full HTML document around pre-built section markup and Chart.js init scripts."""
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     body_sections = "".join(sections)
     chart_inits = "".join(scripts)
-    themes_json = json.dumps(THEMES)
-    toolbar = _toolbar_html()
+    anti_fouc = _anti_fouc_js(dark_mode, switcher)
+    theme_script = _theme_js(palette, dark_mode, switcher)
+    toolbar = _toolbar_html(palette) if switcher else ""
+
+    # Apply swatch colors once on load (interactive mode re-applies on theme change).
+    # In static mode we still need to paint the legend dot swatches.
+    if switcher:
+        post_init = "  _updateToolbar();\n  _updateSwatches();\n"
+    else:
+        post_init = (
+            "  document.documentElement.setAttribute('data-theme', _darkMode ? 'dark' : 'light');\n"
+            "  document.querySelectorAll('[data-color-idx]').forEach(function(el) {\n"
+            "    el.style.background = _themeColor(parseInt(el.getAttribute('data-color-idx'), 10));\n"
+            "  });\n"
+        )
+
+    toolbar_html = f"  {toolbar}\n" if toolbar else ""
     return (
         f"<!DOCTYPE html>\n"
         f'<html lang="en">\n'
@@ -240,21 +307,19 @@ def html_shell(sections: list[str], scripts: list[str], title: str = "abench_spe
         f'  <meta charset="utf-8">\n'
         f'  <meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"  <title>{title}</title>\n"
-        f"  <script>{_ANTI_FOUC_JS}</script>\n"
+        f"  <script>{anti_fouc}</script>\n"
         f'  <script src="{CHART_JS_CDN}"></script>\n'
         f"  <style>{_CSS}  </style>\n"
         f"</head>\n"
         f"<body>\n"
         f"  <h1>{title}</h1>\n"
         f'  <p class="meta">Generated: {timestamp}</p>\n'
-        f"  {toolbar}\n"
+        f"{toolbar_html}"
         f"{body_sections}\n"
         f"  <script>\n"
-        f"  var _THEMES = {themes_json};\n"
-        f"{_THEME_JS}\n"
+        f"{theme_script}\n"
         f"{chart_inits}\n"
-        f"  _updateToolbar();\n"
-        f"  _updateSwatches();\n"
+        f"{post_init}"
         f"  </script>\n"
         f"  <script>{_SLANT_SYNC_JS}  </script>\n"
         f"</body>\n"

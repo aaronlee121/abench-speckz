@@ -11,6 +11,8 @@ from abench_speckz.model import RunError
 
 ALLOWED_TYPES = {"bar", "stacked-bar", "line", "scatter"}
 BLOCK_KINDS = ("text", "plot_id", "html", "include_html")
+ALLOWED_PALETTES = {"tableau", "vivid", "pastel", "paired", "muted", "accessible"}
+ALLOWED_DARK_MODES = {True, False, "auto"}
 
 
 @dataclass
@@ -41,11 +43,45 @@ class Section:
 
 
 @dataclass
+class ThemeConfig:
+    palette: str = "tableau"
+    dark_mode: bool | str = "auto"  # True, False, or "auto"
+    switcher: bool = False
+
+
+@dataclass
 class PlotsDoc:
     plots: list[PlotSpec] = field(default_factory=list)
     sections: list[Section] = field(default_factory=list)
     report_title: str | None = None
     report_description: str | None = None
+    theme: ThemeConfig = field(default_factory=ThemeConfig)
+
+
+def parse_theme(raw: Any, source: str) -> ThemeConfig:
+    if raw is None:
+        return ThemeConfig()
+    if not isinstance(raw, dict):
+        raise RunError(f"{source}: theme must be a mapping")
+
+    palette = raw.get("palette", "tableau")
+    if palette not in ALLOWED_PALETTES:
+        raise RunError(f"{source}: theme.palette must be one of {sorted(ALLOWED_PALETTES)}, got {palette!r}")
+
+    dark_mode_raw = raw.get("dark_mode", "auto")
+    if dark_mode_raw not in ALLOWED_DARK_MODES:
+        raise RunError(f"{source}: theme.dark_mode must be true, false, or 'auto', got {dark_mode_raw!r}")
+    dark_mode: bool | str = dark_mode_raw
+
+    switcher = raw.get("switcher", False)
+    if not isinstance(switcher, bool):
+        raise RunError(f"{source}: theme.switcher must be a boolean")
+
+    unknown = set(raw) - {"palette", "dark_mode", "switcher"}
+    if unknown:
+        raise RunError(f"{source}: theme: unknown fields {sorted(unknown)}")
+
+    return ThemeConfig(palette=palette, dark_mode=dark_mode, switcher=switcher)
 
 
 def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
@@ -266,6 +302,7 @@ def _build_doc(raw: Any, *, source: str, base_dir: Path) -> PlotsDoc:
     if report_description is not None and not isinstance(report_description, str):
         raise RunError(f"{source}: report_description must be a string")
 
+    theme = parse_theme(raw.get("theme"), source=source)
     plots_specs = parse_plots(raw.get("plots"), source=source)
     plot_ids = {p.id for p in plots_specs}
     sections = parse_sections(
@@ -280,6 +317,7 @@ def _build_doc(raw: Any, *, source: str, base_dir: Path) -> PlotsDoc:
         sections=sections,
         report_title=report_title,
         report_description=report_description,
+        theme=theme,
     )
 
 
@@ -293,6 +331,7 @@ def discover_from_tool_snapshots(results_dir: Path) -> PlotsDoc:
     merged_sections: list[Section] = []
     report_title: str | None = None
     report_description: str | None = None
+    theme: ThemeConfig | None = None
 
     for tool_yaml in sorted(tools_dir.glob("*.yaml")):
         raw = yaml.safe_load(tool_yaml.read_text())
@@ -302,6 +341,8 @@ def discover_from_tool_snapshots(results_dir: Path) -> PlotsDoc:
             report_title = raw.get("report_title") or None
         if report_description is None:
             report_description = raw.get("report_description") or None
+        if theme is None and "theme" in raw:
+            theme = parse_theme(raw.get("theme"), source=str(tool_yaml))
 
         for spec in parse_plots(raw.get("plots"), source=str(tool_yaml)):
             if spec.id in seen_ids:
@@ -323,4 +364,5 @@ def discover_from_tool_snapshots(results_dir: Path) -> PlotsDoc:
         sections=merged_sections,
         report_title=report_title,
         report_description=report_description,
+        theme=theme or ThemeConfig(),
     )
