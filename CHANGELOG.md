@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-05-20
+
+### Added
+
+- `${_results_dir}` synthetic variable — resolves to the absolute path of the results directory. Available in `command`, `setup`, `teardown`, `post_run`, `output_file`, `setup_per_sweep`, `teardown_per_sweep`, `combo_probes`, and all `monitor` spans.
+
+### Fixed
+
+- `--where`, `--filter-tag`, and `--filter-exclude-tag` filters passed to `stats --report` now correctly apply to plot chart data. Previously the filters were applied to the tabular output only; charts always showed the full unfiltered dataset.
+
 ## [0.4.7] - 2026-05-19
 
 ### Added
