@@ -238,6 +238,146 @@ Further publication-/presentation-grade ideas, roughly in priority order:
   flagging, warmup-vs-measured visibility.
 - **Env drill-down** — render captured `env_probes` / `combo_probes` inline so a
   chart is traceable to the machine state that produced it.
-- **KPI scorecard blocks** — big-number cards with delta arrows; a new block
-  kind alongside `text` / `plot_id`.
 - **Scatter error bars** — x and y whiskers; a follow-up to feature 1.
+
+(KPI scorecard blocks are now specified — see "Executive-level features"
+below.)
+
+---
+
+## 3. Executive-level features
+
+Three features aimed at presentation-grade output for non-developer audiences:
+KPI scorecard blocks, auto-generated headline callouts, and speedup-normalized
+charts. Implemented as a 4-phase plan.
+
+### Foundation observations
+
+- The editorial system (`plots.py` → `Section` / `Block` →
+  `_render.py::_render_sectioned`) is the natural host for KPI cards and
+  headlines — both are new **block kinds**.
+- Today `Block` is `kind: str` + `value: str`, and
+  `BLOCK_KINDS = ("text", "plot_id", "html", "include_html")`. KPI / headline
+  blocks carry *structured* config, not a string — the model needs a small
+  extension (add an optional `data: Any = None` field).
+- All three features need the same primitive: "resolve a metric value for a
+  combo selection." Build it once (Phase 0).
+- `compare`-against-a-baseline-directory overlaps with the baseline-diff
+  feature above. To keep this work independent, v1 comparisons use a
+  within-results-dir `where` selector only; baseline-dir comparison lands with
+  baseline-diff.
+
+### Phase 0 — Shared value-selection helper
+
+New module `src/abench_speckz/report/_select.py`:
+
+```python
+def resolve_value(results_dir, metric, *, where=None, stat="mean") -> float | None
+def rank_by(results_dir, metric, variable, *, where=None, stat="mean") -> list[tuple[str, float]]
+```
+
+Thin wrappers over `query.compute_rows` — `resolve_value` picks one metric
+value under an optional combo filter; `rank_by` returns `(var_value, metric)`
+pairs sorted by the metric. Foundation for all three phases.
+
+- Files: `report/_select.py` *(new)*, tests.
+- Effort: ~0.5 day.
+
+### Phase 1 — KPI scorecard blocks
+
+Big-number cards: headline value, label, unit, optional delta arrow.
+
+New `kpi` block holding a list of card definitions:
+
+```yaml
+blocks:
+  - kpi:
+      - label: "Peak throughput"
+        metric: rps
+        stat: max                 # max|min|mean across matching combos
+        where: { workload: heavy } # optional combo filter
+        unit: "req/s"
+        precision: 0
+        compare: { where: { workload: light } }   # optional -> delta arrow
+```
+
+- **Model change** — extend `Block` with an optional structured payload
+  (`data: Any = None`); add `"kpi"` to `BLOCK_KINDS`; `_parse_block` gets a
+  branch validating the card list. `_interpolate_doc` leaves `kpi` blocks
+  untouched.
+- **Render** — new `report/_kpi.py` resolves each card via `_select`, computes
+  the delta, and emits a `.kpi-grid` of `.kpi-card` divs (big number, label,
+  unit, up/down arrow colored by `higher_is_better` read from the
+  `tools/*.yaml` snapshots). `_render_sectioned` gets a `kpi` branch. CSS in
+  `_html.py` (dark-mode-safe custom properties).
+- Files: `plots.py`, `report/_kpi.py` *(new)*, `report/_render.py`,
+  `report/_html.py`, tests, CLAUDE.md, CHANGELOG.md.
+- Effort: ~1.5 days.
+
+### Phase 2 — Headline callout blocks
+
+Deterministic auto-generated comparison sentences (no LLM — the tool runs
+offline).
+
+New `headline` block:
+
+```yaml
+blocks:
+  - headline:
+      metric: rps
+      compare: backend                 # variable whose values are ranked
+      where: { workload: heavy }        # optional narrowing
+      template: "{best} delivers {ratio}x the throughput of {worst}"
+```
+
+- **Engine** — uses `_select.rank_by`; computes `ratio = best/worst` and
+  `delta_pct`; fills tokens `{best}`, `{worst}`, `{best_value}`,
+  `{worst_value}`, `{ratio}`, `{delta_pct}` (values mapped through
+  `var_values` / `pretty_names`). Renders as a styled `.callout` banner.
+- Files: `plots.py` (`"headline"` block kind + parse),
+  `report/_headline.py` *(new)*, `report/_render.py`, `report/_html.py` (CSS),
+  tests, CLAUDE.md, CHANGELOG.md.
+- Effort: ~1 day.
+
+### Phase 3 — Speedup-normalized charts
+
+A new `normalize` field that pins one series to 1.0x and expresses the rest
+relative to it.
+
+New optional plot field:
+
+```yaml
+- id: speedup
+  type: bar
+  x: workload
+  y: rps
+  group_by: backend
+  normalize:
+    against: backend       # must be a group_by variable
+    reference: postgres    # the value pinned to 1.0x
+```
+
+- **Render** — post-process the indexed series in
+  `_charts.py::build_bar_or_line_config`: for each x value, divide every series
+  by the reference series' value at that x. y-axis label becomes "x speedup";
+  add a horizontal 1.0 reference line. Validate at YAML load that `against` is
+  in `group_by` and `reference` is non-empty.
+- Files: `plots.py` (parse/validate `normalize`), `report/_charts.py`,
+  `report/_plots.py` (pass-through), `report/_html.py` (reference-line plugin),
+  tests, CLAUDE.md, CHANGELOG.md.
+- Effort: ~1.5 days.
+
+### Sequencing & total
+
+Phase 0 -> 1 -> 2 -> 3. Phases 1-2 reuse Phase 0; Phase 3 is independent and
+can move earlier. Total ~4.5 days. Per phase: unit tests, a `dev/` preview
+entry, CLAUDE.md section, CHANGELOG entry.
+
+### Open decisions
+
+1. KPI `compare` — within-dir `where` only for v1 (recommended), or also
+   support `baseline: <dir>` now (couples to the baseline-diff feature).
+2. Headline `template` — fixed token set (recommended) vs. allowing arbitrary
+   `${var}` interpolation too.
+3. Normalize reference — within-dir reference combo only (recommended), or also
+   normalize against a baseline dir.
