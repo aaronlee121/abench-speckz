@@ -54,7 +54,9 @@ _CSS = """
     .legend-wrap { margin-bottom: 0.75rem; }
     .legend-wrap table { font-size: 0.8rem; }
     .legend-wrap th, .legend-wrap td { padding: 3px 8px; }
-    .fixed-vars { color: var(--text-dim); font-size: 0.85rem; margin: 0.25rem 0 0.5rem; }
+    details.fixed-vars { margin: 0.25rem 0 0.5rem; }
+    details.fixed-vars > summary { color: var(--text-dim); font-size: 0.85rem; }
+    .fixed-vars-body { padding: 0.4rem 0.75rem; color: var(--text-dim); font-size: 0.85rem; }
     h3.plot-title { font-size: 1rem; font-weight: 600; color: var(--text-2); margin: 0 0 0.75rem; }
     details { margin-bottom: 0.75rem; border: 1px solid var(--border-mid); border-radius: 8px; overflow: hidden; }
     summary { cursor: pointer; font-weight: 500; color: var(--text-2); padding: 0.4rem 0.75rem; background: var(--surface-2); user-select: none; list-style: none; display: flex; align-items: center; gap: 0.4rem; }
@@ -412,11 +414,17 @@ def fixed_vars_html(static_vars: dict[str, str], pretty_map: dict) -> str:
     """Render the ``Fixed: k = v, …`` block shown above plots where some group_by keys collapse."""
     if not static_vars:
         return ""
+    key_names = ", ".join(str(resolve_metric(pretty_map, k)) for k in static_vars)
     parts = ", ".join(
         f"<b>{resolve_metric(pretty_map, k)}</b>&nbsp;=&nbsp;{resolve_var_value(pretty_map, k, v)}"
         for k, v in static_vars.items()
     )
-    return f'<p class="fixed-vars">Fixed: {parts}</p>'
+    return (
+        f'<details class="fixed-vars">'
+        f"<summary>Fixed: {key_names}</summary>"
+        f'<div class="fixed-vars-body">{parts}</div>'
+        f"</details>"
+    )
 
 
 def legend_table_html(
