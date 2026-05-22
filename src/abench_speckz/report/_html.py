@@ -87,6 +87,17 @@ _CSS = """
     .rotated-slant thead th::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: var(--border-2); transform: rotate(10deg); transform-origin: bottom center; z-index: 1; }
     .rotated-slant thead th:last-child::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 1px; background: var(--border-2); transform: rotate(10deg); transform-origin: bottom center; z-index: 1; }
     .rotated-slant th.rotated-header span { writing-mode: vertical-rl; transform: rotate(190deg); display: inline-block; }
+    .kpi-grid { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0 1.5rem; }
+    .kpi-card { min-width: 160px; padding: 1.25rem 1.5rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; gap: 0.25rem; }
+    .kpi-value { font-size: 2rem; font-weight: 700; color: var(--text); line-height: 1.1; }
+    .kpi-unit { font-size: 1rem; font-weight: 400; color: var(--text-muted); margin-left: 0.2em; }
+    .kpi-label { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.1rem; }
+    .kpi-delta { font-size: 0.875rem; font-weight: 600; }
+    .kpi-delta-good { color: #2d8a4e; }
+    .kpi-delta-bad { color: #c0392b; }
+    [data-theme="dark"] .kpi-delta-good { color: #4ec97b; }
+    [data-theme="dark"] .kpi-delta-bad { color: #e57373; }
+    .callout { margin: 1rem 0; padding: 1rem 1.25rem; background: var(--surface-2); border-left: 4px solid var(--border-2); border-radius: 0 8px 8px 0; font-size: 1.05rem; color: var(--text-2); }
     .toolbar { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; padding: 0.5rem 0.75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
     .toolbar-label { font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; }
     .swatch-group { display: flex; gap: 0.375rem; align-items: center; flex-wrap: wrap; }
@@ -178,6 +189,28 @@ def _theme_js(palette: str, dark_mode: bool | str, switcher: bool) -> str:
   var _THEMES = {themes_json};
 {theme_init}
 {dark_init}
+  var _refLinePlugin = {{
+    id: 'abenchRefLine',
+    afterDatasetsDraw: function(chart) {{
+      var yVal = chart.options.plugins && chart.options.plugins.abenchRefLine && chart.options.plugins.abenchRefLine.y;
+      if (yVal == null) return;
+      var yScale = chart.scales.y;
+      if (!yScale) return;
+      var ctx = chart.ctx;
+      var y = yScale.getPixelForValue(yVal);
+      ctx.save();
+      ctx.strokeStyle = _darkMode ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.25)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(chart.chartArea.left, y);
+      ctx.lineTo(chart.chartArea.right, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }}
+  }};
+  Chart.register(_refLinePlugin);
   var _charts = [];
   function _themeColor(idx) {{
     var p = _THEMES[_currentTheme] || _THEMES.tableau;

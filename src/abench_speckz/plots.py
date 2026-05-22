@@ -10,9 +10,40 @@ from abench_speckz.expr import is_expr, validate_expr_syntax
 from abench_speckz.model import RunError
 
 ALLOWED_TYPES = {"bar", "stacked-bar", "line", "scatter"}
-BLOCK_KINDS = ("text", "plot_id", "html", "include_html")
+BLOCK_KINDS = ("text", "plot_id", "html", "include_html", "kpi", "headline")
 ALLOWED_PALETTES = {"tableau", "vivid", "pastel", "paired", "muted", "accessible"}
 ALLOWED_DARK_MODES = {True, False, "auto"}
+_KPI_STATS = {"max", "min", "mean"}
+
+
+@dataclass
+class NormalizeSpec:
+    against: str   # group_by variable whose reference value pins to 1.0×
+    reference: str  # the variable value that becomes the denominator
+
+
+@dataclass
+class KpiCompare:
+    where: list[str] = field(default_factory=list)  # "k=v" filter expressions
+
+
+@dataclass
+class KpiCard:
+    label: str
+    metric: str
+    stat: str = "mean"                   # max | min | mean across matching combos
+    where: list[str] = field(default_factory=list)
+    unit: str = ""
+    precision: int = 2
+    compare: KpiCompare | None = None
+
+
+@dataclass
+class HeadlineDef:
+    metric: str
+    compare: str                          # variable whose values are ranked
+    template: str
+    where: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -29,12 +60,14 @@ class PlotSpec:
     data_table: bool = True
     x_title: str | None = None
     y_title: str | None = None
+    normalize: NormalizeSpec | None = None
 
 
 @dataclass
 class Block:
     kind: str  # one of BLOCK_KINDS
-    value: str  # markdown source (text), plot id (plot_id), or final HTML (html/include_html)
+    value: str  # markdown/html/plot_id text; empty for structured blocks (kpi, headline)
+    data: Any = None  # structured payload for kpi (list[KpiCard]) / headline (HeadlineDef)
 
 
 @dataclass
@@ -194,11 +227,30 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
             raise RunError(f"{source}: plot {plot_id!r}: y_title must be a string")
         y_title = y_title_raw or None
 
-        unknown = set(item) - {"id", "type", "x", "y", "title", "group_by", "smooth", "fixed_vars", "series_label", "data_table", "x_title", "y_title"}
+        normalize_raw = item.get("normalize")
+        if normalize_raw is None:
+            normalize: NormalizeSpec | None = None
+        else:
+            if ptype in ("scatter", "stacked-bar"):
+                raise RunError(f"{source}: plot {plot_id!r}: normalize is not allowed on {ptype!r} plots")
+            if not isinstance(normalize_raw, dict):
+                raise RunError(f"{source}: plot {plot_id!r}: normalize must be a mapping")
+            against = normalize_raw.get("against")
+            reference = normalize_raw.get("reference")
+            if not isinstance(against, str) or not against:
+                raise RunError(f"{source}: plot {plot_id!r}: normalize.against must be a non-empty string")
+            if reference is None or str(reference) == "":
+                raise RunError(f"{source}: plot {plot_id!r}: normalize.reference must be a non-empty value")
+            unknown_norm = set(normalize_raw) - {"against", "reference"}
+            if unknown_norm:
+                raise RunError(f"{source}: plot {plot_id!r}: normalize: unknown fields {sorted(unknown_norm)}")
+            normalize = NormalizeSpec(against=str(against), reference=str(reference))
+
+        unknown = set(item) - {"id", "type", "x", "y", "title", "group_by", "smooth", "fixed_vars", "series_label", "data_table", "x_title", "y_title", "normalize"}
         if unknown:
             raise RunError(f"{source}: plot {plot_id!r}: unknown fields {sorted(unknown)}")
 
-        out.append(PlotSpec(id=plot_id, type=ptype, x=x, y=y, title=title, group_by=group_by, smooth=smooth, fixed_vars=fixed_vars, series_label=series_label, data_table=data_table, x_title=x_title, y_title=y_title))
+        out.append(PlotSpec(id=plot_id, type=ptype, x=x, y=y, title=title, group_by=group_by, smooth=smooth, fixed_vars=fixed_vars, series_label=series_label, data_table=data_table, x_title=x_title, y_title=y_title, normalize=normalize))
     return out
 
 
@@ -246,6 +298,87 @@ def parse_sections(
     return out
 
 
+def _where_dict_to_list(raw: Any, *, source: str, ctx: str) -> list[str]:
+    """Convert a YAML where-dict {k: v, ...} to ["k=v", ...] filter strings."""
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        raise RunError(f"{source}: {ctx}: where must be a mapping")
+    return [f"{k}={v}" for k, v in raw.items()]
+
+
+def _parse_kpi_card(item: Any, index: int, *, source: str, ctx: str) -> KpiCard:
+    loc = f"{ctx} kpi[{index}]"
+    if not isinstance(item, dict):
+        raise RunError(f"{source}: {loc} must be a mapping")
+
+    label = item.get("label")
+    if not isinstance(label, str) or not label:
+        raise RunError(f"{source}: {loc}: label must be a non-empty string")
+
+    metric = item.get("metric")
+    if not isinstance(metric, str) or not metric:
+        raise RunError(f"{source}: {loc}: metric must be a non-empty string")
+
+    stat = item.get("stat", "mean")
+    if stat not in _KPI_STATS:
+        raise RunError(f"{source}: {loc}: stat must be one of {sorted(_KPI_STATS)}, got {stat!r}")
+
+    where = _where_dict_to_list(item.get("where"), source=source, ctx=loc)
+
+    unit = item.get("unit", "")
+    if not isinstance(unit, str):
+        raise RunError(f"{source}: {loc}: unit must be a string")
+
+    precision_raw = item.get("precision", 2)
+    if not isinstance(precision_raw, int) or isinstance(precision_raw, bool) or precision_raw < 0:
+        raise RunError(f"{source}: {loc}: precision must be a non-negative integer")
+    precision = precision_raw
+
+    compare_raw = item.get("compare")
+    if compare_raw is None:
+        compare = None
+    else:
+        if not isinstance(compare_raw, dict):
+            raise RunError(f"{source}: {loc}: compare must be a mapping")
+        cmp_where = _where_dict_to_list(compare_raw.get("where"), source=source, ctx=f"{loc} compare")
+        unknown_cmp = set(compare_raw) - {"where"}
+        if unknown_cmp:
+            raise RunError(f"{source}: {loc}: compare: unknown fields {sorted(unknown_cmp)}")
+        compare = KpiCompare(where=cmp_where)
+
+    unknown = set(item) - {"label", "metric", "stat", "where", "unit", "precision", "compare"}
+    if unknown:
+        raise RunError(f"{source}: {loc}: unknown fields {sorted(unknown)}")
+
+    return KpiCard(label=label, metric=metric, stat=stat, where=where, unit=unit, precision=precision, compare=compare)
+
+
+def _parse_headline(item: Any, *, source: str, ctx: str) -> HeadlineDef:
+    if not isinstance(item, dict):
+        raise RunError(f"{source}: {ctx}: headline must be a mapping")
+
+    metric = item.get("metric")
+    if not isinstance(metric, str) or not metric:
+        raise RunError(f"{source}: {ctx}: headline.metric must be a non-empty string")
+
+    compare = item.get("compare")
+    if not isinstance(compare, str) or not compare:
+        raise RunError(f"{source}: {ctx}: headline.compare must be a non-empty string (variable name)")
+
+    template = item.get("template", "{best} is {ratio} ahead of {worst}")
+    if not isinstance(template, str):
+        raise RunError(f"{source}: {ctx}: headline.template must be a string")
+
+    where = _where_dict_to_list(item.get("where"), source=source, ctx=ctx)
+
+    unknown = set(item) - {"metric", "compare", "template", "where"}
+    if unknown:
+        raise RunError(f"{source}: {ctx}: headline: unknown fields {sorted(unknown)}")
+
+    return HeadlineDef(metric=metric, compare=compare, template=template, where=where)
+
+
 def _parse_block(
     item: Any,
     index: int,
@@ -270,6 +403,19 @@ def _parse_block(
         raise RunError(f"{source}: {where} unknown fields {sorted(unknown)}")
 
     kind = present[0]
+
+    if kind == "kpi":
+        cards_raw = item[kind]
+        if not isinstance(cards_raw, list):
+            raise RunError(f"{source}: {where}: kpi must be a list of card definitions")
+        cards = [_parse_kpi_card(c, j, source=source, ctx=where) for j, c in enumerate(cards_raw)]
+        return Block(kind=kind, value="", data=cards)
+
+    if kind == "headline":
+        headline_raw = item[kind]
+        headline = _parse_headline(headline_raw, source=source, ctx=where)
+        return Block(kind=kind, value="", data=headline)
+
     value = item[kind]
     if not isinstance(value, str) or not value:
         raise RunError(f"{source}: {where} {kind!r} must be a non-empty string")

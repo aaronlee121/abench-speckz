@@ -98,6 +98,45 @@ Example — scatter plot of throughput vs. latency tradeoff, one point per workl
   group_by: workload   # one labeled point per workload value
 ```
 
+**`normalize` plot field (bar/line only):** Pins one series to 1.0× and expresses all others relative to it. Requires `group_by` with the `against` variable. `reference` is the value pinned to 1.0×. Y-axis becomes "× speedup"; a dashed reference line at 1.0 is drawn by the `abenchRefLine` Chart.js plugin.
+
+```yaml
+- id: speedup
+  type: bar
+  x: workload
+  y: rps
+  group_by: backend
+  normalize:
+    against: backend       # must be in group_by
+    reference: postgres    # value pinned to 1.0×
+```
+
+**Executive-level block kinds (in `sections`):**
+
+`kpi` — Grid of big-number scorecard cards. Each card specifies a metric value to highlight, with optional delta comparison arrow. `stat` controls how the value is reduced across matching combos: `max`, `min`, or `mean` (default). `where` is a dict of variable filters. `compare.where` targets a second combo to show Δ%.
+
+```yaml
+- kpi:
+    - label: "Peak throughput"
+      metric: rps
+      stat: max
+      where: {workload: heavy}
+      unit: "req/s"
+      precision: 0
+      compare:
+        where: {workload: light}
+```
+
+`headline` — A deterministic auto-generated sentence comparing the best and worst values of a metric across a variable. Template tokens: `{best}`, `{worst}`, `{best_value}`, `{worst_value}`, `{ratio}`, `{delta_pct}`. Sort direction follows `higher_is_better` from `tools/*.yaml`.
+
+```yaml
+- headline:
+    metric: rps
+    compare: backend
+    where: {workload: heavy}
+    template: "{best} delivers {ratio} the throughput of {worst}"
+```
+
 Metric extraction (`extract.py`): reads stdout (or `output_file`) as JSON or JSONL, then applies JSONPath expressions from `capture`. A key ending in `[]` collects all matches as a list. Alternatively, `parser: "module:func"` calls an arbitrary Python function.
 
 ### 4. `rebuild-aggregates` — recompute aggregates

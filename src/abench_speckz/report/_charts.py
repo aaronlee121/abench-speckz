@@ -4,6 +4,7 @@ from typing import Any
 
 from abench_speckz import interpolate
 from abench_speckz.expr import eval_expr, extract_names, is_expr
+from abench_speckz.model import RunError
 from abench_speckz.report._html import color, resolve_metric, resolve_var_value, try_numeric_sort
 
 
@@ -108,6 +109,44 @@ def build_bar_or_line_config(
         "plugins": {"legend": {"position": "top"}},
         "scales": {"x": x_scale, "y": y_scale},
     }
+
+    normalize = getattr(plot, "normalize", None)
+    if normalize is not None and group_by:
+        if normalize.against not in group_by:
+            raise RunError(
+                f"plot {plot.id!r}: normalize.against {normalize.against!r} "
+                f"is not in the resolved group_by {group_by}"
+            )
+        against_idx = group_by.index(normalize.against)
+        ref_val = normalize.reference
+
+        # Build per-(metric, x) reference values
+        ref_lookup: dict[tuple[str, str], float] = {}
+        for metric, gb_tuple in series_keys:
+            if len(gb_tuple) > against_idx and gb_tuple[against_idx] == ref_val:
+                for x in x_values:
+                    v = indexed.get((x, metric, gb_tuple))
+                    if v is not None:
+                        ref_lookup[(metric, x)] = v
+
+        # Divide each dataset's data by its reference series' value
+        for ds, (metric, gb_tuple) in zip(datasets, series_keys):
+            new_data: list[float | None] = []
+            for j, x in enumerate(x_values):
+                orig = ds["data"][j]
+                ref = ref_lookup.get((metric, x))
+                if orig is not None and ref is not None and ref != 0.0:
+                    new_data.append(orig / ref)
+                else:
+                    new_data.append(None)
+            ds["data"] = new_data
+
+        # Update y-axis to show "× speedup" unless caller already set a custom title
+        if not plot.y_title:
+            y_scale["title"] = {"display": True, "text": "× speedup"}
+        y_scale["beginAtZero"] = False
+        # Horizontal reference line at 1.0 (rendered by abenchRefLine plugin in _html.py)
+        options["plugins"]["abenchRefLine"] = {"y": 1.0}
 
     config = {
         "type": chart_type,

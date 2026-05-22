@@ -157,7 +157,7 @@ def generate_plots_html(
             artifacts_by_id[plot.id] = art
 
     if doc.sections:
-        _render_sectioned(doc, artifacts_by_id, sections, scripts)
+        _render_sectioned(doc, artifacts_by_id, sections, scripts, results_dir, pretty_map)
     else:
         _render_plots_only(doc, artifacts_by_id, sections, scripts)
 
@@ -244,8 +244,11 @@ def _render_metric_section(
     return section, script
 
 
-def _render_sectioned(doc, artifacts_by_id, sections, scripts) -> None:
+def _render_sectioned(doc, artifacts_by_id, sections, scripts, results_dir, pretty_map) -> None:
     """Editorial-section layout: blocks reference plots by id; text/html blocks interleave."""
+    from abench_speckz.report._headline import render_headline_block
+    from abench_speckz.report._kpi import render_kpi_block
+
     if doc.report_description:
         sections.append(f'\n  <div class="report-intro">{render_markdown(doc.report_description)}</div>')
 
@@ -259,6 +262,10 @@ def _render_sectioned(doc, artifacts_by_id, sections, scripts) -> None:
                 body += render_markdown(block.value) + "\n    "
             elif block.kind in ("html", "include_html"):
                 body += block.value + "\n    "
+            elif block.kind == "kpi":
+                body += render_kpi_block(block.data, results_dir, pretty_map) + "\n    "
+            elif block.kind == "headline":
+                body += render_headline_block(block.data, results_dir, pretty_map) + "\n    "
             elif block.kind == "plot_id":
                 art = artifacts_by_id.get(block.value)
                 if art is None:
