@@ -388,3 +388,68 @@ def test_resolve_tool_version_command_not_found(tmp_path):
     spec = tools.load_tool(p)
     v = tools.resolve_tool_version(spec)
     assert v is not None and "FileNotFoundError" in v
+
+
+# --- grafana_links ---
+
+
+def test_grafana_links_loaded(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text(
+        "name: t\ncommand: x\n"
+        "grafana_links:\n"
+        "  - label: Overview\n"
+        "    url: 'https://grafana.example.com/d/abc?from=${_started_at_ms}&to=${_finished_at_ms}'\n"
+        "  - label: CPU\n"
+        "    url: 'https://grafana.example.com/d/cpu?from=${_started_at_ms}'\n"
+    )
+    spec = tools.load_tool(p)
+    assert len(spec.grafana_links) == 2
+    assert spec.grafana_links[0]["label"] == "Overview"
+    assert "${_started_at_ms}" in spec.grafana_links[0]["url"]
+    assert spec.grafana_links[1]["label"] == "CPU"
+
+
+def test_grafana_links_default_empty(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\n")
+    spec = tools.load_tool(p)
+    assert spec.grafana_links == []
+
+
+def test_grafana_links_must_be_list(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\ngrafana_links: 'https://example.com'\n")
+    with pytest.raises(RunError, match="grafana_links must be a list"):
+        tools.load_tool(p)
+
+
+def test_grafana_links_entry_must_be_mapping(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\ngrafana_links:\n  - 'https://example.com'\n")
+    with pytest.raises(RunError, match=r"grafana_links\[0\] must be a mapping"):
+        tools.load_tool(p)
+
+
+def test_grafana_links_label_required(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\ngrafana_links:\n  - url: 'https://example.com'\n")
+    with pytest.raises(RunError, match=r"grafana_links\[0\].label"):
+        tools.load_tool(p)
+
+
+def test_grafana_links_url_required(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\ngrafana_links:\n  - label: Dash\n")
+    with pytest.raises(RunError, match=r"grafana_links\[0\].url"):
+        tools.load_tool(p)
+
+
+def test_grafana_links_unknown_key_rejected(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text(
+        "name: t\ncommand: x\ngrafana_links:\n"
+        "  - label: Dash\n    url: 'https://x.com'\n    bogus: 1\n"
+    )
+    with pytest.raises(RunError, match="unknown keys"):
+        tools.load_tool(p)

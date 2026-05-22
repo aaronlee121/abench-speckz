@@ -3,6 +3,7 @@
 import os
 import subprocess
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -219,7 +220,7 @@ def make_row(
     probe_results: dict[str, Any],
 ) -> dict[str, Any]:
     """Build a ``runs.jsonl`` row. ``result`` may be ``None`` when the benchmark didn't run."""
-    return {
+    row: dict[str, Any] = {
         "run_id": run_id,
         "config_hash": ch,
         "vars": {k: str(v) for k, v in entry["vars"].items()},
@@ -236,6 +237,46 @@ def make_row(
         "failure_reason": failure_reason,
         "raw_output_path": None,
     }
+    if tool.grafana_links:
+        row["grafana_links"] = _resolve_grafana_links(tool, entry["vars"], run_id, result)
+    return row
+
+
+def _iso_to_unix_ms(iso: str | None) -> str:
+    if not iso:
+        return ""
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        return str(int(dt.timestamp() * 1000))
+    except (ValueError, TypeError):
+        return ""
+
+
+def _resolve_grafana_links(
+    tool: ToolSpec,
+    entry_vars: dict[str, Any],
+    run_id: str,
+    result,
+) -> list[dict[str, str | None]]:
+    """Resolve grafana_links URL templates for this run. Returns list of {label, url} dicts."""
+    started_at = result.started_at if result is not None else None
+    finished_at = result.finished_at if result is not None else None
+    link_vars: dict[str, str] = {
+        **{k: str(v) for k, v in entry_vars.items()},
+        "_run_id": run_id,
+        "_started_at": started_at or "",
+        "_finished_at": finished_at or "",
+        "_started_at_ms": _iso_to_unix_ms(started_at),
+        "_finished_at_ms": _iso_to_unix_ms(finished_at),
+    }
+    resolved: list[dict[str, str | None]] = []
+    for link in tool.grafana_links:
+        try:
+            url = interpolate.resolve_string(link["url"], link_vars, env=os.environ)
+        except Exception:
+            url = None
+        resolved.append({"label": link["label"], "url": url})
+    return resolved
 
 
 def build_raw(

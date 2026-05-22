@@ -129,6 +129,8 @@ Variable names starting with `_` are reserved and will be rejected at load time.
 | `${_started_at}` | `post_run` | ISO timestamp when the benchmark started |
 | `${_finished_at}` | `post_run` | ISO timestamp when the benchmark finished |
 | `${_duration_ms}` | `post_run` | Wall-clock duration in milliseconds |
+| `${_started_at_ms}` | `grafana_links` | Run start as Unix milliseconds (Grafana time-range format) |
+| `${_finished_at_ms}` | `grafana_links` | Run end as Unix milliseconds (Grafana time-range format) |
 
 Profiles overlay the base spec — variables, static, when, and exclude lists are merged. The `default_profile` is used when `--profile` is not specified.
 
@@ -197,6 +199,15 @@ setup_timeout_seconds: 120   # per-step timeout for setup/teardown/post_run (def
 # receives run-result vars: ${_run_id}, ${_exit_code}, ${_started_at}, ${_finished_at}, ${_duration_ms}
 post_run:
   - "prom-query.sh ${_started_at} ${_finished_at} ${_run_id}"
+
+# optional: Grafana dashboard links rendered in stats --report.
+# URL templates support combo vars, ${env:VAR}, ${_run_id}, ${_started_at},
+# ${_finished_at}, ${_started_at_ms}, ${_finished_at_ms}.
+grafana_links:
+  - label: "Overview"
+    url: "https://grafana.example.com/d/abc?from=${_started_at_ms}&to=${_finished_at_ms}&var-workload=${workload}"
+  - label: "CPU"
+    url: "https://grafana.example.com/d/cpu?from=${_started_at_ms}&to=${_finished_at_ms}"
 
 # optional: background processes. Each entry is a plain string (command template)
 # or an object with 'command' and an optional 'span' field.
@@ -468,6 +479,20 @@ A bare-list standalone file (no sections, no title):
   }
 }
 ```
+
+**`grafana_links`.** A list of `{label, url}` entries. After each benchmark run completes, the URL templates are resolved using combo vars, environment variables, and run-result synthetic vars. The resolved links are stored in `runs.jsonl` under `"grafana_links"` and rendered as styled clickable buttons in `stats --report` inside each run's collapsible block.
+
+Use `${_started_at_ms}` and `${_finished_at_ms}` to embed Unix-millisecond timestamps directly into Grafana's `from=` / `to=` query parameters:
+
+```yaml
+grafana_links:
+  - label: "Overview"
+    url: "https://grafana.example.com/d/abc123?from=${_started_at_ms}&to=${_finished_at_ms}&var-workload=${workload}"
+  - label: "CPU"
+    url: "https://grafana.example.com/d/def456?from=${_started_at_ms}&to=${_finished_at_ms}"
+```
+
+All combo vars, `${env:VAR}`, `${_run_id}`, `${_started_at}` (ISO), and `${_finished_at}` (ISO) are also available. An unresolvable URL (referencing an unknown variable) is stored as `null` and silently omitted from the report — it never aborts a run. When runs have grafana_links but no per-run HTML report files, the report section is titled "Per-run links"; when both are present the title is "Per-run reports".
 
 **Setup / teardown / post_run / monitor.** The full per-rep lifecycle is:
 

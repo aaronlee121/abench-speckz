@@ -36,6 +36,7 @@ class ToolSpec:
     setup_per_sweep: list[str] = field(default_factory=list)
     teardown_per_sweep: list[str] = field(default_factory=list)
     per_sweep_var: str | list[str] | None = None
+    grafana_links: list[dict] = field(default_factory=list)
 
 
 @dataclass

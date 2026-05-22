@@ -1270,3 +1270,77 @@ def test_theme_dark_mode_true_sets_dark(tmp_path):
     html = report_path.read_text()
     assert "var _darkMode = true" in html
     assert "data-theme', 'dark'" in html
+
+
+# ---------------------------------------------------------------------------
+# grafana_links rendering in reports
+# ---------------------------------------------------------------------------
+
+
+def _seed_with_grafana_links(results_dir, run_id=_RUN_ID):
+    """Seed one run row with grafana_links."""
+    store.init_results_dir(results_dir)
+    store.append_run(
+        results_dir,
+        {
+            "run_id": run_id,
+            "config_hash": "h1",
+            "vars": {"workload": "read"},
+            "tags": ["bench"],
+            "exit_code": 0,
+            "results": {"rps": 1000.0},
+            "started_at": "2026-05-14T10:00:00Z",
+            "failure_reason": None,
+            "grafana_links": [
+                {"label": "Overview", "url": "https://grafana.example.com/d/abc?from=1747216800000&to=1747216800001"},
+                {"label": "CPU", "url": "https://grafana.example.com/d/cpu?from=1747216800000"},
+                {"label": "Broken", "url": None},
+            ],
+        },
+    )
+    store.update_aggregates_for_hash(results_dir, "h1")
+
+
+def test_grafana_links_rendered_in_report(tmp_path):
+    from abench_speckz.report import _discover_run_reports, _runs_section
+
+    _seed_with_grafana_links(tmp_path)
+    run_reports = _discover_run_reports(tmp_path)  # no HTML files
+    runs = store.read_runs(tmp_path)
+    section_html, script_js = _runs_section(run_reports, runs, embed=True)
+    assert "Per-run links" in section_html
+    assert 'class="grafana-link"' in section_html
+    assert "https://grafana.example.com/d/abc" in section_html
+    assert "https://grafana.example.com/d/cpu" in section_html
+    assert "Overview" in section_html
+    assert "CPU" in section_html
+    # Broken link (url=None) should not appear
+    assert "Broken" not in section_html
+
+
+def test_grafana_links_with_html_reports_shows_per_run_reports_title(tmp_path):
+    from abench_speckz.report import _discover_run_reports, _runs_section
+
+    store.init_results_dir(tmp_path)
+    html_path = tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html"
+    html_path.write_text("<html/>")
+    store.append_run(
+        tmp_path,
+        {
+            "run_id": _RUN_ID,
+            "config_hash": "h1",
+            "vars": {"workload": "read"},
+            "tags": ["bench"],
+            "exit_code": 0,
+            "started_at": "2026-05-14T10:00:00Z",
+            "failure_reason": None,
+            "grafana_links": [
+                {"label": "Overview", "url": "https://grafana.example.com/d/abc?from=123"}
+            ],
+        },
+    )
+    run_reports = _discover_run_reports(tmp_path)
+    runs = store.read_runs(tmp_path)
+    section_html, _ = _runs_section(run_reports, runs, embed=True)
+    assert "Per-run reports" in section_html
+    assert 'class="grafana-link"' in section_html

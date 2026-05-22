@@ -53,7 +53,7 @@ Profiles overlay the base spec (variables, static, when, exclude are merged); `d
 - Writes to `runs.jsonl` (one JSON line per run) and updates `aggregates.jsonl` after each run
 - Results directory is protected by a `flock` during the sweep
 
-**Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `output_file` (read extraction input from a file the tool writes instead of stdout), `output_format` (`json` default, or `jsonl` for one object per line), `pretty_names`, `var_values` (mapping of variable name → {raw_value: display_label} for friendly legend labels), `units`, `higher_is_better`, `plots` (declarative Chart.js plot definitions consumed by `stats --report`), `env_probes` (mapping of key → shell command run once at sweep start; stdout captured into `env.snapshot.json` under `"probes"`), `combo_probes` (mapping of key → command template run once per unique config hash; stdout captured into `combo_probes.json` and each run row; see below), `setup` / `teardown` (per-rep shell steps), `post_run` (per-rep shell steps that run after teardown with access to run-result vars; see below), `monitor` (list of background-process definitions, each a string or `{command, span}` object; `span` is `per_rep` (default), `per_group`, or `per_sweep`; see below), `setup_timeout_seconds` (per-step timeout, default 120), `per_sweep_var` (string, list of strings, or negation entries like `"!var"` — see below).
+**Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `output_file` (read extraction input from a file the tool writes instead of stdout), `output_format` (`json` default, or `jsonl` for one object per line), `pretty_names`, `var_values` (mapping of variable name → {raw_value: display_label} for friendly legend labels), `units`, `higher_is_better`, `plots` (declarative Chart.js plot definitions consumed by `stats --report`), `env_probes` (mapping of key → shell command run once at sweep start; stdout captured into `env.snapshot.json` under `"probes"`), `combo_probes` (mapping of key → command template run once per unique config hash; stdout captured into `combo_probes.json` and each run row; see below), `setup` / `teardown` (per-rep shell steps), `post_run` (per-rep shell steps that run after teardown with access to run-result vars; see below), `monitor` (list of background-process definitions, each a string or `{command, span}` object; `span` is `per_rep` (default), `per_group`, or `per_sweep`; see below), `setup_timeout_seconds` (per-step timeout, default 120), `per_sweep_var` (string, list of strings, or negation entries like `"!var"` — see below), `grafana_links` (list of `{label, url}` entries; URL templates resolved per-run using combo vars and run-result vars including `${_started_at_ms}` / `${_finished_at_ms}`; stored in `runs.jsonl` and rendered as clickable buttons in `stats --report`).
 
 **Plot fields:** Each entry in `plots` has: `id` (unique string), `type` (`bar`, `stacked-bar`, `line`, `scatter`), `x` (variable name or arithmetic expression of variable names for the x-axis; for `scatter`, a metric name or expression), `y` (metric name, arithmetic expression, or list thereof; `scatter` requires exactly one, `stacked-bar` requires at least two), `title` (optional display title; supports `${var}` and `${env:VAR}` interpolation), `group_by` (optional variable name or list of variable names — see below), `smooth` (boolean, line only — spline curve instead of straight segments), `fixed_vars` (boolean, default `true` — set to `false` to suppress the "Fixed: k = v" annotation), `series_label` (optional `${var}` template string — replaces the multi-column legend table with Chart.js's compact one-line legend; values are mapped through `var_values` automatically), `data_table` (boolean, default `true` — set to `false` to suppress the collapsible "Data" table below the chart). Axis expressions support `+`, `-`, `*`, `/`, `**`, `//`, `%` over variable or metric names and numeric literals; for `y` expressions, exactly one identifier must be a metric name (the rest are treated as combo variables). Syntax is validated at YAML load time.
 
@@ -140,6 +140,7 @@ Built-in synthetic variables (injected per-rep, not user-definable):
 - `${_run_id}` — UUID for this rep (same value written to `runs.jsonl`). Available in `command`, `setup`, `teardown`, `post_run`, `setup_per_sweep`, and `teardown_per_sweep`. For per_sweep phases, a single UUID is generated per group and shared between `setup_per_sweep` and `teardown_per_sweep`.
 - `${_results_dir}` — absolute path to the results directory. Available in `command`, `setup`, `teardown`, `post_run`, `output_file`, `setup_per_sweep`, `teardown_per_sweep`, `combo_probes`, and all `monitor` spans.
 - `${_exit_code}`, `${_started_at}`, `${_finished_at}`, `${_duration_ms}` — benchmark result fields. Available in `post_run` only (result isn't known earlier).
+- `${_started_at_ms}`, `${_finished_at_ms}` — run start/end as Unix milliseconds. Available in `grafana_links` URL templates only.
 
 Variable names starting with `_` are reserved and rejected in spec YAML.
 
@@ -169,6 +170,16 @@ monitor:
     span: per_group
   - command: "top -b > sweep.log"
     span: per_sweep
+```
+
+**`grafana_links`** is a list of `{label, url}` entries. URL templates are resolved per-run after each benchmark completes and the resolved list is stored in `runs.jsonl` under `"grafana_links"`. In `stats --report`, the links appear as styled buttons inside each run's collapsible block (section title is "Per-run links" when there are no HTML report files, "Per-run reports" when both are present). Template variables available: all combo vars, `${env:VAR}`, `${_run_id}`, `${_started_at}` (ISO), `${_finished_at}` (ISO), `${_started_at_ms}` (Unix ms), `${_finished_at_ms}` (Unix ms). An unresolvable URL is stored as `null` and omitted from the report.
+
+```yaml
+grafana_links:
+  - label: "Overview"
+    url: "https://grafana.example.com/d/abc?from=${_started_at_ms}&to=${_finished_at_ms}&var-workload=${workload}"
+  - label: "CPU"
+    url: "https://grafana.example.com/d/cpu?from=${_started_at_ms}&to=${_finished_at_ms}"
 ```
 
 **`per_sweep_var`** controls how combos are grouped for `setup_per_sweep` / `teardown_per_sweep`. Accepts a string, a list of strings, or negation entries (prefix `!` to exclude a variable from the auto-expanded set). Negation is resolved against the `variables` keys in the manifest (static values are excluded), mirroring the `group_by` negation in plots.

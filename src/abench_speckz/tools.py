@@ -33,6 +33,7 @@ _FIELDS = {
     "setup_per_sweep",
     "teardown_per_sweep",
     "per_sweep_var",
+    "grafana_links",
 }
 
 
@@ -63,6 +64,33 @@ def _load_monitors(raw: dict, path) -> list[MonitorEntry]:
             raise RunError(
                 f"{path}: tool.monitor[{i}] must be a string or mapping, got {type(item).__name__}"
             )
+    return entries
+
+
+def _load_grafana_links(raw: dict, path) -> list[dict]:
+    value = raw.get("grafana_links")
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise RunError(f"{path}: tool.grafana_links must be a list")
+    entries: list[dict] = []
+    for i, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise RunError(
+                f"{path}: tool.grafana_links[{i}] must be a mapping, got {type(item).__name__}"
+            )
+        label = item.get("label")
+        url = item.get("url")
+        if not isinstance(label, str) or not label:
+            raise RunError(f"{path}: tool.grafana_links[{i}].label must be a non-empty string")
+        if not isinstance(url, str) or not url:
+            raise RunError(f"{path}: tool.grafana_links[{i}].url must be a non-empty string")
+        unknown = set(item) - {"label", "url"}
+        if unknown:
+            raise RunError(
+                f"{path}: tool.grafana_links[{i}] has unknown keys: {sorted(unknown)}"
+            )
+        entries.append({"label": label, "url": url})
     return entries
 
 
@@ -150,6 +178,7 @@ def load_tool(path: str | Path) -> ToolSpec:
     monitor = _load_monitors(raw, path)
     setup_per_sweep = _load_phase(raw, path, "setup_per_sweep")
     teardown_per_sweep = _load_phase(raw, path, "teardown_per_sweep")
+    grafana_links = _load_grafana_links(raw, path)
 
     per_sweep_var = raw.get("per_sweep_var")
     if per_sweep_var is not None:
@@ -195,6 +224,7 @@ def load_tool(path: str | Path) -> ToolSpec:
         setup_per_sweep=setup_per_sweep,
         teardown_per_sweep=teardown_per_sweep,
         per_sweep_var=per_sweep_var,
+        grafana_links=grafana_links,
     )
 
 

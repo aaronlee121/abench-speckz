@@ -30,7 +30,7 @@ def runs_section(
     eligible = [
         r
         for r in runs
-        if r.get("run_id") in run_reports
+        if (r.get("run_id") in run_reports or r.get("grafana_links"))
         and r.get("exit_code") == 0
         and "warmup" not in (r.get("tags") or [])
     ]
@@ -54,14 +54,28 @@ def runs_section(
         for run in group_runs:
             body_html += _render_run_details(
                 run=run,
-                reports=run_reports[run["run_id"]],
+                reports=run_reports.get(run["run_id"]) or [],
                 embed=embed,
                 js_data_lines=js_data_lines,
             )
 
-    section_html = f"\n  <section>\n    <h2>Per-run reports</h2>\n    {body_html}\n  </section>"
+    has_reports = any(r.get("run_id") in run_reports for r in eligible)
+    section_title = "Per-run reports" if has_reports else "Per-run links"
+    section_html = f"\n  <section>\n    <h2>{section_title}</h2>\n    {body_html}\n  </section>"
     script_js = _build_loader_script(js_data_lines) if embed and js_data_lines else ""
     return section_html, script_js
+
+
+def _grafana_links_html(links: list[dict]) -> str:
+    """Render a row of Grafana dashboard link buttons, skipping entries with no URL."""
+    valid = [lnk for lnk in links if lnk.get("url")]
+    if not valid:
+        return ""
+    anchors = "".join(
+        f'<a href="{lnk["url"]}" target="_blank" rel="noopener" class="grafana-link">{lnk["label"]}</a>'
+        for lnk in valid
+    )
+    return f'<div class="grafana-links">{anchors}</div>\n'
 
 
 def _group_by_config_hash(runs: list[dict]) -> dict[str, list[dict]]:
@@ -85,7 +99,7 @@ def _render_run_details(
     short_id = run_id[:8] if run_id else "?"
     names = [name for name, _ in reports]
 
-    inner_html = ""
+    inner_html = _grafana_links_html(run.get("grafana_links") or [])
     for name, path in reports:
         iframe_id = "rpt-" + run_id.replace("-", "_") + "_" + safe_id(name)
         if embed:

@@ -1825,3 +1825,91 @@ def test_collect_env_metadata_returns_known_keys():
     info = runner.collect_env_metadata()
     for key in ("host", "system", "release", "machine", "python", "cpu_count"):
         assert key in info
+
+
+# ---------------------------------------------------------------------------
+# grafana_links
+# ---------------------------------------------------------------------------
+
+
+def test_grafana_links_stored_in_runs_jsonl(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+grafana_links:
+  - label: Overview
+    url: "https://grafana.example.com/d/abc?from=${{_started_at_ms}}&to=${{_finished_at_ms}}&workload=${{workload}}"
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+    )
+    runs = store.read_runs(results)
+    assert len(runs) == 1
+    links = runs[0].get("grafana_links")
+    assert links is not None and len(links) == 1
+    assert links[0]["label"] == "Overview"
+    url = links[0]["url"]
+    # URL should have ms-precision timestamps embedded
+    assert "from=" in url and "to=" in url
+    assert "workload=read" in url
+    # Timestamps should be numeric ms strings (not empty)
+    import re
+    ms_matches = re.findall(r"(?:from|to)=(\d+)", url)
+    assert len(ms_matches) == 2
+    assert all(len(ms) > 10 for ms in ms_matches)  # epoch ms is >10 digits since ~2001
+
+
+def test_grafana_links_absent_when_not_configured(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = _tool_yaml(tmp_path)
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+    )
+    runs = store.read_runs(results)
+    assert "grafana_links" not in runs[0]
+
+
+def test_grafana_links_unresolvable_url_stored_as_null(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+grafana_links:
+  - label: Broken
+    url: "https://grafana.example.com/d/abc?var=${{no_such_var}}"
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+    )
+    runs = store.read_runs(results)
+    links = runs[0].get("grafana_links")
+    assert links is not None and len(links) == 1
+    assert links[0]["label"] == "Broken"
+    assert links[0]["url"] is None
+    # Benchmark still ran successfully
+    assert runs[0]["exit_code"] == 0
