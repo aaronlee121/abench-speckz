@@ -96,17 +96,18 @@ def build_bar_or_line_config(
         datasets.append(ds)
         series_meta.append({"metric": metric, "vals": vals, "color": c})
 
+    x_scale: dict[str, Any] = {"title": {"display": True, "text": plot.x_title if plot.x_title else plot.x}}
+    y_scale: dict[str, Any] = {"beginAtZero": True}
+    if plot.y_title:
+        y_scale["title"] = {"display": True, "text": plot.y_title}
+    if stacked:
+        x_scale["stacked"] = True
+        y_scale["stacked"] = True
     options: dict[str, Any] = {
         "responsive": True,
         "plugins": {"legend": {"position": "top"}},
-        "scales": {
-            "x": {"title": {"display": True, "text": plot.x}},
-            "y": {"beginAtZero": True},
-        },
+        "scales": {"x": x_scale, "y": y_scale},
     }
-    if stacked:
-        options["scales"]["x"]["stacked"] = True
-        options["scales"]["y"]["stacked"] = True
 
     config = {
         "type": chart_type,
@@ -168,6 +169,8 @@ def build_scatter_config(
         )
         series_meta.append({"metric": y_metric, "vals": vals, "color": c})
 
+    x_title_text = plot.x_title if plot.x_title else resolve_metric(pretty_map, plot.x)
+    y_title_text = plot.y_title if plot.y_title else resolve_metric(pretty_map, y_metric)
     config = {
         "type": "scatter",
         "data": {"datasets": datasets},
@@ -175,8 +178,8 @@ def build_scatter_config(
             "responsive": True,
             "plugins": {"legend": {"position": "top"}},
             "scales": {
-                "x": {"title": {"display": True, "text": resolve_metric(pretty_map, plot.x)}},
-                "y": {"beginAtZero": True, "title": {"display": True, "text": resolve_metric(pretty_map, y_metric)}},
+                "x": {"title": {"display": True, "text": x_title_text}},
+                "y": {"beginAtZero": True, "title": {"display": True, "text": y_title_text}},
             },
         },
     }

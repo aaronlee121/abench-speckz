@@ -27,6 +27,8 @@ class PlotSpec:
     fixed_vars: bool = True
     series_label: str | None = None
     data_table: bool = True
+    x_title: str | None = None
+    y_title: str | None = None
 
 
 @dataclass
@@ -182,11 +184,21 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
             raise RunError(f"{source}: plot {plot_id!r}: data_table must be a boolean")
         data_table = data_table_raw
 
-        unknown = set(item) - {"id", "type", "x", "y", "title", "group_by", "smooth", "fixed_vars", "series_label", "data_table"}
+        x_title_raw = item.get("x_title")
+        if x_title_raw is not None and not isinstance(x_title_raw, str):
+            raise RunError(f"{source}: plot {plot_id!r}: x_title must be a string")
+        x_title = x_title_raw or None
+
+        y_title_raw = item.get("y_title")
+        if y_title_raw is not None and not isinstance(y_title_raw, str):
+            raise RunError(f"{source}: plot {plot_id!r}: y_title must be a string")
+        y_title = y_title_raw or None
+
+        unknown = set(item) - {"id", "type", "x", "y", "title", "group_by", "smooth", "fixed_vars", "series_label", "data_table", "x_title", "y_title"}
         if unknown:
             raise RunError(f"{source}: plot {plot_id!r}: unknown fields {sorted(unknown)}")
 
-        out.append(PlotSpec(id=plot_id, type=ptype, x=x, y=y, title=title, group_by=group_by, smooth=smooth, fixed_vars=fixed_vars, series_label=series_label, data_table=data_table))
+        out.append(PlotSpec(id=plot_id, type=ptype, x=x, y=y, title=title, group_by=group_by, smooth=smooth, fixed_vars=fixed_vars, series_label=series_label, data_table=data_table, x_title=x_title, y_title=y_title))
     return out
 
 

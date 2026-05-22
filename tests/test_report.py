@@ -898,6 +898,58 @@ def test_interp_env_var_in_plot_title(tmp_path, monkeypatch):
     assert "Throughput (PostgreSQL)" in html
 
 
+def test_x_title_appears_in_chart_config(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n  x_title: 'Workload type'\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Workload type" in html
+
+
+def test_y_title_appears_in_chart_config(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n  y_title: 'Throughput (req/s)'\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Throughput (req/s)" in html
+
+
+def test_x_title_overrides_default_in_scatter(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "- id: p1\n  type: scatter\n  x: rps\n  y: p95_ms\n"
+        "  x_title: 'Requests/sec'\n  y_title: 'P95 latency (ms)'\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Requests/sec" in html
+    assert "P95 latency (ms)" in html
+
+
+def test_x_title_interpolates_env_var(tmp_path, monkeypatch):
+    _seed(tmp_path)
+    monkeypatch.setenv("AXIS_UNIT", "threads")
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "- id: p1\n  type: line\n  x: workload\n  y: rps\n"
+        "  x_title: 'Concurrency (${env:AXIS_UNIT})'\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Concurrency (threads)" in html
+
+
 def test_interp_varying_var_not_substituted(tmp_path):
     """A var with multiple values is NOT in the text vars dict, so ${var} is rejected."""
     _seed_static(tmp_path)

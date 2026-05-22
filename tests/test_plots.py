@@ -349,6 +349,48 @@ def test_fixed_vars_non_bool_rejected(tmp_path):
         plots.load_plots_file(p)
 
 
+def test_x_title_parsed(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text("- id: p1\n  type: bar\n  x: concurrency\n  y: rps\n  x_title: 'Concurrency (threads)'\n")
+    doc = plots.load_plots_file(p)
+    assert doc.plots[0].x_title == "Concurrency (threads)"
+
+
+def test_y_title_parsed(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text("- id: p1\n  type: bar\n  x: concurrency\n  y: rps\n  y_title: 'Throughput (req/s)'\n")
+    doc = plots.load_plots_file(p)
+    assert doc.plots[0].y_title == "Throughput (req/s)"
+
+
+def test_x_title_defaults_to_none(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n")
+    doc = plots.load_plots_file(p)
+    assert doc.plots[0].x_title is None
+
+
+def test_y_title_defaults_to_none(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n")
+    doc = plots.load_plots_file(p)
+    assert doc.plots[0].y_title is None
+
+
+def test_x_title_non_string_rejected(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  x_title: 42\n")
+    with pytest.raises(RunError, match="x_title must be a string"):
+        plots.load_plots_file(p)
+
+
+def test_y_title_non_string_rejected(tmp_path):
+    p = tmp_path / "plots.yaml"
+    p.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  y_title: 42\n")
+    with pytest.raises(RunError, match="y_title must be a string"):
+        plots.load_plots_file(p)
+
+
 def test_series_label_parsed(tmp_path):
     p = tmp_path / "plots.yaml"
     p.write_text("- id: p1\n  type: line\n  x: concurrency\n  y: rps\n  group_by: backend\n  series_label: '${backend}'\n")

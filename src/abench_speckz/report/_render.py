@@ -57,7 +57,12 @@ def _interp(s: str | None, vars_: dict[str, str], env: dict[str, str]) -> str | 
 def _interpolate_doc(doc, vars_: dict[str, str], env: dict[str, str]):
     """Return a new PlotsDoc with ${var}/${env:VAR} substituted in all text fields."""
     new_plots = [
-        dataclasses.replace(p, title=_interp(p.title, vars_, env))
+        dataclasses.replace(
+            p,
+            title=_interp(p.title, vars_, env),
+            x_title=_interp(p.x_title, vars_, env),
+            y_title=_interp(p.y_title, vars_, env),
+        )
         for p in doc.plots
     ]
     new_sections = []
