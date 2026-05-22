@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-21
+
+### Added
+
+- **`kpi` block kind** — grid of big-number scorecard cards in editorial sections. Each card specifies a `metric`, a `stat` aggregator (`max` | `min` | `mean` across matching combos), optional `where` filter, `unit`, `precision`, and an optional `compare.where` selection that produces a Δ% arrow colored green/red by `higher_is_better`.
+- **`headline` block kind** — deterministic comparison sentence rendered as a styled callout banner. Compares values of a `metric` across the levels of a `compare` variable, fills template tokens `{best}`, `{worst}`, `{best_value}`, `{worst_value}`, `{ratio}`, `{delta_pct}`. Sort direction (which end is "best") follows the metric's `higher_is_better` flag from `tools/*.yaml`.
+- **`normalize` plot field** (bar / line only) — pins one series to 1.0× and expresses all others relative to it. Specify `against` (a `group_by` variable) and `reference` (the value pinned to 1.0×). Y-axis becomes "× speedup"; a dashed reference line at y = 1.0 is drawn by the new inline `abenchRefLine` Chart.js plugin.
+- **`report/_select.py`** — shared value-selection helpers used by `kpi` and `headline` renderers: `resolve_value()` (scalar reduction across combos), `rank_by()` (ranked pairs for a variable), and `higher_is_better_map()` (reads direction flags from `tools/*.yaml` snapshots).
+
 ## [0.4.9] - 2026-05-21
 
 ### Added
