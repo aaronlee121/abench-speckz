@@ -193,7 +193,7 @@ def _run_groups(
         runnable_idx = [
             j
             for j, (entry, _r, is_warmup) in enumerate(items)
-            if not (skip_existing and not is_warmup and skip_counts[config_hash(entry["vars"])] >= repeat)
+            if not (skip_existing and skip_counts[config_hash(entry["vars"])] >= repeat)
         ]
         if not runnable_idx:
             for entry, _r, _is_warmup in items:
@@ -262,7 +262,7 @@ def _run_groups(
             for j, (entry, _r, is_warmup) in enumerate(items):
                 sweep_idx += 1
                 ch = config_hash(entry["vars"])
-                if skip_existing and not is_warmup and skip_counts[ch] >= repeat:
+                if skip_existing and skip_counts[ch] >= repeat:
                     counts["skipped"] += 1
                     _progress(progress_stream, sweep_idx, total, t_sweep, "skip", ch)
                     continue
@@ -400,7 +400,7 @@ def _record_sweep_setup_failures(
     for entry, _r, is_warmup in items:
         sweep_idx += 1
         ch = config_hash(entry["vars"])
-        if skip_existing and not is_warmup and skip_counts[ch] >= repeat:
+        if skip_existing and skip_counts[ch] >= repeat:
             counts["skipped"] += 1
             _progress(progress_stream, sweep_idx, total, t_sweep, "skip", ch)
             continue

@@ -167,6 +167,33 @@ def test_skip_existing(tmp_path):
     assert s3["succeeded"] == 5
 
 
+def test_skip_existing_skips_warmups(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "8"}])
+    tool = _tool_yaml(tmp_path)
+    results = tmp_path / "results"
+
+    s1 = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool,
+        results_dir=results,
+        repeat=3,
+        warmup=2,
+    )
+    assert s1["succeeded"] == 5  # 2 warmup + 3 measured
+
+    # Re-run with skip_existing: warmups should also be skipped
+    s2 = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool,
+        results_dir=results,
+        repeat=3,
+        warmup=2,
+        skip_existing=True,
+    )
+    assert s2["skipped"] == 5  # 2 warmup + 3 measured, all skipped
+    assert s2["succeeded"] == 0
+
+
 def test_dry_run_writes_nothing(tmp_path):
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "1"}])
     tool = _tool_yaml(tmp_path)
