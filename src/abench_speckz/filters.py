@@ -31,10 +31,23 @@ class Predicate:
     value: str
 
     def __call__(self, vars_: dict[str, Any]) -> bool:
-        if self.op != "=":
-            raise RunError(f"operator {self.op!r} not yet supported (planned for v1.1)")
-        actual = str(vars_.get(self.key, ""))
-        return actual == self.value
+        actual = vars_.get(self.key, "")
+        if self.op in ("=", "!="):
+            match = str(actual) == self.value
+            return match if self.op == "=" else not match
+        # Ordering operators: try numeric comparison, fall back to string
+        try:
+            lhs: Any = float(str(actual))
+            rhs: Any = float(self.value)
+        except ValueError:
+            lhs, rhs = str(actual), self.value
+        if self.op == ">":
+            return lhs > rhs
+        if self.op == "<":
+            return lhs < rhs
+        if self.op == ">=":
+            return lhs >= rhs
+        return lhs <= rhs  # "<="
 
 
 def parse_kv(expressions: Iterable[str]) -> list[Predicate]:

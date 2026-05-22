@@ -259,7 +259,12 @@ def _build_where(
     clauses: list[str] = list(extra_clauses) or ["1=1"]
     params: list[Any] = []
     for pred in parse_kv(where_exprs):
-        clauses.append(f"(vars->>'{pred.key}') = ?")
+        if pred.op in ("=", "!="):
+            clauses.append(f"(vars->>'{pred.key}') {pred.op} ?")
+        else:
+            clauses.append(
+                f"TRY_CAST((vars->>'{pred.key}') AS DOUBLE) {pred.op} TRY_CAST(? AS DOUBLE)"
+            )
         params.append(pred.value)
     for t in require_tags:
         clauses.append("list_contains(tags, ?)")

@@ -9,12 +9,28 @@ def test_parse_eq():
     assert [(x.key, x.op, x.value) for x in p] == [("a", "=", "1"), ("b", "=", "hi")]
 
 
-def test_parse_other_ops_lex_but_dont_apply():
-    # Lexer accepts; calling raises until v1.1
+def test_neq():
     p = filters.parse_kv(["a!=1"])
     assert p[0].op == "!="
-    with pytest.raises(RunError, match="not yet supported"):
-        p[0]({"a": "2"})
+    assert p[0]({"a": "2"})
+    assert not p[0]({"a": "1"})
+
+
+def test_ordering_ops_numeric():
+    assert filters.parse_kv(["n>5"])[0]({"n": "10"})
+    assert not filters.parse_kv(["n>5"])[0]({"n": "3"})
+    assert filters.parse_kv(["n<5"])[0]({"n": "3"})
+    assert not filters.parse_kv(["n<5"])[0]({"n": "10"})
+    assert filters.parse_kv(["n>=5"])[0]({"n": "5"})
+    assert not filters.parse_kv(["n>=5"])[0]({"n": "4"})
+    assert filters.parse_kv(["n<=5"])[0]({"n": "5"})
+    assert not filters.parse_kv(["n<=5"])[0]({"n": "6"})
+
+
+def test_ordering_ops_string_fallback():
+    # Non-numeric values fall back to lexicographic comparison
+    assert filters.parse_kv(["s>apple"])[0]({"s": "banana"})
+    assert not filters.parse_kv(["s>apple"])[0]({"s": "aardvark"})
 
 
 def test_make_filter_kv():
