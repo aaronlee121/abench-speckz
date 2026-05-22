@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-05-22
+
+### Fixed
+
+- Piped commands and shell operators (`|`, `&&`, `;`, redirects) now work in all tool YAML fields (`command`, `setup`, `teardown`, `post_run`, `monitor`, `env_probes`, `combo_probes`). Previously all commands were run via `shlex.split()` without `shell=True`, silently breaking any shell syntax.
+
 ## [0.6.0] - 2026-05-22
 
 ### Added
