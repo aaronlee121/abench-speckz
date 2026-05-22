@@ -101,7 +101,7 @@ def build_bar_or_line_config(
         "plugins": {"legend": {"position": "top"}},
         "scales": {
             "x": {"title": {"display": True, "text": plot.x}},
-            "y": {"beginAtZero": False},
+            "y": {"beginAtZero": True},
         },
     }
     if stacked:
@@ -176,7 +176,7 @@ def build_scatter_config(
             "plugins": {"legend": {"position": "top"}},
             "scales": {
                 "x": {"title": {"display": True, "text": resolve_metric(pretty_map, plot.x)}},
-                "y": {"title": {"display": True, "text": resolve_metric(pretty_map, y_metric)}},
+                "y": {"beginAtZero": True, "title": {"display": True, "text": resolve_metric(pretty_map, y_metric)}},
             },
         },
     }
