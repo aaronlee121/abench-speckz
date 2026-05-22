@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-05-22
+
+### Fixed
+
+- `--skip-existing` now skips warmup iterations in addition to measured reps. Previously, if all measured reps for a combo were already recorded, warmup reps still ran unnecessarily on re-invocation.
+
 ## [0.5.0] - 2026-05-21
 
 ### Added
