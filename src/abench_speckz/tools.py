@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 from abench_speckz.model import RunError
-from abench_speckz.runspec import MonitorEntry, ToolSpec, _MONITOR_SPANS
+from abench_speckz.runspec import MonitorEntry, ScopeEntry, ToolSpec, _MONITOR_SPANS
 
 _FIELDS = {
     "name",
@@ -33,6 +33,7 @@ _FIELDS = {
     "setup_per_sweep",
     "teardown_per_sweep",
     "per_sweep_var",
+    "scopes",
     "grafana_links",
 }
 
@@ -121,6 +122,38 @@ def _parse_var_values(raw, path) -> dict[str, dict[str, str]]:
     return out
 
 
+def _load_scopes(raw: dict, path) -> list[ScopeEntry]:
+    value = raw.get("scopes")
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise RunError(f"{path}: tool.scopes must be a list")
+    entries: list[ScopeEntry] = []
+    for i, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise RunError(f"{path}: tool.scopes[{i}] must be a mapping")
+        unknown = set(item) - {"vars", "setup", "teardown"}
+        if unknown:
+            raise RunError(f"{path}: tool.scopes[{i}] has unknown keys: {sorted(unknown)}")
+        vars_ = item.get("vars")
+        if vars_ is None:
+            raise RunError(f"{path}: tool.scopes[{i}].vars is required")
+        var_list = [vars_] if isinstance(vars_, str) else vars_
+        if not isinstance(var_list, list) or not var_list:
+            raise RunError(f"{path}: tool.scopes[{i}].vars must be a non-empty string or list")
+        for j, v in enumerate(var_list):
+            if not isinstance(v, str) or not v:
+                raise RunError(f"{path}: tool.scopes[{i}].vars[{j}] must be a non-empty string")
+            bare = v[1:] if v.startswith("!") else v
+            if not bare:
+                raise RunError(f"{path}: tool.scopes[{i}].vars[{j}] '!' must be followed by a variable name")
+        scope_path = f"{path} (scopes[{i}])"
+        setup = _load_phase(item, scope_path, "setup")
+        teardown = _load_phase(item, scope_path, "teardown")
+        entries.append(ScopeEntry(vars=vars_, setup=setup, teardown=teardown))
+    return entries
+
+
 def load_tool(path: str | Path) -> ToolSpec:
     raw = yaml.safe_load(Path(path).read_text())
     if not isinstance(raw, dict):
@@ -179,8 +212,14 @@ def load_tool(path: str | Path) -> ToolSpec:
     setup_per_sweep = _load_phase(raw, path, "setup_per_sweep")
     teardown_per_sweep = _load_phase(raw, path, "teardown_per_sweep")
     grafana_links = _load_grafana_links(raw, path)
+    scopes = _load_scopes(raw, path)
 
     per_sweep_var = raw.get("per_sweep_var")
+    if scopes and (per_sweep_var is not None or setup_per_sweep or teardown_per_sweep):
+        raise RunError(
+            f"{path}: tool.scopes cannot be combined with per_sweep_var, "
+            "setup_per_sweep, or teardown_per_sweep; use scopes only"
+        )
     if per_sweep_var is not None:
         entries = [per_sweep_var] if isinstance(per_sweep_var, str) else per_sweep_var
         if not isinstance(entries, list) or not entries:
@@ -224,6 +263,7 @@ def load_tool(path: str | Path) -> ToolSpec:
         setup_per_sweep=setup_per_sweep,
         teardown_per_sweep=teardown_per_sweep,
         per_sweep_var=per_sweep_var,
+        scopes=scopes,
         grafana_links=grafana_links,
     )
 

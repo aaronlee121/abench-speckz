@@ -1033,6 +1033,378 @@ def test_per_sweep_negation_rejects_excluded_var_in_steps(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# nested scopes
+# ---------------------------------------------------------------------------
+
+
+def _scopes_tool_yaml(tmp_path: Path, *, scopes_yaml: str, extra: str = "") -> Path:
+    p = tmp_path / "tool.yaml"
+    p.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+{extra}
+scopes:
+{scopes_yaml}
+"""
+    )
+    return p
+
+
+def test_scopes_two_levels_correct_execution_order(tmp_path):
+    """Outer scope setup/teardown bracket inner scope setup/teardown bracket reps."""
+    phase = _phase_script(tmp_path)
+    marker = tmp_path / "marker.txt"
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"backend": "pg", "workload": "read"},
+            {"backend": "pg", "workload": "write"},
+            {"backend": "mysql", "workload": "read"},
+        ],
+    )
+    tool_path = _scopes_tool_yaml(
+        tmp_path,
+        scopes_yaml=f"""
+  - vars: backend
+    setup:
+      - "python {phase} outer-setup-${{backend}} {marker}"
+    teardown:
+      - "python {phase} outer-teardown-${{backend}} {marker}"
+  - vars: [backend, workload]
+    setup:
+      - "python {phase} inner-setup-${{backend}}-${{workload}} {marker}"
+    teardown:
+      - "python {phase} inner-teardown-${{backend}}-${{workload}} {marker}"
+""",
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+    )
+    assert summary["succeeded"] == 6
+    lines = marker.read_text().splitlines()
+    # Sorted order: mysql first, then pg (alphabetical). Within pg: read then write.
+    assert lines == [
+        "outer-setup-mysql",
+        "inner-setup-mysql-read",
+        "inner-teardown-mysql-read",
+        "outer-teardown-mysql",
+        "outer-setup-pg",
+        "inner-setup-pg-read",
+        "inner-teardown-pg-read",
+        "inner-setup-pg-write",
+        "inner-teardown-pg-write",
+        "outer-teardown-pg",
+    ]
+
+
+def test_scopes_reps_run_within_innermost_group(tmp_path):
+    """All reps for a combo run inside the innermost scope group, not repeatedly setting up."""
+    phase = _phase_script(tmp_path)
+    marker = tmp_path / "marker.txt"
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [{"backend": "pg", "workload": "read"}],
+    )
+    tool_path = _scopes_tool_yaml(
+        tmp_path,
+        scopes_yaml=f"""
+  - vars: backend
+    setup:
+      - "python {phase} outer-setup {marker}"
+    teardown:
+      - "python {phase} outer-teardown {marker}"
+  - vars: [backend, workload]
+    setup:
+      - "python {phase} inner-setup {marker}"
+    teardown:
+      - "python {phase} inner-teardown {marker}"
+""",
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=3,
+    )
+    assert summary["succeeded"] == 3
+    lines = marker.read_text().splitlines()
+    # 3 reps produce no extra setup/teardown lines
+    assert lines == ["outer-setup", "inner-setup", "inner-teardown", "outer-teardown"]
+
+
+def test_scopes_outer_var_accessible_in_inner_steps(tmp_path):
+    """Inner scope steps can reference vars from outer scopes."""
+    phase = _phase_script(tmp_path)
+    marker = tmp_path / "marker.txt"
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [{"backend": "pg", "workload": "read"}],
+    )
+    tool_path = _scopes_tool_yaml(
+        tmp_path,
+        scopes_yaml=f"""
+  - vars: backend
+    setup:
+      - "python {phase} outer-${{backend}} {marker}"
+  - vars: workload
+    setup:
+      - "python {phase} inner-${{backend}}-${{workload}} {marker}"
+""",
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    assert summary["succeeded"] == 1
+    assert marker.read_text().splitlines() == ["outer-pg", "inner-pg-read"]
+
+
+def test_scopes_setup_failure_records_inner_reps_as_failed(tmp_path):
+    """Setup failure at outer scope marks all reps in that outer group as failed."""
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"backend": "pg", "workload": "read"},
+            {"backend": "pg", "workload": "write"},
+            {"backend": "mysql", "workload": "read"},
+        ],
+    )
+    tool_path = _scopes_tool_yaml(
+        tmp_path,
+        scopes_yaml="""
+  - vars: backend
+    setup:
+      - "python -c \\"import sys; sys.exit(5 if '${backend}' == 'pg' else 0)\\""
+  - vars: [backend, workload]
+""",
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+    )
+    # pg group fails (2 combos × 2 reps = 4), mysql succeeds (1 combo × 2 reps = 2)
+    assert summary["failed"] == 4
+    assert summary["succeeded"] == 2
+
+
+def test_scopes_inner_setup_failure_records_only_inner_group(tmp_path):
+    """Setup failure at inner scope marks only that inner group's reps as failed."""
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"backend": "pg", "workload": "read"},
+            {"backend": "pg", "workload": "write"},
+        ],
+    )
+    tool_path = _scopes_tool_yaml(
+        tmp_path,
+        scopes_yaml="""
+  - vars: backend
+  - vars: [backend, workload]
+    setup:
+      - "python -c \\"import sys; sys.exit(3 if '${workload}' == 'write' else 0)\\""
+""",
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+    )
+    # read succeeds (2 reps), write fails (2 reps)
+    assert summary["succeeded"] == 2
+    assert summary["failed"] == 2
+
+
+def test_scopes_innermost_teardown_folds_into_last_rep(tmp_path):
+    """Inner scope teardown failure is folded into the last rep's failure_reason."""
+    manifest_dir = _make_manifest(tmp_path, [{"backend": "pg", "workload": "read"}])
+    tool_path = _scopes_tool_yaml(
+        tmp_path,
+        scopes_yaml="""
+  - vars: backend
+  - vars: [backend, workload]
+    teardown:
+      - "python -c \\"import sys; sys.exit(7)\\""
+""",
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=3,
+    )
+    runs = store.read_runs(results)
+    assert len(runs) == 3
+    assert runs[0]["failure_reason"] is None
+    assert runs[1]["failure_reason"] is None
+    assert runs[2]["failure_reason"].startswith("per_sweep_teardown[0]")
+    assert summary["succeeded"] == 2
+    assert summary["failed"] == 1
+
+
+def test_scopes_rejects_outer_var_in_outer_steps_only_rule(tmp_path):
+    """Inner scope steps referencing a var not in any scope raise RunError."""
+    manifest_dir = _make_manifest(tmp_path, [{"backend": "pg", "workload": "read"}])
+    tool_path = _scopes_tool_yaml(
+        tmp_path,
+        scopes_yaml="""
+  - vars: backend
+    setup:
+      - "echo ${workload}"
+  - vars: workload
+""",
+    )
+    results = tmp_path / "results"
+    with pytest.raises(RunError) as ei:
+        runner.execute_sweep(
+            manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        )
+    assert "${workload}" in str(ei.value)
+    assert "scopes[0].setup[0]" in str(ei.value)
+
+
+def test_scopes_rejects_combination_with_per_sweep_var(tmp_path):
+    """Combining scopes with per_sweep_var raises RunError at load time."""
+    p = tmp_path / "tool.yaml"
+    p.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+per_sweep_var: backend
+scopes:
+  - vars: backend
+"""
+    )
+    with pytest.raises(RunError) as ei:
+        from abench_speckz import tools
+        tools.load_tool(p)
+    assert "scopes" in str(ei.value)
+    assert "per_sweep_var" in str(ei.value)
+
+
+def test_scopes_negation_in_vars(tmp_path):
+    """Negation in scope vars expands to all vars except the excluded one."""
+    phase = _phase_script(tmp_path)
+    marker = tmp_path / "marker.txt"
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"backend": "pg", "workload": "read", "concurrency": "1"},
+            {"backend": "pg", "workload": "read", "concurrency": "8"},
+            {"backend": "pg", "workload": "write", "concurrency": "1"},
+        ],
+    )
+    tool_path = _scopes_tool_yaml(
+        tmp_path,
+        scopes_yaml=f"""
+  - vars: backend
+    setup:
+      - "python {phase} outer-${{backend}} {marker}"
+  - vars: "!concurrency"
+    setup:
+      - "python {phase} inner-${{backend}}-${{workload}} {marker}"
+""",
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    assert summary["succeeded"] == 3
+    lines = marker.read_text().splitlines()
+    # One outer group (pg), two inner groups (pg-read, pg-write)
+    # concurrency varies within each inner group; outer scope has no teardown
+    assert lines == ["outer-pg", "inner-pg-read", "inner-pg-write"]
+
+
+def test_scopes_dry_run_shows_nested_structure(tmp_path):
+    """Dry run with scopes prints setup/teardown for each scope level."""
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"backend": "pg", "workload": "read"},
+            {"backend": "pg", "workload": "write"},
+        ],
+    )
+    tool_path = _scopes_tool_yaml(
+        tmp_path,
+        scopes_yaml="""
+  - vars: backend
+    setup:
+      - "echo outer-setup-${backend}"
+    teardown:
+      - "echo outer-teardown-${backend}"
+  - vars: [backend, workload]
+    setup:
+      - "echo inner-setup-${backend}-${workload}"
+""",
+    )
+    results = tmp_path / "results"
+    buf = io.StringIO()
+    runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results,
+        repeat=1, dry_run=True, progress_stream=buf,
+    )
+    out = buf.getvalue()
+    assert "[scope0 setup 0, backend=pg]: echo outer-setup-pg" in out
+    assert "[scope1 setup 0, backend=pg, workload=read]: echo inner-setup-pg-read" in out
+    assert "[scope1 setup 0, backend=pg, workload=write]: echo inner-setup-pg-write" in out
+    assert "[scope0 teardown 0, backend=pg]: echo outer-teardown-pg" in out
+    assert not (results / "runs.jsonl").exists()
+
+
+def test_scopes_var_missing_from_combos_raises(tmp_path):
+    """Scope var not in any combo raises RunError before any run."""
+    manifest_dir = _make_manifest(tmp_path, [{"backend": "pg"}])
+    tool_path = _scopes_tool_yaml(
+        tmp_path,
+        scopes_yaml="""
+  - vars: backend
+  - vars: missing_var
+""",
+    )
+    results = tmp_path / "results"
+    with pytest.raises(RunError) as ei:
+        runner.execute_sweep(
+            manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        )
+    assert "missing_var" in str(ei.value)
+    assert not (results / "runs.jsonl").exists()
+
+
+def test_scopes_scope_without_setup_teardown_is_valid(tmp_path):
+    """A scope entry with no setup or teardown is a pure grouping scope."""
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"backend": "pg", "workload": "read"},
+            {"backend": "pg", "workload": "write"},
+        ],
+    )
+    # Outer scope has no steps — just groups; inner scope has setup
+    phase = _phase_script(tmp_path)
+    marker = tmp_path / "marker.txt"
+    tool_path = _scopes_tool_yaml(
+        tmp_path,
+        scopes_yaml=f"""
+  - vars: backend
+  - vars: [backend, workload]
+    setup:
+      - "python {phase} inner-${{backend}}-${{workload}} {marker}"
+""",
+    )
+    results = tmp_path / "results"
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+    )
+    assert summary["succeeded"] == 2
+    lines = sorted(marker.read_text().splitlines())
+    assert lines == ["inner-pg-read", "inner-pg-write"]
+
+
+# ---------------------------------------------------------------------------
 # env_probes
 # ---------------------------------------------------------------------------
 

@@ -53,7 +53,7 @@ Profiles overlay the base spec (variables, static, when, exclude are merged); `d
 - Writes to `runs.jsonl` (one JSON line per run) and updates `aggregates.jsonl` after each run
 - Results directory is protected by a `flock` during the sweep
 
-**Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `output_file` (read extraction input from a file the tool writes instead of stdout), `output_format` (`json` default, or `jsonl` for one object per line), `pretty_names`, `var_values` (mapping of variable name → {raw_value: display_label} for friendly legend labels), `units`, `higher_is_better`, `plots` (declarative Chart.js plot definitions consumed by `stats --report`), `env_probes` (mapping of key → shell command run once at sweep start; stdout captured into `env.snapshot.json` under `"probes"`), `combo_probes` (mapping of key → command template run once per unique config hash; stdout captured into `combo_probes.json` and each run row; see below), `setup` / `teardown` (per-rep shell steps), `post_run` (per-rep shell steps that run after teardown with access to run-result vars; see below), `monitor` (list of background-process definitions, each a string or `{command, span}` object; `span` is `per_rep` (default), `per_group`, or `per_sweep`; see below), `setup_timeout_seconds` (per-step timeout, default 120), `per_sweep_var` (string, list of strings, or negation entries like `"!var"` — see below), `grafana_links` (list of `{label, url}` entries; URL templates resolved per-run using combo vars and run-result vars including `${_started_at_ms}` / `${_finished_at_ms}`; stored in `runs.jsonl` and rendered as clickable buttons in `stats --report`).
+**Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `output_file` (read extraction input from a file the tool writes instead of stdout), `output_format` (`json` default, or `jsonl` for one object per line), `pretty_names`, `var_values` (mapping of variable name → {raw_value: display_label} for friendly legend labels), `units`, `higher_is_better`, `plots` (declarative Chart.js plot definitions consumed by `stats --report`), `env_probes` (mapping of key → shell command run once at sweep start; stdout captured into `env.snapshot.json` under `"probes"`), `combo_probes` (mapping of key → command template run once per unique config hash; stdout captured into `combo_probes.json` and each run row; see below), `setup` / `teardown` (per-rep shell steps), `post_run` (per-rep shell steps that run after teardown with access to run-result vars; see below), `monitor` (list of background-process definitions, each a string or `{command, span}` object; `span` is `per_rep` (default), `per_group`, or `per_sweep`; see below), `setup_timeout_seconds` (per-step timeout, default 120), `per_sweep_var` (string, list of strings, or negation entries like `"!var"` — see below), `scopes` (list of scope entries for nested per-sweep grouping — see below; mutually exclusive with `per_sweep_var`/`setup_per_sweep`/`teardown_per_sweep`), `grafana_links` (list of `{label, url}` entries; URL templates resolved per-run using combo vars and run-result vars including `${_started_at_ms}` / `${_finished_at_ms}`; stored in `runs.jsonl` and rendered as clickable buttons in `stats --report`).
 
 **Plot fields:** Each entry in `plots` has: `id` (unique string), `type` (`bar`, `stacked-bar`, `line`, `scatter`), `x` (variable name or arithmetic expression of variable names for the x-axis; for `scatter`, a metric name or expression), `y` (metric name, arithmetic expression, or list thereof; `scatter` requires exactly one, `stacked-bar` requires at least two), `title` (optional display title; supports `${var}` and `${env:VAR}` interpolation), `group_by` (optional variable name or list of variable names — see below), `smooth` (boolean, line only — spline curve instead of straight segments), `fixed_vars` (boolean, default `true` — set to `false` to suppress the "Fixed: k = v" annotation), `series_label` (optional `${var}` template string — replaces the multi-column legend table with Chart.js's compact one-line legend; values are mapped through `var_values` automatically), `data_table` (boolean, default `true` — set to `false` to suppress the collapsible "Data" table below the chart). Axis expressions support `+`, `-`, `*`, `/`, `**`, `//`, `%` over variable or metric names and numeric literals; for `y` expressions, exactly one identifier must be a metric name (the rest are treated as combo variables). Syntax is validated at YAML load time.
 
@@ -231,3 +231,29 @@ per_sweep_var: [backend, "!concurrency"] # include backend explicitly, exclude c
 ```
 
 `setup_per_sweep` / `teardown_per_sweep` steps may only reference variables listed in `per_sweep_var` (after negation expansion), plus `${_envfile}`, `${_run_id}`, `${_results_dir}`, and `${env:VAR}`. The group slug in raw file names joins all group variable values with `-`.
+
+**`scopes`** provides nested multi-level per-sweep grouping. Each entry has `vars` (required — same string/list/negation syntax as `per_sweep_var`) plus optional `setup` and `teardown` step lists. Scopes are ordered outermost to innermost; setup runs top-down before reps begin, teardown runs bottom-up after reps finish. `scopes` cannot be combined with `per_sweep_var`, `setup_per_sweep`, or `teardown_per_sweep`.
+
+Step variable access follows scope depth: scope `i` steps may reference vars from scopes `0..i` (outer scopes are constant within an inner group), plus `${_envfile}`, `${_run_id}`, `${_results_dir}`, and `${env:VAR}`.
+
+```yaml
+scopes:
+  - vars: backend                        # outer: one group per backend
+    setup:
+      - "deploy.sh ${backend}"
+    teardown:
+      - "stop.sh ${backend}"
+  - vars: [backend, workload]            # inner: one group per (backend, workload)
+    setup:
+      - "load_dataset.sh ${backend} ${workload}"   # may reference outer var too
+    teardown:
+      - "cleanup_dataset.sh ${workload}"
+```
+
+Execution order (for backends `pg`, `mysql` each with workloads `read`, `write`):
+1. `deploy.sh pg` → `load_dataset.sh pg read` → all reps → `cleanup_dataset.sh read`
+2. `load_dataset.sh pg write` → all reps → `cleanup_dataset.sh write`
+3. `stop.sh pg`
+4. `deploy.sh mysql` → … → `stop.sh mysql`
+
+Innermost teardown failures are folded into the last rep's `failure_reason` (same as flat mode). Outer teardown failures are written to `raw/scope{i}-{slug}.json`. A scope entry with no `setup` or `teardown` is a pure grouping scope (useful as a bracket for per_group monitors at that level).

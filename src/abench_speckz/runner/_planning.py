@@ -1,18 +1,28 @@
 """Plan a sweep: filter manifest entries, expand into reps, validate per_sweep config."""
 
 from collections import Counter
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from abench_speckz import interpolate, store
 from abench_speckz.filters import make_filter
 from abench_speckz.model import RunError
-from abench_speckz.runspec import ToolSpec
+from abench_speckz.runspec import ScopeEntry, ToolSpec
 
 # One unit of work: (manifest_entry, rep_index, is_warmup).
 Work = tuple[dict[str, Any], int, bool]
 # Contiguous reps sharing a per_sweep_var group key; key is None for non-grouped sweeps.
 WorkGroup = tuple[tuple[str, ...] | None, list[Work]]
+
+
+@dataclass
+class ResolvedScope:
+    """A single scope level after var-negation expansion."""
+
+    vars: list[str]
+    setup: list[str] = field(default_factory=list)
+    teardown: list[str] = field(default_factory=list)
 
 
 def resolve_per_sweep_vars(
@@ -88,7 +98,7 @@ def group_work(work: list[Work], per_sweep_vars: list[str] | None) -> list[WorkG
     return groups
 
 
-_SYNTHETIC_PER_SWEEP = frozenset({"_envfile", "_run_id"})
+_SYNTHETIC_PER_SWEEP = frozenset({"_envfile", "_run_id", "_results_dir"})
 
 
 def validate_per_sweep(
@@ -124,6 +134,63 @@ def validate_per_sweep(
             if missing:
                 raise RunError(
                     f"tool.per_sweep_var={var!r} not present in {len(missing)} selected combo(s)"
+                )
+
+
+def resolve_scopes(raw_scopes: list[ScopeEntry], all_var_names: list[str]) -> list[ResolvedScope]:
+    """Expand negation entries in each scope's vars and return ResolvedScope list."""
+    return [
+        ResolvedScope(
+            vars=resolve_per_sweep_vars(s.vars, all_var_names) or [],
+            setup=s.setup,
+            teardown=s.teardown,
+        )
+        for s in raw_scopes
+    ]
+
+
+def all_scope_sort_vars(scopes: list[ResolvedScope]) -> list[str]:
+    """Ordered, deduplicated list of all vars across all scopes (outer → inner)."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for scope in scopes:
+        for v in scope.vars:
+            if v not in seen:
+                out.append(v)
+                seen.add(v)
+    return out
+
+
+def validate_scopes(
+    scopes: list[ResolvedScope],
+    selected_entries: list[dict[str, Any]],
+) -> None:
+    """Validate each scope's steps only reference vars accessible at that scope level.
+
+    Scope i may reference vars from scopes 0..i (they are constant within that group)
+    plus the synthetic per-sweep vars (_envfile, _run_id, _results_dir).
+    """
+    accumulated: set[str] = set()
+    for i, scope in enumerate(scopes):
+        accumulated |= set(scope.vars)
+        allowed = accumulated | _SYNTHETIC_PER_SWEEP
+        for phase_name, steps in [("setup", scope.setup), ("teardown", scope.teardown)]:
+            for j, step in enumerate(steps):
+                for ref in interpolate.find_combo_var_refs(step):
+                    if ref not in allowed:
+                        allowed_names = ", ".join(
+                            f"${{{v}}}" for v in sorted(accumulated)
+                        )
+                        raise RunError(
+                            f"tool.scopes[{i}].{phase_name}[{j}] references combo var ${{{ref}}}; "
+                            f"at scope level {i} only {allowed_names}, "
+                            f"${{_envfile}}, ${{_run_id}}, ${{_results_dir}} are allowed"
+                        )
+        for v in scope.vars:
+            missing = [e for e in selected_entries if v not in (e.get("vars") or {})]
+            if missing:
+                raise RunError(
+                    f"tool.scopes[{i}].vars={v!r} not present in {len(missing)} selected combo(s)"
                 )
 
 

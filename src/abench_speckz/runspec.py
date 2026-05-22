@@ -6,6 +6,15 @@ _MONITOR_SPANS = ("per_rep", "per_group", "per_sweep")
 
 
 @dataclass
+class ScopeEntry:
+    """One level in a nested per-sweep scope hierarchy (raw, pre-resolution)."""
+
+    vars: str | list[str]
+    setup: list[str] = field(default_factory=list)
+    teardown: list[str] = field(default_factory=list)
+
+
+@dataclass
 class MonitorEntry:
     command: str
     span: str = "per_rep"  # "per_rep" | "per_group" | "per_sweep"
@@ -36,6 +45,7 @@ class ToolSpec:
     setup_per_sweep: list[str] = field(default_factory=list)
     teardown_per_sweep: list[str] = field(default_factory=list)
     per_sweep_var: str | list[str] | None = None
+    scopes: list[ScopeEntry] = field(default_factory=list)
     grafana_links: list[dict] = field(default_factory=list)
 
 
