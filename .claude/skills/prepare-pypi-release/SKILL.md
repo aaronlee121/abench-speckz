@@ -44,7 +44,28 @@ date +%Y-%m-%d
 
 Move all content from the `## [Unreleased]` section into the new `## [X.Y.Z]` entry. If `[Unreleased]` is empty, summarise the unreleased commits yourself under the appropriate headings (`### Added`, `### Fixed`, `### Changed`, `### Removed`). Keep `## [Unreleased]` as an empty placeholder above the new entry.
 
-## Step 3 — Run tests
+## Step 3 — Lint, format, and type checks
+
+```bash
+source .venv/bin/activate
+ruff check src/ tests/
+ruff format --check src/ tests/
+mypy
+```
+
+All three must exit 0 before proceeding. Fix any issues:
+
+- `ruff check --fix src/ tests/` auto-fixes safe lint violations
+- `ruff format src/ tests/` auto-formats code
+- Mypy type errors must be fixed manually
+
+Re-run the checks after fixing to confirm clean. If `ruff` is not installed, install it:
+
+```bash
+pip install ruff -q
+```
+
+## Step 4 — Run tests
 
 ```bash
 source .venv/bin/activate
@@ -53,7 +74,7 @@ pytest -x -q
 
 All tests must pass before proceeding. Fix any failures first.
 
-## Step 4 — Build the distribution
+## Step 5 — Build the distribution
 
 ```bash
 source .venv/bin/activate
@@ -66,7 +87,7 @@ Expected output ends with:
 Successfully built abench_speckz-X.Y.Z.tar.gz and abench_speckz-X.Y.Z-py3-none-any.whl
 ```
 
-## Step 5 — Validate the build
+## Step 6 — Validate the build
 
 ```bash
 source .venv/bin/activate
@@ -75,7 +96,7 @@ twine check dist/abench_speckz-X.Y.Z*
 
 Both the `.whl` and `.tar.gz` must show `PASSED`. If either fails, fix the issue (usually a malformed README or missing metadata) before committing.
 
-## Step 6 — Commit the version bump
+## Step 7 — Commit the version bump
 
 Stage only the three version files (do not stage `dist/`):
 
@@ -84,25 +105,36 @@ git add pyproject.toml src/abench_speckz/__init__.py CHANGELOG.md
 git commit -m "Bump version to X.Y.Z, update CHANGELOG"
 ```
 
-## Step 7 — Report to the user
-
-Tell the user:
-- The new version
-- The dist files produced (`dist/abench_speckz-X.Y.Z.tar.gz`, `dist/abench_speckz-X.Y.Z-py3-none-any.whl`)
-- The publish command to run manually when ready:
-
-```bash
-twine upload dist/abench_speckz-X.Y.Z*
-# or, for TestPyPI first:
-twine upload --repository testpypi dist/abench_speckz-X.Y.Z*
-```
-
-And the tag command if they want to push a git tag:
+## Step 8 — Tag and push
 
 ```bash
 git tag vX.Y.Z
 git push origin main --tags
 ```
+
+Confirm both the commit and the tag are on origin before proceeding.
+
+## Step 9 — Publish to PyPI
+
+```bash
+source .venv/bin/activate
+twine upload dist/abench_speckz-X.Y.Z*
+```
+
+If you want to smoke-test on TestPyPI first:
+
+```bash
+twine upload --repository testpypi dist/abench_speckz-X.Y.Z*
+# verify, then publish to the real index:
+twine upload dist/abench_speckz-X.Y.Z*
+```
+
+## Step 10 — Report to the user
+
+Tell the user:
+- The new version
+- That the tag `vX.Y.Z` has been pushed
+- That the package is live on PyPI (or confirm if they chose TestPyPI only)
 
 ## Gotchas
 
@@ -110,3 +142,4 @@ git push origin main --tags
 - **Version must match in all three files.** A mismatch between `pyproject.toml` and `__init__.py` will confuse users importing the package.
 - **Do not amend published commits.** Once a version tag is pushed, create a new patch release for any follow-up fixes.
 - **`python -m build` uses the installed setuptools**, not the venv's source tree. Make sure `pip install -e '.[dev]'` was run in the active venv.
+- **PyPI releases are permanent.** Once a version is uploaded it cannot be replaced — only yanked. Double-check `twine check` passes before uploading.
