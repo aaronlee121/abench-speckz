@@ -382,7 +382,11 @@ def table_html(rows: list[dict], headers: list[str]) -> str:
 
 
 def escape_for_js_template_literal(s: str) -> str:
-    return s.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+    s = s.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+    # Prevent </script> inside the template literal from closing the outer <script> tag.
+    # <\/script> is valid JS (\ before / is a no-op) but the HTML parser won't match it.
+    s = re.sub(r"</script", r"<\\/script", s, flags=re.IGNORECASE)
+    return s
 
 
 def split_group_by_vars(

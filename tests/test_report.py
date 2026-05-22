@@ -603,6 +603,33 @@ def test_run_reports_appear_in_full_report(tmp_path):
     assert "flame" in html
 
 
+def test_embedded_run_report_with_script_tag_does_not_break_outer_script(tmp_path):
+    # Per-run HTML containing </script> must not prematurely close the outer
+    # <script> block; if it does, loadRunReport is never defined and charts fail.
+    import io
+
+    _seed_with_run(tmp_path)
+    (tmp_path / "raw" / f"{_RUN_ID}_chart.html").write_text(
+        "<html><head>"
+        '<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>'
+        "</head><body>"
+        "<canvas id='myChart'></canvas>"
+        "<script>new Chart(document.getElementById('myChart'), {type:'bar'});</script>"
+        "</body></html>"
+    )
+    report_path = tmp_path / "report.html"
+    query.stats(tmp_path, group_by=["workload"], report=report_path, out=io.StringIO())
+    html = report_path.read_text()
+    # The escaped form must appear — raw </script> inside the template literal
+    # would close the outer <script> tag and break everything after it.
+    assert "<\\/script>" in html
+    # The loader function and its data block must both be present; if the outer
+    # <script> were closed early by an unescaped </script>, one or both would be
+    # missing or syntactically broken.
+    assert "_runReports" in html
+    assert "loadRunReport" in html
+
+
 def test_link_mode_no_embedded_content(tmp_path):
     import io
 
