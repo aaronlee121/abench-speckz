@@ -1,6 +1,5 @@
 """Run a list of shell-command steps (setup/teardown/post_run) with structured records."""
 
-import shlex
 import subprocess
 from typing import Any
 
@@ -30,7 +29,8 @@ def run_phase(
             return f"{phase}[{i}]: interpolation: {e}", records
         try:
             result = subprocess.run(
-                shlex.split(cmd),
+                cmd,
+                shell=True,
                 env=env,
                 capture_output=True,
                 text=True,
@@ -47,9 +47,6 @@ def run_phase(
                 }
             )
             return f"{phase}[{i}]: timeout after {timeout_seconds}s: {cmd}", records
-        except FileNotFoundError as e:
-            records.append({"command": cmd, "exit_code": -1, "stdout": "", "stderr": str(e)})
-            return f"{phase}[{i}]: command_not_found: {e}", records
         records.append(
             {
                 "command": cmd,

@@ -44,8 +44,8 @@ def test_timeout():
 def test_command_not_found():
     ex = LocalSubprocessExecutor()
     r = ex.execute(_request("definitely-not-a-real-command-xyz"))
-    assert r.exit_code == -1
-    assert r.failure_reason and "command_not_found" in r.failure_reason
+    assert r.exit_code == 127
+    assert r.failure_reason and "exit_code=127" in r.failure_reason
 
 
 def test_env_is_passed():

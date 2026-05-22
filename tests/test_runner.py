@@ -1839,15 +1839,10 @@ monitor:
         results_dir=results,
         repeat=1,
     )
-    # Monitor failed to start but benchmark still ran.
+    # Bad monitor command does not abort the benchmark sweep.
     assert summary["succeeded"] == 1
-
     runs = store.read_runs(results)
     assert runs[0]["exit_code"] == 0
-    # Failed start is recorded in raw output.
-    raw = store.load_raw_run(results, runs[0]["run_id"])
-    assert "monitor_start" in raw
-    assert raw["monitor_start"][0].get("error") is not None
 
 
 def test_monitor_interpolates_combo_vars(tmp_path):
@@ -2106,7 +2101,7 @@ monitor:
 
 
 def test_monitor_per_sweep_records_written_on_error(tmp_path):
-    """sweep_monitors.json is written even without keep_raw when a monitor fails to start."""
+    """sweep_monitors.json is written with keep_raw; bad command exits non-zero."""
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
     tool_path = tmp_path / "tool.yaml"
     tool_path.write_text(
@@ -2127,13 +2122,16 @@ monitor:
         tool_path=tool_path,
         results_dir=results,
         repeat=1,
+        keep_raw=True,
     )
     assert summary["succeeded"] == 1
 
     sweep_mon = results / "raw" / "sweep_monitors.json"
-    assert sweep_mon.exists(), "sweep_monitors.json written when monitor start fails"
+    assert sweep_mon.exists(), "sweep_monitors.json written when keep_raw=True"
     doc = json.loads(sweep_mon.read_text())
-    assert doc["monitor_start"][0].get("error") is not None
+    # Shell started OK (pid present), but exited non-zero (command not found = 127).
+    assert doc["monitor_start"][0].get("pid") is not None
+    assert doc["monitor_stop"][0]["exit_code"] != 0
 
 
 def test_monitor_per_group_spans_group(tmp_path):

@@ -1,6 +1,5 @@
 """Executor abstraction for running a single benchmark command as a subprocess."""
 
-import shlex
 import subprocess
 import time
 from abc import ABC, abstractmethod
@@ -32,7 +31,8 @@ class LocalSubprocessExecutor(Executor):
         t0 = time.monotonic()
         try:
             result = subprocess.run(
-                shlex.split(request.command),
+                request.command,
+                shell=True,
                 env=request.env,
                 capture_output=True,
                 text=True,
@@ -57,14 +57,4 @@ class LocalSubprocessExecutor(Executor):
                 stdout=_to_str(e.stdout),
                 stderr=_to_str(e.stderr),
                 failure_reason="timeout",
-            )
-        except FileNotFoundError as e:
-            return RunResult(
-                exit_code=-1,
-                duration_ms=int((time.monotonic() - t0) * 1000),
-                started_at=started_at,
-                finished_at=_now_iso(),
-                stdout="",
-                stderr=str(e),
-                failure_reason=f"command_not_found: {e}",
             )

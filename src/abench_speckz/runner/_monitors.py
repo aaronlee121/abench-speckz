@@ -1,6 +1,5 @@
 """Launch and terminate side-car monitor processes that run alongside the benchmark."""
 
-import shlex
 import subprocess
 from typing import Any
 
@@ -29,7 +28,8 @@ def run_monitors(
             continue
         try:
             proc = subprocess.Popen(
-                shlex.split(cmd),
+                cmd,
+                shell=True,
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -37,8 +37,6 @@ def run_monitors(
             )
             procs.append(proc)
             records.append({"command": cmd, "pid": proc.pid})
-        except FileNotFoundError as e:
-            records.append({"command": cmd, "pid": None, "error": f"command_not_found: {e}"})
         except Exception as e:
             records.append({"command": cmd, "pid": None, "error": str(e)})
     return procs, records

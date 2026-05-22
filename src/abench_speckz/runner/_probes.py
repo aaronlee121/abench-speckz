@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-import shlex
 import subprocess
 from typing import Any
 
@@ -37,7 +36,8 @@ def collect_probe_results(
                 interpolate.resolve_string(template, vars_, env=env or {}) if vars_ is not None else template
             )
             result = subprocess.run(
-                shlex.split(command),
+                command,
+                shell=True,
                 env=env,
                 capture_output=True,
                 text=True,
