@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-22
+
+### Added
+
+- **`scopes` tool YAML field** — nested per-sweep setup/teardown hierarchy. Each scope entry has `vars` (same string/list/negation syntax as `per_sweep_var`), `setup`, and `teardown`. Outer scopes bracket inner scopes which bracket the actual reps, enabling patterns like deploying a service once per backend while loading fixtures once per (backend, workload) pair. Inner scope steps may reference vars from all enclosing outer scopes. Mutually exclusive with the flat `per_sweep_var`/`setup_per_sweep`/`teardown_per_sweep` fields.
+
+### Fixed
+
+- KPI scorecard cards now always tile horizontally when space permits. The flex layout with `flex-basis: auto` caused cards to size to their content width, making two cards wrap onto separate rows even with room to spare. Switched `.kpi-grid` to CSS grid with `auto-fill / minmax(180px, 1fr)` so cards fill the row evenly.
+
 ## [0.5.1] - 2026-05-22
 
 ### Fixed
