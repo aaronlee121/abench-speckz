@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Inline report generation — pipeline diagram</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f5f6fa;
+      color: #222;
+      padding: 2rem;
+    }
+    h1 { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.35rem; }
+    .subtitle { font-size: 0.85rem; color: #666; margin-bottom: 2.5rem; }
+
+    /* ── layout ──────────────────────────────────────────────────────── */
+    .pipeline {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      max-width: 860px;
+    }
+
+    /* ── phase row ───────────────────────────────────────────────────── */
+    .phase {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+    }
+    .phase-label {
+      writing-mode: vertical-lr;
+      transform: rotate(180deg);
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #fff;
+      padding: 0.6rem 0.4rem;
+      border-radius: 6px 0 0 6px;
+      min-width: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .phase-body {
+      flex: 1;
+      border: 1.5px solid #dde0e8;
+      border-left: none;
+      border-radius: 0 6px 6px 0;
+      background: #fff;
+      padding: 1rem 1.25rem 1rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+    }
+
+    /* ── connectors between phases ───────────────────────────────────── */
+    .connector {
+      display: flex;
+      align-items: center;
+      padding-left: 28px; /* align with phase body */
+      height: 32px;
+      color: #999;
+      font-size: 0.78rem;
+      gap: 0.5rem;
+    }
+    .connector::before {
+      content: '';
+      display: block;
+      width: 2px;
+      height: 100%;
+      background: #cdd1de;
+      margin-left: 0.65rem;
+      margin-right: 0.5rem;
+      flex-shrink: 0;
+    }
+
+    /* ── step boxes ──────────────────────────────────────────────────── */
+    .steps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      align-items: flex-start;
+    }
+    .step {
+      border: 1.5px solid #dde0e8;
+      border-radius: 6px;
+      padding: 0.45rem 0.75rem;
+      background: #f9fafc;
+      min-width: 160px;
+    }
+    .step .fn {
+      font-size: 0.78rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-weight: 600;
+      color: #1a55d1;
+    }
+    .step .file {
+      font-size: 0.68rem;
+      color: #888;
+      margin-top: 0.1rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .step .desc {
+      font-size: 0.75rem;
+      color: #444;
+      margin-top: 0.3rem;
+      line-height: 1.4;
+    }
+    .step.highlight {
+      background: #eef4ff;
+      border-color: #b0c8f8;
+    }
+    .step.output {
+      background: #f0faf2;
+      border-color: #a8d9b5;
+    }
+    .step.filter {
+      background: #fff8ec;
+      border-color: #f5d890;
+    }
+    .step.embed {
+      background: #fdf0ff;
+      border-color: #ddb0f0;
+    }
+
+    /* ── arrow between steps in same phase ───────────────────────────── */
+    .arrow {
+      display: flex;
+      align-items: center;
+      color: #bbb;
+      font-size: 1rem;
+      align-self: center;
+      padding-top: 0.2rem;
+    }
+
+    /* ── data flow chip ──────────────────────────────────────────────── */
+    .data-flow {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.73rem;
+      color: #666;
+    }
+    .chip {
+      background: #eef0f7;
+      border: 1px solid #cdd1de;
+      border-radius: 20px;
+      padding: 0.15rem 0.6rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.7rem;
+      color: #444;
+      white-space: nowrap;
+    }
+    .chip.green  { background: #edfaf2; border-color: #a8d9b5; color: #266a3b; }
+    .chip.purple { background: #f5eeff; border-color: #cca8f5; color: #6b1fa0; }
+    .chip.blue   { background: #eef4ff; border-color: #a8c0f8; color: #1a3ca8; }
+    .chip.amber  { background: #fff8ec; border-color: #f5d890; color: #7a5500; }
+
+    /* ── mode fork ───────────────────────────────────────────────────── */
+    .fork {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .fork-branch {
+      flex: 1;
+      min-width: 220px;
+      border: 1.5px dashed #dde0e8;
+      border-radius: 6px;
+      padding: 0.65rem 0.9rem;
+    }
+    .fork-branch .branch-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+    .fork-branch.embed-branch .branch-label { color: #7b2fa0; }
+    .fork-branch.link-branch .branch-label  { color: #0d7040; }
+
+    /* ── output box ──────────────────────────────────────────────────── */
+    .output-box {
+      border: 2px solid #a8d9b5;
+      border-radius: 8px;
+      background: #f0faf2;
+      padding: 0.75rem 1rem;
+    }
+    .output-box .title { font-weight: 700; font-size: 0.85rem; margin-bottom: 0.5rem; }
+    .output-box ul { padding-left: 1.2rem; font-size: 0.78rem; color: #333; line-height: 1.8; }
+    .output-box code {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      background: #e2f4e8;
+      padding: 0 0.25rem;
+      border-radius: 3px;
+      font-size: 0.72rem;
+    }
+
+    /* ── phase palette ───────────────────────────────────────────────── */
+    .ph-discover { background: #4b6dbd; }
+    .ph-filter   { background: #c07c18; }
+    .ph-group    { background: #7b4fa0; }
+    .ph-render   { background: #1a7a4a; }
+    .ph-script   { background: #b0362a; }
+    .ph-assemble { background: #2a6b8a; }
+
+    /* ── legend ──────────────────────────────────────────────────────── */
+    .legend {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 2.5rem;
+      font-size: 0.73rem;
+      color: #555;
+    }
+    .legend-item { display: flex; align-items: center; gap: 0.35rem; }
+    .legend-dot {
+      width: 12px; height: 12px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Inline report generation pipeline</h1>
+  <p class="subtitle">
+    How <code>raw/{run_id}_{name}.html</code> files get discovered, escaped, and
+    embedded into the main report's <code>&lt;script&gt;</code> block.
+    Entry points: <code>generate_html()</code> and <code>generate_plots_html()</code>
+    both call <code>_append_run_reports_section()</code>.
+  </p>
+
+  <div class="pipeline">
+
+    <!-- ── 1. DISCOVER ───────────────────────────────────────────────── -->
+    <div class="phase">
+      <div class="phase-label ph-discover">Discover</div>
+      <div class="phase-body">
+        <div class="steps">
+          <div class="step highlight">
+            <div class="fn">discover_run_reports()</div>
+            <div class="file">report/_runs.py</div>
+            <div class="desc">Globs <code>raw/*.html</code>; parses stems matching<br><code>{uuid36}_{name}.html</code></div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="step">
+            <div class="fn">store.read_runs()</div>
+            <div class="file">store.py</div>
+            <div class="desc">Reads <code>runs.jsonl</code> — all run rows needed for filtering</div>
+          </div>
+        </div>
+        <div class="data-flow">
+          <span>produces</span>
+          <span class="chip blue">{run_id → [(name, path)]}</span>
+          <span>+</span>
+          <span class="chip">[run dicts from runs.jsonl]</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">filter eligible runs</div>
+
+    <!-- ── 2. FILTER ─────────────────────────────────────────────────── -->
+    <div class="phase">
+      <div class="phase-label ph-filter">Filter</div>
+      <div class="phase-body">
+        <div class="steps">
+          <div class="step filter">
+            <div class="fn">runs_section() — eligibility</div>
+            <div class="file">report/_runs.py:30</div>
+            <div class="desc">
+              Keep run if:<br>
+              • <code>run_id</code> has at least one HTML file<br>
+              • <code>exit_code == 0</code><br>
+              • <code>"warmup" ∉ tags</code>
+            </div>
+          </div>
+        </div>
+        <div class="data-flow">
+          <span>early-exit</span>
+          <span class="chip amber">→ ("", "") if no eligible runs</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">group by config hash, sort by vars</div>
+
+    <!-- ── 3. GROUP ──────────────────────────────────────────────────── -->
+    <div class="phase">
+      <div class="phase-label ph-group">Group</div>
+      <div class="phase-body">
+        <div class="steps">
+          <div class="step embed">
+            <div class="fn">_group_by_config_hash()</div>
+            <div class="file">report/_runs.py:67</div>
+            <div class="desc">Buckets runs by <code>config_hash</code><br>(combos with same vars share a group)</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="step">
+            <div class="fn">sort groups</div>
+            <div class="file">runs_section():41</div>
+            <div class="desc">Alphabetical by first run's vars</div>
+          </div>
+        </div>
+        <div class="data-flow">
+          <span>emits per group</span>
+          <span class="chip purple">&lt;h3&gt;k=v, k=v&lt;/h3&gt;</span>
+          <span>heading in body HTML</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">render each run (mode fork)</div>
+
+    <!-- ── 4. RENDER ─────────────────────────────────────────────────── -->
+    <div class="phase">
+      <div class="phase-label ph-render">Render</div>
+      <div class="phase-body">
+
+        <div class="steps" style="margin-bottom:0.5rem">
+          <div class="step">
+            <div class="fn">_render_run_details()</div>
+            <div class="file">report/_runs.py:75</div>
+            <div class="desc">Outer <code>&lt;details ontoggle="loadRunReport(…)"&gt;</code><br>One inner block per report file</div>
+          </div>
+        </div>
+
+        <div class="fork">
+          <!-- embedded branch -->
+          <div class="fork-branch embed-branch">
+            <div class="branch-label">embedded mode (default)</div>
+            <div class="step embed" style="margin-bottom:0.5rem">
+              <div class="fn">path.read_text()</div>
+              <div class="desc">Read raw HTML from disk</div>
+            </div>
+            <div class="arrow" style="margin-bottom:0.5rem">↓</div>
+            <div class="step embed" style="margin-bottom:0.5rem">
+              <div class="fn">escape_for_js_template_literal()</div>
+              <div class="file">report/_html.py:384</div>
+              <div class="desc">
+                Escapes: <code>\\</code> → <code>\\\\</code>,
+                <code>`</code> → <code>\`</code>,
+                <code>${</code> → <code>\${</code>,
+                <code>&lt;/script</code> → <code>&lt;\/script</code>
+              </div>
+            </div>
+            <div class="arrow" style="margin-bottom:0.5rem">↓</div>
+            <div class="step embed">
+              <div class="fn">js_data_lines.append()</div>
+              <div class="desc">Appends <code>_runReports["id/name"] = `…`;</code> to JS data list</div>
+            </div>
+            <div style="margin-top:0.5rem">
+              <div class="data-flow">
+                <span>HTML in body:</span>
+                <span class="chip purple">&lt;iframe id="rpt-…" sandbox="allow-scripts allow-same-origin"&gt;</span>
+              </div>
+              <div class="data-flow" style="margin-top:0.3rem">
+                <span>JS:</span>
+                <span class="chip purple">_runReports["id/name"] = `escaped HTML`</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- linked branch -->
+          <div class="fork-branch link-branch">
+            <div class="branch-label">linked mode</div>
+            <div class="step output">
+              <div class="fn">&lt;a href="raw/…"&gt;</div>
+              <div class="desc">Simple hyperlink to the raw file; no JS data, no iframe</div>
+            </div>
+            <div style="margin-top:0.5rem">
+              <div class="data-flow">
+                <span>no JS produced</span>
+                <span class="chip green">script_js = ""</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="connector">build loader script (embedded only)</div>
+
+    <!-- ── 5. SCRIPT ─────────────────────────────────────────────────── -->
+    <div class="phase">
+      <div class="phase-label ph-script">Script</div>
+      <div class="phase-body">
+        <div class="steps">
+          <div class="step embed">
+            <div class="fn">_build_loader_script()</div>
+            <div class="file">report/_runs.py:116</div>
+            <div class="desc">
+              Emits:<br>
+              <code>const _runReports = {};</code><br>
+              <code>_runReports["id/name"] = `…`;</code> (×N)<br>
+              <code>function loadRunReport(el, runId, names) {…}</code>
+            </div>
+          </div>
+        </div>
+        <div class="data-flow">
+          <span>lazy fill:</span>
+          <span class="chip purple">ontoggle → iframe.srcdoc = _runReports[key]</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">append to sections + scripts, hand off to html_shell()</div>
+
+    <!-- ── 6. ASSEMBLE ───────────────────────────────────────────────── -->
+    <div class="phase">
+      <div class="phase-label ph-assemble">Assemble</div>
+      <div class="phase-body">
+        <div class="steps">
+          <div class="step">
+            <div class="fn">_append_run_reports_section()</div>
+            <div class="file">report/_render.py:287</div>
+            <div class="desc">Pushes <code>rpt_html</code> → <code>sections[]</code><br>Pushes <code>rpt_js</code> → <code>scripts[]</code></div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="step output">
+            <div class="fn">html_shell()</div>
+            <div class="file">report/_html.py:273</div>
+            <div class="desc">
+              <code>sections</code> → <code>&lt;body&gt;</code> HTML<br>
+              <code>scripts</code> → single <code>&lt;script&gt;</code> block
+            </div>
+          </div>
+        </div>
+
+        <div class="output-box" style="margin-top:0.5rem">
+          <div class="title">Final HTML structure</div>
+          <ul>
+            <li><code>&lt;body&gt;</code> → plot sections + <b>Per-run reports</b> section (iframes, headings, details)</li>
+            <li><code>&lt;script&gt;</code> → theme JS + chart inits + <code>_runReports{}</code> + <code>loadRunReport()</code></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /pipeline -->
+
+  <div class="legend">
+    <strong style="align-self:center">Legend:</strong>
+    <div class="legend-item"><div class="legend-dot" style="background:#eef4ff;border:1.5px solid #b0c8f8"></div> discovery / entry</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#fff8ec;border:1.5px solid #f5d890"></div> filter / guard</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#fdf0ff;border:1.5px solid #ddb0f0"></div> embed-mode path</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f0faf2;border:1.5px solid #a8d9b5"></div> output / linked-mode</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f9fafc;border:1.5px solid #dde0e8"></div> neutral step</div>
+    <div class="legend-item" style="margin-left:1rem; color:#888">Entry points: <code>generate_html()</code> · <code>generate_plots_html()</code></div>
+  </div>
+
+</body>
+</html>
