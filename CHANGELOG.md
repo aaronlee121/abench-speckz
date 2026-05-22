@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-22
+
+### Added
+
+- **`--where` filter operators** — `!=`, `>`, `<`, `>=`, `<=` are now supported in addition to `=`. Numeric values are compared numerically; non-numeric values fall back to lexicographic comparison. The same operators work in both the Python filter path (`make_filter`) and the DuckDB SQL path (`stats`).
+
 ## [0.6.1] - 2026-05-22
 
 ### Fixed
