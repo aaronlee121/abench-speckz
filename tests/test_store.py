@@ -187,6 +187,49 @@ def test_raw_step_stdout_spilled(tmp_path):
     assert loaded["setup"][0]["stdout"] == _LARGE
 
 
+def test_raw_monitor_stop_stdout_spilled(tmp_path):
+    store.init_results_dir(tmp_path)
+    raw = {
+        "stdout": "",
+        "stderr": "",
+        "monitor_stop": [
+            {"pid": 1, "exit_code": 0, "stdout": _LARGE, "stderr": _SMALL},
+            {"pid": 2, "exit_code": 0, "stdout": _SMALL, "stderr": ""},
+        ],
+    }
+    store.write_raw_run(tmp_path, "run-m", raw)
+
+    import json
+
+    doc = json.loads((tmp_path / "raw" / "run-m.json").read_text())
+    assert isinstance(doc["monitor_stop"][0]["stdout"], dict)
+    assert isinstance(doc["monitor_stop"][0]["stderr"], dict)
+    assert isinstance(doc["monitor_stop"][1]["stdout"], dict)
+    assert doc["monitor_stop"][1]["stderr"] == ""  # empty stays inline
+
+    loaded = store.load_raw_run(tmp_path, "run-m")
+    assert loaded["monitor_stop"][0]["stdout"] == _LARGE
+    assert loaded["monitor_stop"][0]["stderr"] == _SMALL
+    assert loaded["monitor_stop"][1]["stdout"] == _SMALL
+
+
+def test_raw_sweep_monitors_stdout_spilled(tmp_path):
+    store.init_results_dir(tmp_path)
+    store.write_raw_sweep_monitors(
+        tmp_path,
+        monitor_start=[{"command": "top", "pid": 42}],
+        monitor_stop=[{"pid": 42, "exit_code": 0, "stdout": _LARGE, "stderr": _SMALL}],
+    )
+
+    import json
+
+    doc = json.loads((tmp_path / "raw" / "sweep_monitors.json").read_text())
+    assert isinstance(doc["monitor_stop"][0]["stdout"], dict)
+    assert isinstance(doc["monitor_stop"][0]["stderr"], dict)
+    sidecar = tmp_path / doc["monitor_stop"][0]["stdout"]["$ref"]
+    assert sidecar.read_text() == _LARGE
+
+
 def test_raw_load_missing_returns_none(tmp_path):
     store.init_results_dir(tmp_path)
     assert store.load_raw_run(tmp_path, "nonexistent") is None

@@ -136,9 +136,9 @@ def _always_spill(content: str, sidecar_path: Path, results_dir: Path) -> "str |
 
 
 def _spill_phases(doc: dict[str, Any], base_name: str, raw_dir: Path, results_dir: Path) -> dict[str, Any]:
-    """Spill stdout/stderr in setup/teardown/post_run step lists. Returns a new dict."""
+    """Spill stdout/stderr in step/record lists. Returns a new dict."""
     doc = dict(doc)
-    for phase in ("setup", "teardown", "post_run"):
+    for phase in ("setup", "teardown", "post_run", "monitor_start", "monitor_stop"):
         if not isinstance(doc.get(phase), list):
             continue
         steps = []
@@ -247,11 +247,13 @@ def write_raw_sweep_monitors(
     """Persist per-sweep monitor start/stop records to ``raw/sweep_monitors.json``."""
     target = results_dir / "raw" / "sweep_monitors.json"
     target.parent.mkdir(parents=True, exist_ok=True)
+    raw_dir = results_dir / "raw"
     raw: dict[str, Any] = {}
     if monitor_start:
         raw["monitor_start"] = monitor_start
     if monitor_stop:
         raw["monitor_stop"] = monitor_stop
+    raw = _spill_phases(raw, "sweep_monitors", raw_dir, results_dir)
     target.write_text(json.dumps(raw, indent=2))
     return target
 
