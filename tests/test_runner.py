@@ -1914,7 +1914,6 @@ monitor:
 
 def test_monitor_log_file_contains_output(tmp_path):
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
-    marker = tmp_path / "started"
     tool_path = tmp_path / "tool.yaml"
     tool_path.write_text(
         f"""

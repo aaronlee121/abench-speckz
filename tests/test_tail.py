@@ -6,7 +6,6 @@ import pytest
 
 from abench_speckz.tail import _fmt_val, _print_row, _report_new_logs, tail
 
-
 # ---------------------------------------------------------------------------
 # _fmt_val
 # ---------------------------------------------------------------------------
@@ -65,12 +64,13 @@ def test_print_row_ok_shows_vars_and_metrics(capsys):
     assert "backend=pg" in out
     assert "workload=read" in out
     assert "12,345" in out  # rps formatted
-    assert "2.3" in out     # p95_ms
-    assert "1.2s" in out    # duration
+    assert "2.3" in out  # p95_ms
+    assert "1.2s" in out  # duration
 
 
 def test_print_row_ok_shows_timestamp(capsys):
     import re
+
     _print_row(_ok_row())
     out = capsys.readouterr().out
     # A bracketed HH:MM:SS timestamp derived from started_at (displayed in local TZ).

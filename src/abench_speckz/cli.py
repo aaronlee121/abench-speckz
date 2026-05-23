@@ -4,7 +4,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from abench_speckz import generate, query, runner, slug, spec, store, tail as tail_mod, tui, validate, writers
+from abench_speckz import generate, query, runner, slug, spec, store, tui, validate, writers
+from abench_speckz import tail as tail_mod
 from abench_speckz.model import Combo, RunError, SpecError
 
 

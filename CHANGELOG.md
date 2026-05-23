@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-22
+
+### Added
+
+- **`abench-speckz browse`** — interactive Textual TUI browser for a results directory. Three-pane layout: combos (left), per-combo metric stats with n / mean / p50 / p95 / p99 / stddev (middle), individual runs with per-rep metric values (right). Navigate panes with `Tab` / `1` / `2` / `3`; reload from disk with `r`; rebuild aggregates with `R`. Requires `pip install 'abench-speckz[tui]'` (new `[tui]` optional extra; already included in `[dev]`).
+- **`abench-speckz tail`** — live-follow a running sweep: prints each completed run as it lands in `runs.jsonl`, showing exit code, duration, and extracted metric values.
+- **`log_files` monitor field** — each monitor entry now accepts a `log_files` mapping of label → path to collect and display alongside monitor start/stop records.
+
+### Fixed
+
+- Fixed hang when stopping `shell=True` subprocesses with pipe commands. SIGTERM was sent only to the shell process, leaving piped children alive and causing the sweep to block indefinitely. Now uses `os.killpg` to signal the entire process group.
+- Fixed column-alignment bug in the `log_files` display when monitor names differ in length.
+
 ## [0.7.0] - 2026-05-22
 
 ### Added

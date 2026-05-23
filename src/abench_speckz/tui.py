@@ -1,4 +1,5 @@
 """Textual TUI for browsing a results directory."""
+
 from __future__ import annotations
 
 import json
@@ -43,15 +44,17 @@ def _load_combos(results_dir: Path) -> tuple[list[_ComboSummary], list[str]]:
             combos[h].n_runs = max(combos[h].n_runs, row.get("n", 0))
             combos[h].n_failed = max(combos[h].n_failed, row.get("n_failed", 0))
 
-        combos[h].metrics.append({
-            "metric": row.get("metric", ""),
-            "n": row.get("n", 0),
-            "mean": row.get("mean"),
-            "p50": row.get("p50"),
-            "p95": row.get("p95"),
-            "p99": row.get("p99"),
-            "stddev": row.get("stddev"),
-        })
+        combos[h].metrics.append(
+            {
+                "metric": row.get("metric", ""),
+                "n": row.get("n", 0),
+                "mean": row.get("mean"),
+                "p50": row.get("p50"),
+                "p95": row.get("p95"),
+                "p99": row.get("p99"),
+                "stddev": row.get("stddev"),
+            }
+        )
 
     # Prefer the manifest snapshot's original key order
     snapshot = results_dir / "manifest.snapshot.json"
@@ -100,11 +103,10 @@ def browse(results_dir: Path) -> None:
         from textual.containers import Horizontal, Vertical
         from textual.reactive import reactive
         from textual.widgets import DataTable, Footer, Header, Label
-    except ImportError:
+    except ImportError as exc:
         raise SystemExit(
-            "textual is required for 'abench-speckz browse'.\n"
-            "Install it: pip install 'abench-speckz[tui]'"
-        )
+            "textual is required for 'abench-speckz browse'.\nInstall it: pip install 'abench-speckz[tui]'"
+        ) from exc
 
     _pane_ids = ["combo-table", "metric-table", "run-table"]
 
@@ -251,7 +253,7 @@ def browse(results_dir: Path) -> None:
 
             metric_names: list[str] = []
             for run in runs:
-                for k in (run.get("results") or {}):
+                for k in run.get("results") or {}:
                     if k not in metric_names:
                         metric_names.append(k)
 
@@ -322,6 +324,7 @@ def browse(results_dir: Path) -> None:
 
         def action_rebuild(self) -> None:
             from abench_speckz import store
+
             n = store.rebuild_aggregates(results_dir)
             self._load_and_populate()
             self.notify(f"Rebuilt {n} aggregate rows")
