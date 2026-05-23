@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Conditional step syntax** — steps in `setup`, `teardown`, `post_run`, `setup_per_sweep`, `teardown_per_sweep`, and `scopes` now accept a `{run, when}` dict form alongside plain strings. The `when` dict is a variable equality filter; steps are silently skipped when any key-value pair does not match the current combo vars. Numeric `when` values are coerced to strings for comparison. Plain-string steps are unchanged.
+
 ## [0.11.0] - 2026-05-23
 
 ### Added
