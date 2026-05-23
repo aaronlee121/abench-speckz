@@ -77,7 +77,8 @@ def test_log_file_created(tmp_path):
     )
     stop_monitors(procs, log_files)
 
-    assert (log_dir / "mon-0.log").exists()
+    assert (log_dir / "mon-0.out.log").exists()
+    assert (log_dir / "mon-0.err.log").exists()
 
 
 def test_log_file_contains_output(tmp_path):
@@ -92,12 +93,12 @@ def test_log_file_contains_output(tmp_path):
     assert _wait_for(marker), "monitor did not start in time"
     stop_monitors(procs, log_files)
 
-    content = (log_dir / "monitor-0.log").read_text()
+    content = (log_dir / "monitor-0.out.log").read_text()
     assert "hello from monitor" in content
 
 
-def test_log_file_receives_stderr_too(tmp_path):
-    # stderr=STDOUT merges stderr into the log file.
+def test_log_file_receives_stderr_separately(tmp_path):
+    # stdout and stderr go to separate log files.
     marker = tmp_path / "started"
     log_dir = tmp_path / "logs"
     procs, records, log_files = run_monitors(
@@ -109,9 +110,8 @@ def test_log_file_receives_stderr_too(tmp_path):
     assert _wait_for(marker), "monitor did not start in time"
     stop_monitors(procs, log_files)
 
-    content = (log_dir / "monitor-0.log").read_text()
-    assert "out" in content
-    assert "err" in content
+    assert "out" in (log_dir / "monitor-0.out.log").read_text()
+    assert "err" in (log_dir / "monitor-0.err.log").read_text()
 
 
 def test_log_path_in_start_record(tmp_path):
@@ -125,7 +125,8 @@ def test_log_path_in_start_record(tmp_path):
     )
     stop_monitors(procs, log_files)
 
-    assert records[0]["log_path"] == str(log_dir / "test-0.log")
+    assert records[0]["log_path_out"] == str(log_dir / "test-0.out.log")
+    assert records[0]["log_path_err"] == str(log_dir / "test-0.err.log")
 
 
 def test_stop_record_has_no_stdout_with_log_file(tmp_path):
@@ -181,8 +182,9 @@ def test_log_files_parallel_to_procs_with_interpolation_failure(tmp_path):
     assert len(procs) == 1
     assert len(log_files) == 1
     stop_monitors(procs, log_files)
-    # The log file belongs to command 1 (index 1 → p-1.log)
-    assert (log_dir / "p-1.log").exists()
+    # The log file belongs to command 1 (index 1 → p-1.out.log / p-1.err.log)
+    assert (log_dir / "p-1.out.log").exists()
+    assert (log_dir / "p-1.err.log").exists()
 
 
 def test_multiple_monitors_get_separate_log_files(tmp_path):
@@ -202,8 +204,8 @@ def test_multiple_monitors_get_separate_log_files(tmp_path):
     assert _wait_for(marker0) and _wait_for(marker1), "monitors did not start in time"
     stop_monitors(procs, log_files)
 
-    assert "first" in (log_dir / "m-0.log").read_text()
-    assert "second" in (log_dir / "m-1.log").read_text()
+    assert "first" in (log_dir / "m-0.out.log").read_text()
+    assert "second" in (log_dir / "m-1.out.log").read_text()
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +226,7 @@ def test_log_file_written_before_process_exits(tmp_path):
     )
 
     assert _wait_for(marker), "monitor did not start in time"
-    content = (log_dir / "monitor-0.log").read_text()
+    content = (log_dir / "monitor-0.out.log").read_text()
     assert "live" in content
 
     stop_monitors(procs, log_files)

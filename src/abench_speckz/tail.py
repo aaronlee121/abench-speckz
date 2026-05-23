@@ -27,17 +27,19 @@ def tail(results_dir: Path) -> None:
     seen_logs: set[str] = set(str(p) for p in logs_dir.glob("*.log")) if logs_dir.exists() else set()
     # path_str → (file_handle, short_label, partial_line_buffer)
     open_logs: dict[str, tuple[IO, str, bytes]] = {}
+    # base_stem (without .out/.err) → assigned monitor index N
+    base_to_index: dict[str, int] = {}
     log_index = 0
 
     with runs_path.open() as f:
         while True:
             line = f.readline()
             if not line:
-                log_index = _open_new_logs(logs_dir, seen_logs, open_logs, log_index)
+                log_index = _open_new_logs(logs_dir, seen_logs, open_logs, base_to_index, log_index)
                 _drain_logs(open_logs)
                 time.sleep(0.5)
                 continue
-            log_index = _open_new_logs(logs_dir, seen_logs, open_logs, log_index)
+            log_index = _open_new_logs(logs_dir, seen_logs, open_logs, base_to_index, log_index)
             _drain_logs(open_logs)
             try:
                 row = json.loads(line)
@@ -50,6 +52,7 @@ def _open_new_logs(
     logs_dir: Path,
     seen: set[str],
     open_logs: dict[str, tuple],
+    base_to_index: dict[str, int],
     log_index: int,
 ) -> int:
     if not logs_dir.exists():
@@ -58,8 +61,18 @@ def _open_new_logs(
         key = str(p)
         if key not in seen:
             seen.add(key)
-            label = f"mon-{log_index}"
-            log_index += 1
+            stem = p.stem  # e.g. "monitor-uuid-0.out" or "monitor-uuid-0.err"
+            if stem.endswith(".out"):
+                base, stream = stem[:-4], "out"
+            elif stem.endswith(".err"):
+                base, stream = stem[:-4], "err"
+            else:
+                base, stream = stem, "out"
+            if base not in base_to_index:
+                base_to_index[base] = log_index
+                log_index += 1
+            n = base_to_index[base]
+            label = f"mon-{n} {stream}"
             print(f"  → [{label}] {p.name}", flush=True)
             try:
                 open_logs[key] = (open(p, "rb"), label, b"")  # noqa: SIM115

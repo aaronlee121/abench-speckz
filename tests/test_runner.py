@@ -1908,8 +1908,10 @@ monitor:
         repeat=1,
     )
 
-    log_files = list((results / "logs").glob("monitor-*.log"))
-    assert len(log_files) == 1, f"expected one monitor log, got: {log_files}"
+    out_logs = list((results / "logs").glob("monitor-*.out.log"))
+    err_logs = list((results / "logs").glob("monitor-*.err.log"))
+    assert len(out_logs) == 1, f"expected one stdout log, got: {out_logs}"
+    assert len(err_logs) == 1, f"expected one stderr log, got: {err_logs}"
 
 
 def test_monitor_log_file_contains_output(tmp_path):
@@ -1934,9 +1936,8 @@ monitor:
         repeat=1,
     )
 
-    log_file = next((results / "logs").glob("monitor-*.log"))
-    content = log_file.read_text()
-    assert "monitor-output-marker" in content
+    log_file = next((results / "logs").glob("monitor-*.out.log"))
+    assert "monitor-output-marker" in log_file.read_text()
 
 
 def test_monitor_does_not_abort_benchmark_on_start_failure(tmp_path):

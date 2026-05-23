@@ -114,35 +114,52 @@ def test_print_row_missing_started_at_uses_fallback(capsys):
 
 
 def test_open_new_logs_announces_and_opens_file(tmp_path, capsys):
-    log_file = tmp_path / "monitor-abc-0.log"
+    log_file = tmp_path / "monitor-abc-0.out.log"
     log_file.write_bytes(b"")
     seen: set[str] = set()
     open_logs: dict = {}
+    base_to_index: dict = {}
 
-    idx = _open_new_logs(tmp_path, seen, open_logs, 0)
+    idx = _open_new_logs(tmp_path, seen, open_logs, base_to_index, 0)
 
     out = capsys.readouterr().out
-    assert "monitor-abc-0.log" in out
-    assert "[mon-0]" in out
+    assert "monitor-abc-0.out.log" in out
+    assert "[mon-0 out]" in out
     assert str(log_file) in seen
     assert idx == 1
     assert len(open_logs) == 1
 
 
+def test_open_new_logs_err_shares_index_with_out(tmp_path, capsys):
+    # .out.log and .err.log from the same monitor share the same N.
+    (tmp_path / "monitor-abc-0.out.log").write_bytes(b"")
+    (tmp_path / "monitor-abc-0.err.log").write_bytes(b"")
+    seen: set[str] = set()
+    open_logs: dict = {}
+    base_to_index: dict = {}
+
+    idx = _open_new_logs(tmp_path, seen, open_logs, base_to_index, 0)
+
+    out = capsys.readouterr().out
+    assert "[mon-0 out]" in out
+    assert "[mon-0 err]" in out
+    assert idx == 1  # only one N consumed for both files
+
+
 def test_open_new_logs_skips_already_seen(tmp_path, capsys):
-    log_file = tmp_path / "monitor-abc-0.log"
+    log_file = tmp_path / "monitor-abc-0.out.log"
     log_file.write_bytes(b"")
     seen: set[str] = {str(log_file)}
     open_logs: dict = {}
 
-    _open_new_logs(tmp_path, seen, open_logs, 0)
+    _open_new_logs(tmp_path, seen, open_logs, {}, 0)
 
     assert capsys.readouterr().out == ""
     assert open_logs == {}
 
 
 def test_open_new_logs_no_op_when_dir_missing(tmp_path, capsys):
-    idx = _open_new_logs(tmp_path / "nonexistent", set(), {}, 0)
+    idx = _open_new_logs(tmp_path / "nonexistent", set(), {}, {}, 0)
     assert capsys.readouterr().out == ""
     assert idx == 0
 
@@ -258,9 +275,9 @@ def test_tail_surfaces_new_monitor_log_files(tmp_path, capsys, monkeypatch):
         nonlocal call_count
         call_count += 1
         if call_count == 1:
-            # Drop a new log file on first sleep
             logs_dir.mkdir()
-            (logs_dir / "monitor-abc-0.log").write_bytes(b"")
+            (logs_dir / "monitor-abc-0.out.log").write_bytes(b"")
+            (logs_dir / "monitor-abc-0.err.log").write_bytes(b"")
         if call_count >= 3:
             raise KeyboardInterrupt
 
@@ -270,8 +287,10 @@ def test_tail_surfaces_new_monitor_log_files(tmp_path, capsys, monkeypatch):
         tail(tmp_path)
 
     out = capsys.readouterr().out
-    assert "monitor-abc-0.log" in out
-    assert "[mon-0]" in out
+    assert "[mon-0 out]" in out
+    assert "[mon-0 err]" in out
+    assert "monitor-abc-0.out.log" in out
+    assert "monitor-abc-0.err.log" in out
 
 
 def test_tail_does_not_replay_existing_log_files(tmp_path, capsys, monkeypatch):
@@ -279,7 +298,7 @@ def test_tail_does_not_replay_existing_log_files(tmp_path, capsys, monkeypatch):
     runs_path.write_text("")
     logs_dir = tmp_path / "logs"
     logs_dir.mkdir()
-    (logs_dir / "monitor-old-0.log").write_text("")  # pre-existing file
+    (logs_dir / "monitor-old-0.out.log").write_bytes(b"")  # pre-existing file
 
     monkeypatch.setattr("abench_speckz.tail.time.sleep", _make_sleep_bomb(2))
 
@@ -287,7 +306,7 @@ def test_tail_does_not_replay_existing_log_files(tmp_path, capsys, monkeypatch):
         tail(tmp_path)
 
     out = capsys.readouterr().out
-    assert "monitor-old-0.log" not in out
+    assert "monitor-old-0.out.log" not in out
 
 
 def test_tail_skips_malformed_json_lines(tmp_path, capsys, monkeypatch):
