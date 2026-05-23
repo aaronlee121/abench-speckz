@@ -364,3 +364,4 @@ def browse(results_dir: Path) -> None:
             self.notify(f"Rebuilt {n} aggregate rows")
 
     BrowserApp().run()
+    print("\033[2J\033[H", end="", flush=True)
