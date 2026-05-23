@@ -100,8 +100,16 @@ def execute_sweep(
 
     groups = group_work(work, per_sweep_vars) if not resolved_scopes else []
 
+    total = len(work)
+    n_combos = len({config_hash(e["vars"]) for e, _, _ in work})
+    print(
+        f"sweep: {total} rep(s) across {n_combos} combo(s)",
+        file=progress_stream,
+        flush=True,
+    )
+
     with store.lock_results_dir(results_dir):
-        _init_sweep(results_dir, actual_manifest_path, tool_path, tool)
+        _init_sweep(results_dir, actual_manifest_path, tool_path, tool, progress_stream)
         tool_version = tools.resolve_tool_version(tool)
         skip_counts = existing_counts(results_dir) if skip_existing else Counter()
 
@@ -182,6 +190,7 @@ def _init_sweep(
     manifest_path: Path,
     tool_path: Path,
     tool: ToolSpec,
+    progress_stream=sys.stderr,
 ) -> None:
     """Prepare the results dir: init layout, snapshot inputs, capture env + pretty names."""
     store.init_results_dir(results_dir)
@@ -190,6 +199,11 @@ def _init_sweep(
 
     env_meta = collect_env_metadata()
     if tool.env_probes:
+        print(
+            f"env probes: {len(tool.env_probes)} probe(s)...",
+            file=progress_stream,
+            flush=True,
+        )
         env_meta["probes"] = collect_probe_results(tool.env_probes, tool.setup_timeout_seconds)
     store.write_env_snapshot(results_dir, env_meta)
 
@@ -254,6 +268,18 @@ def _run_groups(
                 _progress(progress_stream, sweep_idx, total, t_sweep, "skip", config_hash(entry["vars"]))
             continue
 
+        if tool.setup_per_sweep:
+            _label = (
+                ", ".join(f"{v}={group_key[i]}" for i, v in enumerate(per_sweep_vars))
+                if (per_sweep_vars and group_key is not None)
+                else ""
+            )
+            _suffix = f" [{_label}]" if _label else ""
+            print(
+                f"per_sweep setup{_suffix} ({len(tool.setup_per_sweep)} step(s))...",
+                file=progress_stream,
+                flush=True,
+            )
         sweep_setup_failure, sweep_setup_records = (
             run_phase(
                 "per_sweep_setup", tool.setup_per_sweep, phase_vars, base_env, tool.setup_timeout_seconds
@@ -334,6 +360,7 @@ def _run_groups(
                     cache=combo_probe_cache,
                 )
 
+                _progress_start(progress_stream, sweep_idx, total, ch, is_warmup)
                 try:
                     row = execute_one_rep(
                         entry=entry,
@@ -529,6 +556,7 @@ def _run_innermost_group_reps(
                 cache=combo_probe_cache,
             )
 
+            _progress_start(progress_stream, state["sweep_idx"], state["total"], ch, is_warmup)
             try:
                 row = execute_one_rep(
                     entry=entry,
@@ -656,6 +684,13 @@ def _run_nested_groups(
                 )
             continue
 
+        if scope.setup:
+            _label = ", ".join(f"{v}={group_key[i]}" for i, v in enumerate(scope.vars))
+            print(
+                f"scope{scope_idx} setup [{_label}] ({len(scope.setup)} step(s))...",
+                file=progress_stream,
+                flush=True,
+            )
         setup_failure, setup_records = (
             run_phase("per_sweep_setup", scope.setup, phase_vars, base_env, tool.setup_timeout_seconds)
             if scope.setup
@@ -1004,6 +1039,11 @@ def _progress(stream, idx: int, total: int, t_start: float, status: str, ch: str
         file=stream,
         flush=True,
     )
+
+
+def _progress_start(stream, idx: int, total: int, ch: str, is_warmup: bool) -> None:
+    tag = " [warmup]" if is_warmup else ""
+    print(f"[{idx:>4}/{total}] run  {ch}{tag}", file=stream, flush=True)
 
 
 def _empty_summary() -> dict[str, int]:
