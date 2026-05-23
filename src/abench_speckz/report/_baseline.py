@@ -60,7 +60,7 @@ def compare_rows(
 
     for r in current_rows:
         key = tuple(str(r.get(k, "")) for k in group_by)
-        metric = r.get("metric")
+        metric: str = r.get("metric") or ""
         lookup = (key, metric)
         seen.add(lookup)
 
@@ -104,13 +104,13 @@ def compare_rows(
         )
 
     # Baseline rows with no matching current row → "removed"
-    for (key, metric), base_row in base_idx.items():
-        if (key, metric) not in seen:
+    for (key, base_metric), base_row in base_idx.items():
+        if (key, base_metric) not in seen:
             keys_dict = {k: v for k, v in zip(group_by, key, strict=True)}
             results.append(
                 Comparison(
                     keys=keys_dict,
-                    metric=metric,
+                    metric=base_metric or "",
                     current=None,
                     baseline=base_row.get("mean"),
                     delta=None,
@@ -129,7 +129,7 @@ def _is_significant(cur: dict, base: dict) -> bool:
     c_hi = cur.get("ci95_high")
     b_lo = base.get("ci95_low")
     b_hi = base.get("ci95_high")
-    if None in (c_lo, c_hi, b_lo, b_hi):
+    if c_lo is None or c_hi is None or b_lo is None or b_hi is None:
         return False
     # Overlap when c_lo <= b_hi AND b_lo <= c_hi; disjoint otherwise
     return not (c_lo <= b_hi and b_lo <= c_hi)

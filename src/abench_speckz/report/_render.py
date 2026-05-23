@@ -210,7 +210,9 @@ def _prepend_regression_summary(
     baseline_rows = query.compute_rows(baseline_dir, group_by=all_vars)
     hib = load_higher_is_better(results_dir)
 
-    comparisons = compare_rows(current_rows, baseline_rows, all_vars, higher_is_better=hib, threshold=threshold)
+    comparisons = compare_rows(
+        current_rows, baseline_rows, all_vars, higher_is_better=hib, threshold=threshold
+    )
     comparisons = sort_summary(comparisons, hib)
 
     if not comparisons:
@@ -218,7 +220,9 @@ def _prepend_regression_summary(
 
     n_reg = sum(1 for c in comparisons if c.status == "regressed")
     n_imp = sum(1 for c in comparisons if c.status == "improved")
-    summary_line = f"{n_reg} regression{'s' if n_reg != 1 else ''}, {n_imp} improvement{'s' if n_imp != 1 else ''}"
+    summary_line = (
+        f"{n_reg} regression{'s' if n_reg != 1 else ''}, {n_imp} improvement{'s' if n_imp != 1 else ''}"
+    )
     table = comparison_table_html(comparisons, all_vars, pretty_map)
     section_html = (
         f'\n  <section class="regression-summary">\n'

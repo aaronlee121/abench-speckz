@@ -89,8 +89,7 @@ def build_bar_or_line_config(
             label = " / ".join(label_parts)
 
         data = [
-            r.get("mean") if (r := indexed.get((x, metric, gb_tuple))) is not None else None
-            for x in x_values
+            r.get("mean") if (r := indexed.get((x, metric, gb_tuple))) is not None else None for x in x_values
         ]
         ds: dict[str, Any] = {
             "label": label,

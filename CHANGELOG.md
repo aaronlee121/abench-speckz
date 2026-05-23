@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-05-22
+
+### Added
+
+- **Baseline comparison mode** — `abench-speckz stats --baseline <dir>` compares a results directory against a baseline. The HTML report gains a **Regression Summary** section (all combo×metric deltas, sorted worst-first, with colour coding), ghost overlay series on every bar/line chart, and Δ/Δ% columns in per-plot data tables. A delta is flagged only when it exceeds `--regression-threshold` (default 5%) **and** is statistically significant (CI bands disjoint). Direction follows `higher_is_better` from the tool YAML.
+- **`error_bars` plot field** — set to `ci95` or `stddev` on `bar` or `line` plots to draw whisker error bars on each data point using CI or ±stddev from aggregated stats.
+
+### Fixed
+
+- Fixed terminal clear on `browse` exit to use `os.system("clear")` for portable behaviour across platforms.
+
 ## [0.9.0] - 2026-05-22
 
 ### Added

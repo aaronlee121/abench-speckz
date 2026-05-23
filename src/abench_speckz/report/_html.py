@@ -573,9 +573,7 @@ def comparison_table_html(comparisons: list, group_by: list[str], pretty_map: di
         return '<p class="meta">(no comparison data)</p>'
 
     group_headers = "".join(f"<th>{resolve_metric(pretty_map, k)}</th>" for k in group_by)
-    header_cells = (
-        f"{group_headers}<th>metric</th><th>current</th><th>baseline</th><th>Δ</th><th>Δ%</th>"
-    )
+    header_cells = f"{group_headers}<th>metric</th><th>current</th><th>baseline</th><th>Δ</th><th>Δ%</th>"
     body_rows = ""
     for c in comparisons:
         if c.status == "regressed":
@@ -610,8 +608,7 @@ def comparison_table_html(comparisons: list, group_by: list[str], pretty_map: di
             pct_cell = "<td></td>"
 
         body_rows += (
-            f"<tr{row_cls}>{group_cells}{metric_cell}"
-            f"{cur_cell}{base_cell}{delta_cell}{pct_cell}</tr>"
+            f"<tr{row_cls}>{group_cells}{metric_cell}{cur_cell}{base_cell}{delta_cell}{pct_cell}</tr>"
         )
 
     return (

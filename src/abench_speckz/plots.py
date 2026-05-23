@@ -262,9 +262,7 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
                     f"{sorted(_ALLOWED_ERROR_BARS)}, got {error_bars_raw!r}"
                 )
             if ptype in ("scatter", "stacked-bar"):
-                raise RunError(
-                    f"{source}: plot {plot_id!r}: error_bars is not allowed on {ptype!r} plots"
-                )
+                raise RunError(f"{source}: plot {plot_id!r}: error_bars is not allowed on {ptype!r} plots")
             error_bars = error_bars_raw
 
         unknown = set(item) - {
