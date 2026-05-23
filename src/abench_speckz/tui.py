@@ -102,13 +102,51 @@ def browse(results_dir: Path) -> None:
         from textual.binding import Binding
         from textual.containers import Horizontal, Vertical
         from textual.reactive import reactive
-        from textual.widgets import DataTable, Footer, Header, Label
+        from textual.widgets import DataTable, Footer, Header, Label, Tree
+        from textual.widgets._tree import TreeNode
     except ImportError as exc:
         raise SystemExit(
             "textual is required for 'abench-speckz browse'.\nInstall it: pip install 'abench-speckz[tui]'"
         ) from exc
 
-    _pane_ids = ["combo-table", "metric-table", "run-table"]
+    def _build_tree_nodes(
+        parent: TreeNode,  # type: ignore[type-arg]
+        combos: list[_ComboSummary],
+        var_keys: list[str],
+        depth: int,
+    ) -> None:
+        if depth >= len(var_keys):
+            return
+        key = var_keys[depth]
+        is_last = depth == len(var_keys) - 1
+
+        groups: dict[str, list[_ComboSummary]] = {}
+        for combo in combos:
+            val = combo.vars.get(key, "")
+            groups.setdefault(val, []).append(combo)
+
+        for val, sub_combos in groups.items():
+            n_fail = sum(c.n_failed for c in sub_combos)
+            if is_last:
+                combo = sub_combos[0]
+                label = Text()
+                label.append(f"{key}=")
+                label.append(val, style="bold")
+                label.append(f"  n={combo.n_runs}", style="dim")
+                if combo.n_failed:
+                    label.append(f"  ✗{combo.n_failed}", style="bold red")
+                parent.add_leaf(label, data=combo.config_hash)
+            else:
+                label = Text()
+                label.append(f"{key}=")
+                label.append(val, style="bold")
+                label.append(f"  ({len(sub_combos)})", style="dim")
+                if n_fail:
+                    label.append(f"  ✗{n_fail}", style="bold red")
+                child = parent.add(label, expand=True)
+                _build_tree_nodes(child, sub_combos, var_keys, depth + 1)
+
+    _pane_ids = ["combo-tree", "metric-table", "run-table"]
 
     class BrowserApp(App):
         CSS = """
@@ -137,6 +175,7 @@ def browse(results_dir: Path) -> None:
         }
 
         DataTable { height: 1fr; }
+        Tree { height: 1fr; }
         """
 
         BINDINGS = [
@@ -158,14 +197,13 @@ def browse(results_dir: Path) -> None:
             self.title = f"abench-speckz browse — {results_dir}"
             self.combos: list[_ComboSummary] = []
             self.var_keys: list[str] = []
-            self._has_failures: bool = False
 
         def compose(self) -> ComposeResult:
             yield Header()
             with Horizontal(id="panes"):
                 with Vertical(id="left-pane", classes="pane"):
                     yield Label("Combos", classes="pane-title", id="left-title")
-                    yield DataTable(id="combo-table", cursor_type="row")
+                    yield Tree("", id="combo-tree")
                 with Vertical(id="middle-pane", classes="pane"):
                     yield Label("Metrics", classes="pane-title", id="middle-title")
                     yield DataTable(id="metric-table", cursor_type="row")
@@ -176,7 +214,7 @@ def browse(results_dir: Path) -> None:
 
         def on_mount(self) -> None:
             self._load_and_populate()
-            self.query_one("#combo-table").focus()
+            self.query_one("#combo-tree").focus()
 
         # ------------------------------------------------------------------
         # Data loading
@@ -184,35 +222,31 @@ def browse(results_dir: Path) -> None:
 
         def _load_and_populate(self) -> None:
             self.combos, self.var_keys = _load_combos(results_dir)
-            self._has_failures = any(c.n_failed for c in self.combos)
-            self._populate_combos()
+            self._populate_combo_tree()
+            known = {c.config_hash for c in self.combos}
+            if self.combos and self.selected_hash not in known:
+                self.selected_hash = self.combos[0].config_hash
             self._populate_metrics(self.selected_hash)
             self._populate_runs(self.selected_hash)
 
-        def _populate_combos(self) -> None:
-            table = self.query_one("#combo-table", DataTable)
-            table.clear(columns=True)
-            self.query_one("#left-title", Label).update(f"Combos ({len(self.combos)})")
+        def _populate_combo_tree(self) -> None:
+            tree = self.query_one("#combo-tree", Tree)
+            tree.clear()
+            n = len(self.combos)
+            tree.root.set_label(f"Combos ({n})")
+            self.query_one("#left-title", Label).update(f"Combos ({n})")
 
             if not self.combos:
-                table.add_column("(no data)")
+                tree.root.add_leaf("(no data)")
+                tree.root.expand()
                 return
 
-            for k in self.var_keys:
-                table.add_column(k, key=k)
-            table.add_column("n", key="n")
-            if self._has_failures:
-                table.add_column("fail", key="fail")
-
-            for combo in self.combos:
-                row: list[Any] = [combo.vars.get(k, "") for k in self.var_keys]
-                row.append(str(combo.n_runs))
-                if self._has_failures:
-                    fail_cell = Text(str(combo.n_failed))
-                    if combo.n_failed > 0:
-                        fail_cell.stylize("bold red")
-                    row.append(fail_cell)
-                table.add_row(*row, key=combo.config_hash)
+            if not self.var_keys:
+                for combo in self.combos:
+                    tree.root.add_leaf(combo.config_hash[:12], data=combo.config_hash)
+            else:
+                _build_tree_nodes(tree.root, self.combos, self.var_keys, 0)
+            tree.root.expand()
 
         def _populate_metrics(self, config_hash: str | None) -> None:
             table = self.query_one("#metric-table", DataTable)
@@ -286,9 +320,9 @@ def browse(results_dir: Path) -> None:
         # Events
         # ------------------------------------------------------------------
 
-        def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-            if event.data_table.id == "combo-table" and event.row_key:
-                self.selected_hash = str(event.row_key.value)
+        def on_tree_node_highlighted(self, event: Tree.NodeHighlighted) -> None:
+            if event.node.data is not None:
+                self.selected_hash = str(event.node.data)
 
         def watch_selected_hash(self, h: str | None) -> None:
             self._populate_metrics(h)
@@ -308,7 +342,7 @@ def browse(results_dir: Path) -> None:
 
         def action_focus_combo(self) -> None:
             self.active_pane = 0
-            self.query_one("#combo-table").focus()
+            self.query_one("#combo-tree").focus()
 
         def action_focus_metrics(self) -> None:
             self.active_pane = 1
