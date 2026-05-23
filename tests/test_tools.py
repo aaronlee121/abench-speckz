@@ -2,7 +2,7 @@ import pytest
 
 from abench_speckz import tools
 from abench_speckz.model import RunError
-from abench_speckz.runspec import MonitorEntry
+from abench_speckz.runspec import MonitorEntry, Step
 
 
 def test_load_minimal(tmp_path):
@@ -108,8 +108,8 @@ def test_setup_and_teardown_loaded(tmp_path):
         "teardown:\n  - 'docker compose down -v'\n"
     )
     spec = tools.load_tool(p)
-    assert spec.setup == ["docker compose up -d redis", "sleep 1"]
-    assert spec.teardown == ["docker compose down -v"]
+    assert spec.setup == [Step(run="docker compose up -d redis"), Step(run="sleep 1")]
+    assert spec.teardown == [Step(run="docker compose down -v")]
 
 
 def test_setup_default_empty(tmp_path):
@@ -128,11 +128,55 @@ def test_setup_must_be_list(tmp_path):
         tools.load_tool(p)
 
 
-def test_setup_steps_must_be_strings(tmp_path):
+def test_setup_steps_invalid_type_rejected(tmp_path):
     p = tmp_path / "t.yaml"
     p.write_text("name: t\ncommand: x\nsetup:\n  - 42\n")
-    with pytest.raises(RunError, match=r"tool.setup\[0\] must be a string"):
+    with pytest.raises(RunError, match=r"tool.setup\[0\] must be a string or mapping"):
         tools.load_tool(p)
+
+
+def test_setup_step_dict_form_loaded(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text(
+        "name: t\ncommand: x\n"
+        "setup:\n"
+        "  - run: 'load_read.sh'\n"
+        "    when: {workload: read}\n"
+        "  - 'always_runs.sh'\n"
+    )
+    spec = tools.load_tool(p)
+    assert spec.setup == [
+        Step(run="load_read.sh", when={"workload": "read"}),
+        Step(run="always_runs.sh"),
+    ]
+
+
+def test_setup_step_dict_missing_run_rejected(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nsetup:\n  - when: {workload: read}\n")
+    with pytest.raises(RunError, match=r"tool.setup\[0\].run must be a non-empty string"):
+        tools.load_tool(p)
+
+
+def test_setup_step_dict_unknown_key_rejected(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nsetup:\n  - run: 'x'\n    bogus: 1\n")
+    with pytest.raises(RunError, match=r"tool.setup\[0\] has unknown keys"):
+        tools.load_tool(p)
+
+
+def test_setup_step_dict_when_non_mapping_rejected(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nsetup:\n  - run: 'x'\n    when: [a, b]\n")
+    with pytest.raises(RunError, match=r"tool.setup\[0\].when must be a mapping"):
+        tools.load_tool(p)
+
+
+def test_setup_step_when_values_coerced_to_string(tmp_path):
+    p = tmp_path / "t.yaml"
+    p.write_text("name: t\ncommand: x\nsetup:\n  - run: 'x'\n    when: {concurrency: 4}\n")
+    spec = tools.load_tool(p)
+    assert spec.setup[0].when == {"concurrency": "4"}
 
 
 def test_setup_timeout_must_be_positive_int(tmp_path):

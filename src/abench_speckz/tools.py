@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 from abench_speckz.model import RunError
-from abench_speckz.runspec import _MONITOR_SPANS, MonitorEntry, ScopeEntry, ToolSpec
+from abench_speckz.runspec import _MONITOR_SPANS, MonitorEntry, ScopeEntry, Step, ToolSpec
 
 _FIELDS = {
     "name",
@@ -91,17 +91,36 @@ def _load_grafana_links(raw: dict, path) -> list[dict]:
     return entries
 
 
-def _load_phase(raw: dict, path, key: str) -> list[str]:
+def _load_phase(raw: dict, path, key: str) -> list[Step]:
     value = raw.get(key)
     if value is None:
         return []
     if not isinstance(value, list):
         raise RunError(f"{path}: tool.{key} must be a list of shell-command strings")
-    steps: list[str] = []
-    for i, step in enumerate(value):
-        if not isinstance(step, str):
-            raise RunError(f"{path}: tool.{key}[{i}] must be a string, got {type(step).__name__}")
-        steps.append(step)
+    steps: list[Step] = []
+    for i, item in enumerate(value):
+        if isinstance(item, str):
+            steps.append(Step(run=item))
+        elif isinstance(item, dict):
+            unknown = set(item) - {"run", "when"}
+            if unknown:
+                raise RunError(f"{path}: tool.{key}[{i}] has unknown keys: {sorted(unknown)}")
+            run = item.get("run")
+            if not isinstance(run, str) or not run:
+                raise RunError(f"{path}: tool.{key}[{i}].run must be a non-empty string")
+            when = item.get("when") or {}
+            if not isinstance(when, dict):
+                raise RunError(f"{path}: tool.{key}[{i}].when must be a mapping")
+            for k, v in when.items():
+                if not isinstance(k, str) or not k:
+                    raise RunError(f"{path}: tool.{key}[{i}].when keys must be non-empty strings")
+                if not isinstance(v, (str, int, float, bool)):
+                    raise RunError(f"{path}: tool.{key}[{i}].when[{k!r}] value must be a scalar")
+            steps.append(Step(run=run, when={k: str(v) for k, v in when.items()}))
+        else:
+            raise RunError(
+                f"{path}: tool.{key}[{i}] must be a string or mapping, got {type(item).__name__}"
+            )
     return steps
 
 

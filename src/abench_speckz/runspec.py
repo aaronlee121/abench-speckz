@@ -6,12 +6,23 @@ _MONITOR_SPANS = ("per_rep", "per_group", "per_sweep")
 
 
 @dataclass
+class Step:
+    """One shell-command step, optionally guarded by a variable equality filter."""
+
+    run: str
+    when: dict[str, str] = field(default_factory=dict)
+
+    def matches(self, vars_: dict) -> bool:
+        return all(str(vars_.get(k)) == v for k, v in self.when.items())
+
+
+@dataclass
 class ScopeEntry:
     """One level in a nested per-sweep scope hierarchy (raw, pre-resolution)."""
 
     vars: str | list[str]
-    setup: list[str] = field(default_factory=list)
-    teardown: list[str] = field(default_factory=list)
+    setup: list[Step] = field(default_factory=list)
+    teardown: list[Step] = field(default_factory=list)
 
 
 @dataclass
@@ -37,13 +48,13 @@ class ToolSpec:
     plots: list[dict] = field(default_factory=list)
     env_probes: dict[str, str] = field(default_factory=dict)
     combo_probes: dict[str, str] = field(default_factory=dict)
-    setup: list[str] = field(default_factory=list)
-    teardown: list[str] = field(default_factory=list)
-    post_run: list[str] = field(default_factory=list)
+    setup: list[Step] = field(default_factory=list)
+    teardown: list[Step] = field(default_factory=list)
+    post_run: list[Step] = field(default_factory=list)
     monitor: list[MonitorEntry] = field(default_factory=list)
     setup_timeout_seconds: int = 120
-    setup_per_sweep: list[str] = field(default_factory=list)
-    teardown_per_sweep: list[str] = field(default_factory=list)
+    setup_per_sweep: list[Step] = field(default_factory=list)
+    teardown_per_sweep: list[Step] = field(default_factory=list)
     per_sweep_var: str | list[str] | None = None
     scopes: list[ScopeEntry] = field(default_factory=list)
     grafana_links: list[dict] = field(default_factory=list)

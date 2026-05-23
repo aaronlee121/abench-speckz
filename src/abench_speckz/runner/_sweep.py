@@ -901,8 +901,10 @@ def _dry_run_nested_level(
             "_results_dir": str(results_dir.resolve()) if results_dir else "<results_dir>",
         }
         label = ", ".join(f"{v}={group_key[i]}" for i, v in enumerate(scope.vars))
-        for k, template in enumerate(scope.setup):
-            cmd = interpolate.resolve_string(template, phase_vars, env=os.environ)
+        for k, step in enumerate(scope.setup):
+            if not step.matches(phase_vars):
+                continue
+            cmd = interpolate.resolve_string(step.run, phase_vars, env=os.environ)
             print(f"{pad}[scope{scope_idx} setup {k}, {label}]: {cmd}", file=stream)
         if is_innermost:
             for entry, rep, is_warmup in group_items:
@@ -922,8 +924,10 @@ def _dry_run_nested_level(
                 results_dir,
                 indent=indent + 1,
             )
-        for k, template in enumerate(scope.teardown):
-            cmd = interpolate.resolve_string(template, phase_vars, env=os.environ)
+        for k, step in enumerate(scope.teardown):
+            if not step.matches(phase_vars):
+                continue
+            cmd = interpolate.resolve_string(step.run, phase_vars, env=os.environ)
             print(f"{pad}[scope{scope_idx} teardown {k}, {label}]: {cmd}", file=stream)
 
 
@@ -1012,16 +1016,20 @@ def _dry_run_preview(
             if (per_sweep_vars and group_key is not None)
             else ""
         )
-        for k, template in enumerate(tool.setup_per_sweep):
-            cmd = interpolate.resolve_string(template, phase_vars, env=os.environ)
+        for k, step in enumerate(tool.setup_per_sweep):
+            if not step.matches(phase_vars):
+                continue
+            cmd = interpolate.resolve_string(step.run, phase_vars, env=os.environ)
             print(f"[per_sweep setup {k}{label}]: {cmd}", file=stream)
         for entry, rep, is_warmup in items:
             ch = config_hash(entry["vars"])
             cmd = interpolate.resolve_string(tool.command, entry["vars"], env=os.environ)
             tag = " [warmup]" if is_warmup else ""
             print(f"{ch} rep={rep}{tag}: {cmd}", file=stream)
-        for k, template in enumerate(tool.teardown_per_sweep):
-            cmd = interpolate.resolve_string(template, phase_vars, env=os.environ)
+        for k, step in enumerate(tool.teardown_per_sweep):
+            if not step.matches(phase_vars):
+                continue
+            cmd = interpolate.resolve_string(step.run, phase_vars, env=os.environ)
             print(f"[per_sweep teardown {k}{label}]: {cmd}", file=stream)
 
 
