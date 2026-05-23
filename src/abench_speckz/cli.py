@@ -48,8 +48,7 @@ def main(argv: list[str] | None = None) -> int:
         "--max-repeat",
         type=int,
         default=None,
-        help="maximum reps per combo when --ci-target is set "
-        "(default: max(--repeat, 30))",
+        help="maximum reps per combo when --ci-target is set (default: max(--repeat, 30))",
     )
     run.add_argument("--results", type=Path, default=Path("results"))
     run.add_argument("--filter", action="append", default=[], help="K=V combo filter (AND)")

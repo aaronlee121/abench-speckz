@@ -45,8 +45,16 @@ def test_fixed_scheduler_yields_warmup_then_measured_per_entry():
 
     # entry1: 2 warmup + 3 measured, then entry2: 2 warmup + 3 measured
     assert seq == [
-        ("read", True), ("read", True), ("read", False), ("read", False), ("read", False),
-        ("write", True), ("write", True), ("write", False), ("write", False), ("write", False),
+        ("read", True),
+        ("read", True),
+        ("read", False),
+        ("read", False),
+        ("read", False),
+        ("write", True),
+        ("write", True),
+        ("write", False),
+        ("write", False),
+        ("write", False),
     ]
 
 
@@ -68,7 +76,7 @@ def test_fixed_scheduler_skip_existing_off_ignores_skip_counts():
     ch1 = config_hash(e1["vars"])
     sched = FixedScheduler([e1], warmup=0, repeat=2, skip_counts={ch1: 10}, skip_existing=False)
     state = SweepState()
-    items = list(iter(lambda: sched.next(SweepState()), None) if False else [])
+    _items = list(iter(lambda: sched.next(SweepState()), None) if False else [])
     # Easier: just count what next() returns
     state = SweepState()
     seen = []
@@ -97,13 +105,11 @@ def test_fixed_scheduler_planned_counts_per_entry():
 def test_ci_target_stops_at_min_repeat_when_already_tight():
     e = _entry(workload="read")
     ch = config_hash(e["vars"])
-    sched = CITargetScheduler(
-        [e], [CITarget("rps", 0.05)], min_repeat=3, max_repeat=20, warmup=0
-    )
+    sched = CITargetScheduler([e], [CITarget("rps", 0.05)], min_repeat=3, max_repeat=20, warmup=0)
     state = SweepState()
 
     issued = 0
-    while (item := sched.next(state)) is not None:
+    while (_ := sched.next(state)) is not None:
         issued += 1
         # Nearly identical values → very tight CI
         state.record(ch, _row(ch, value=100.0 + 0.001 * issued))
@@ -117,15 +123,14 @@ def test_ci_target_stops_at_min_repeat_when_already_tight():
 def test_ci_target_runs_to_max_repeat_when_never_converges():
     e = _entry(workload="read")
     ch = config_hash(e["vars"])
-    sched = CITargetScheduler(
-        [e], [CITarget("rps", 0.001)], min_repeat=3, max_repeat=10, warmup=0
-    )
+    sched = CITargetScheduler([e], [CITarget("rps", 0.001)], min_repeat=3, max_repeat=10, warmup=0)
     state = SweepState()
 
     issued = 0
     import random
+
     rng = random.Random(42)
-    while (item := sched.next(state)) is not None:
+    while (_ := sched.next(state)) is not None:
         issued += 1
         # Highly variable values → CI never converges to 0.1%.
         state.record(ch, _row(ch, value=rng.uniform(10, 1000)))
@@ -145,16 +150,19 @@ def test_ci_target_requires_all_metrics_to_converge():
     state = SweepState()
 
     issued = 0
-    while (item := sched.next(state)) is not None:
+    while (_ := sched.next(state)) is not None:
         issued += 1
         # rps is tight, latency_ms varies wildly.
-        state.record(ch, {
-            "config_hash": ch,
-            "exit_code": 0,
-            "results": {"rps": 100.0 + 0.001 * issued, "latency_ms": 5.0 * issued},
-            "tags": [],
-            "vars": {},
-        })
+        state.record(
+            ch,
+            {
+                "config_hash": ch,
+                "exit_code": 0,
+                "results": {"rps": 100.0 + 0.001 * issued, "latency_ms": 5.0 * issued},
+                "tags": [],
+                "vars": {},
+            },
+        )
     # latency_ms never converges → run to max_repeat
     assert issued == 8
 
@@ -162,9 +170,7 @@ def test_ci_target_requires_all_metrics_to_converge():
 def test_ci_target_warmup_runs_first():
     e = _entry(workload="read")
     ch = config_hash(e["vars"])
-    sched = CITargetScheduler(
-        [e], [CITarget("rps", 0.05)], min_repeat=3, max_repeat=10, warmup=2
-    )
+    sched = CITargetScheduler([e], [CITarget("rps", 0.05)], min_repeat=3, max_repeat=10, warmup=2)
     state = SweepState()
 
     seq = []
@@ -212,9 +218,7 @@ def test_ci_target_rejects_bad_args():
 
 def test_ci_target_planned_measured_is_min_repeat():
     e = _entry(workload="read")
-    sched = CITargetScheduler(
-        [e], [CITarget("rps", 0.05)], min_repeat=4, max_repeat=20, warmup=1
-    )
+    sched = CITargetScheduler([e], [CITarget("rps", 0.05)], min_repeat=4, max_repeat=20, warmup=1)
     assert sched.planned_warmup_for(e) == 1
     assert sched.planned_measured_for(e) == 4
 

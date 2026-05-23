@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-05-23
+
 ### Added
 
 - **Adaptive `--ci-target` stopping** — `abench-speckz run --ci-target METRIC=THRESHOLD` (repeatable) stops a combo as soon as every named metric's 95% CI half-width is within `THRESHOLD * |mean|`, bounded by new `--min-repeat` (default 3) and `--max-repeat` (default `max(--repeat, 30)`) flags. Stable combos finish in the minimum; noisy combos use more, up to the cap. Stopping decisions are scoped to one per_sweep / scope group at a time.

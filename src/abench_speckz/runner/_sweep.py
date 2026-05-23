@@ -119,9 +119,8 @@ def execute_sweep(
         return _empty_summary()
 
     if scheduler_factory is None:
-        def _default_factory(
-            entries: list[dict[str, Any]], skip_counts: dict[str, int]
-        ) -> Scheduler:
+
+        def _default_factory(entries: list[dict[str, Any]], skip_counts: dict[str, int]) -> Scheduler:
             return FixedScheduler(
                 entries,
                 warmup=warmup,
@@ -129,6 +128,7 @@ def execute_sweep(
                 skip_counts=skip_counts,
                 skip_existing=skip_existing,
             )
+
         scheduler_factory = _default_factory
 
     # Pre-instantiate schedulers per group only to (a) compute total for
@@ -202,9 +202,11 @@ def execute_sweep(
                     "succeeded": summary["succeeded"],
                 }
             else:
-                groups = group_entries(selected, per_sweep_vars)
+                entry_groups: list[tuple[tuple[str, ...] | None, list[dict[str, Any]]]] = group_entries(
+                    selected, per_sweep_vars
+                )
                 return _run_groups(
-                    groups=groups,
+                    groups=entry_groups,
                     tool=tool,
                     tool_version=tool_version,
                     per_sweep_vars=per_sweep_vars,
@@ -469,6 +471,7 @@ def _drive_scheduler_loop(
                 # next decision sees this rep. Disk write is still deferred
                 # until we know whether this is the final rep (so any
                 # teardown_per_sweep failure can be folded in).
+                assert prev_ch is not None
                 state.record(prev_ch, prev_row)
             item = scheduler.next(state)
             if item is None:
@@ -529,9 +532,7 @@ def _drive_scheduler_loop(
                 )
                 if teardown_failure:
                     prior = prev_row.get("failure_reason")
-                    prev_row["failure_reason"] = (
-                        f"{prior}; {teardown_failure}" if prior else teardown_failure
-                    )
+                    prev_row["failure_reason"] = f"{prior}; {teardown_failure}" if prior else teardown_failure
             _commit_disk(
                 prev_row,
                 prev_ch,

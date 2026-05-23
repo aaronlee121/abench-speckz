@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from abench_speckz import aggregate
@@ -70,9 +70,7 @@ class SweepState:
         return sum(
             1
             for r in self._rows.get(ch, ())
-            if "warmup" not in (r.get("tags") or [])
-            and r.get("exit_code") == 0
-            and r.get("results")
+            if "warmup" not in (r.get("tags") or []) and r.get("exit_code") == 0 and r.get("results")
         )
 
     def aggregates_for(self, ch: str) -> list[AggregateRow]:
@@ -144,7 +142,8 @@ class FixedScheduler:
 
     def runnable_entries(self) -> list[dict[str, Any]]:
         return [
-            e for e in self._entries
+            e
+            for e in self._entries
             if not (self._skip_existing and self._skip.get(config_hash(e["vars"]), 0) >= self._repeat)
         ]
 
@@ -232,13 +231,12 @@ class CITargetScheduler:
         captured = {k[:-2] if k.endswith("[]") else k for k in captured}
         missing = [t.metric for t in self._targets if t.metric not in captured]
         if missing:
-            raise ValueError(
-                f"--ci-target references metric(s) not in tool.capture: {', '.join(missing)}"
-            )
+            raise ValueError(f"--ci-target references metric(s) not in tool.capture: {', '.join(missing)}")
 
     def runnable_entries(self) -> list[dict[str, Any]]:
         return [
-            e for e in self._entries
+            e
+            for e in self._entries
             if not (self._skip_existing and self._skip.get(config_hash(e["vars"]), 0) >= self._max)
         ]
 
