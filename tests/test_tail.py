@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from abench_speckz.tail import _fmt_val, _print_row, _report_new_logs, tail
+from abench_speckz.tail import _drain_logs, _fmt_val, _open_new_logs, _print_row, tail
 
 # ---------------------------------------------------------------------------
 # _fmt_val
@@ -109,37 +109,70 @@ def test_print_row_missing_started_at_uses_fallback(capsys):
 
 
 # ---------------------------------------------------------------------------
-# _report_new_logs
+# _open_new_logs / _drain_logs
 # ---------------------------------------------------------------------------
 
 
-def test_report_new_logs_shows_new_file(tmp_path, capsys):
+def test_open_new_logs_announces_and_opens_file(tmp_path, capsys):
     log_file = tmp_path / "monitor-abc-0.log"
-    log_file.write_text("")
+    log_file.write_bytes(b"")
     seen: set[str] = set()
+    open_logs: dict = {}
 
-    _report_new_logs(tmp_path, seen)
+    idx = _open_new_logs(tmp_path, seen, open_logs, 0)
 
     out = capsys.readouterr().out
     assert "monitor-abc-0.log" in out
-    assert "tail -f" in out
+    assert "[mon-0]" in out
     assert str(log_file) in seen
+    assert idx == 1
+    assert len(open_logs) == 1
 
 
-def test_report_new_logs_skips_already_seen(tmp_path, capsys):
+def test_open_new_logs_skips_already_seen(tmp_path, capsys):
     log_file = tmp_path / "monitor-abc-0.log"
-    log_file.write_text("")
+    log_file.write_bytes(b"")
     seen: set[str] = {str(log_file)}
+    open_logs: dict = {}
 
-    _report_new_logs(tmp_path, seen)
+    _open_new_logs(tmp_path, seen, open_logs, 0)
+
+    assert capsys.readouterr().out == ""
+    assert open_logs == {}
+
+
+def test_open_new_logs_no_op_when_dir_missing(tmp_path, capsys):
+    idx = _open_new_logs(tmp_path / "nonexistent", set(), {}, 0)
+    assert capsys.readouterr().out == ""
+    assert idx == 0
+
+
+def test_drain_logs_prints_complete_lines(tmp_path, capsys):
+    log_file = tmp_path / "mon.log"
+    log_file.write_bytes(b"line one\nline two\n")
+    fh = open(log_file, "rb")  # noqa: SIM115
+    open_logs = {str(log_file): (fh, "mon-0", b"")}
+
+    _drain_logs(open_logs)
+    fh.close()
 
     out = capsys.readouterr().out
-    assert out == ""
+    assert "[mon-0] line one" in out
+    assert "[mon-0] line two" in out
 
 
-def test_report_new_logs_no_op_when_dir_missing(tmp_path, capsys):
-    _report_new_logs(tmp_path / "nonexistent", set())
-    assert capsys.readouterr().out == ""
+def test_drain_logs_buffers_partial_lines(tmp_path, capsys):
+    log_file = tmp_path / "mon.log"
+    log_file.write_bytes(b"partial")
+    fh = open(log_file, "rb")  # noqa: SIM115
+    open_logs = {str(log_file): (fh, "mon-0", b"")}
+
+    _drain_logs(open_logs)
+    assert capsys.readouterr().out == ""  # no newline yet → nothing printed
+    # Buffer should hold the partial line for next iteration
+    _, _, buf = open_logs[str(log_file)]
+    assert buf == b"partial"
+    fh.close()
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +260,7 @@ def test_tail_surfaces_new_monitor_log_files(tmp_path, capsys, monkeypatch):
         if call_count == 1:
             # Drop a new log file on first sleep
             logs_dir.mkdir()
-            (logs_dir / "monitor-abc-0.log").write_text("")
+            (logs_dir / "monitor-abc-0.log").write_bytes(b"")
         if call_count >= 3:
             raise KeyboardInterrupt
 
@@ -238,7 +271,7 @@ def test_tail_surfaces_new_monitor_log_files(tmp_path, capsys, monkeypatch):
 
     out = capsys.readouterr().out
     assert "monitor-abc-0.log" in out
-    assert "tail -f" in out
+    assert "[mon-0]" in out
 
 
 def test_tail_does_not_replay_existing_log_files(tmp_path, capsys, monkeypatch):

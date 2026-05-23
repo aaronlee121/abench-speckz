@@ -4,13 +4,14 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import IO
 
 
 def tail(results_dir: Path) -> None:
     """Follow runs.jsonl and print each completed run as it lands.
 
-    Blocks until Ctrl+C. Also surfaces new monitor log files as they appear
-    so the caller can ``tail -f`` them in a second terminal.
+    Blocks until Ctrl+C. Also streams content from monitor log files as they
+    appear so monitor output is visible inline without a separate terminal.
     """
     runs_path = results_dir / "runs.jsonl"
     logs_dir = results_dir / "logs"
@@ -22,17 +23,22 @@ def tail(results_dir: Path) -> None:
 
     print(f"Watching {runs_path}  (Ctrl+C to stop)\n", flush=True)
 
-    # Seed seen_logs with any pre-existing files so we don't replay old runs.
+    # Seed seen_logs with pre-existing files so we don't replay old output.
     seen_logs: set[str] = set(str(p) for p in logs_dir.glob("*.log")) if logs_dir.exists() else set()
+    # path_str → (file_handle, short_label, partial_line_buffer)
+    open_logs: dict[str, tuple[IO, str, bytes]] = {}
+    log_index = 0
 
     with runs_path.open() as f:
         while True:
             line = f.readline()
             if not line:
-                _report_new_logs(logs_dir, seen_logs)
+                log_index = _open_new_logs(logs_dir, seen_logs, open_logs, log_index)
+                _drain_logs(open_logs)
                 time.sleep(0.5)
                 continue
-            _report_new_logs(logs_dir, seen_logs)
+            log_index = _open_new_logs(logs_dir, seen_logs, open_logs, log_index)
+            _drain_logs(open_logs)
             try:
                 row = json.loads(line)
             except json.JSONDecodeError:
@@ -40,14 +46,43 @@ def tail(results_dir: Path) -> None:
             _print_row(row)
 
 
-def _report_new_logs(logs_dir: Path, seen: set[str]) -> None:
+def _open_new_logs(
+    logs_dir: Path,
+    seen: set[str],
+    open_logs: dict[str, tuple],
+    log_index: int,
+) -> int:
     if not logs_dir.exists():
-        return
+        return log_index
     for p in sorted(logs_dir.glob("*.log")):
         key = str(p)
         if key not in seen:
             seen.add(key)
-            print(f"  → monitor log: {p}  (tail -f to follow)", flush=True)
+            label = f"mon-{log_index}"
+            log_index += 1
+            print(f"  → [{label}] {p.name}", flush=True)
+            try:
+                open_logs[key] = (open(p, "rb"), label, b"")  # noqa: SIM115
+            except OSError:
+                pass
+    return log_index
+
+
+def _drain_logs(open_logs: dict[str, tuple]) -> None:
+    for key, (fh, label, buf) in list(open_logs.items()):
+        try:
+            chunk = fh.read()
+        except OSError:
+            open_logs.pop(key, None)
+            continue
+        if not chunk:
+            continue
+        buf += chunk
+        while b"\n" in buf:
+            raw_line, buf = buf.split(b"\n", 1)
+            text = raw_line.decode("utf-8", errors="replace").rstrip("\r")
+            print(f"  [{label}] {text}", flush=True)
+        open_logs[key] = (fh, label, buf)
 
 
 def _print_row(row: dict) -> None:
