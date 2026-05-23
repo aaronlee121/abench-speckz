@@ -10,19 +10,23 @@ from abench_speckz import prettynames
 CHART_JS_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4"
 
 THEMES: dict[str, list[str]] = {
-    "tableau":    ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7"],
-    "vivid":      ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#a65628", "#f781bf", "#999999"],
-    "pastel":     ["#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#80b1d3", "#fdb462", "#b3de69", "#fccde5"],
-    "paired":     ["#a6cee3", "#1f78b4", "#b2df8a", "#33a02c", "#fb9a99", "#e31a1c", "#fdbf6f", "#ff7f00"],
-    "muted":      ["#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e", "#e6ab02", "#a6761d", "#666666"],
+    "tableau": ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7"],
+    "vivid": ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#a65628", "#f781bf", "#999999"],
+    "pastel": ["#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#80b1d3", "#fdb462", "#b3de69", "#fccde5"],
+    "paired": ["#a6cee3", "#1f78b4", "#b2df8a", "#33a02c", "#fb9a99", "#e31a1c", "#fdbf6f", "#ff7f00"],
+    "muted": ["#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e", "#e6ab02", "#a6761d", "#666666"],
     "accessible": ["#0077bb", "#ee7733", "#009988", "#cc3311", "#33bbee", "#ee3377", "#bbbbbb", "#555555"],
 }
 COLORS = THEMES["tableau"]
 STAT_COLS = ("n", "n_failed", "mean", "stddev", "p50", "p95", "p99", "ci95_low", "ci95_high")
 
 _THEME_LABELS = {
-    "tableau": "Tableau", "vivid": "Vivid", "pastel": "Pastel",
-    "paired": "Paired", "muted": "Muted", "accessible": "Accessible",
+    "tableau": "Tableau",
+    "vivid": "Vivid",
+    "pastel": "Pastel",
+    "paired": "Paired",
+    "muted": "Muted",
+    "accessible": "Accessible",
 }
 
 
@@ -130,6 +134,7 @@ _SLANT_SYNC_JS = """
     window.addEventListener('resize', syncSlant);
   })();
 """
+
 
 def _anti_fouc_js(dark_mode: bool | str, switcher: bool) -> str:
     """Return inline script that sets data-theme before CSS loads to prevent flash."""
@@ -289,10 +294,7 @@ def _theme_js(palette: str, dark_mode: bool | str, switcher: bool) -> str:
 def _toolbar_html(active_palette: str) -> str:
     swatch_btns = ""
     for tid, colors in THEMES.items():
-        dots = "".join(
-            f'<span class="swatch-dot" style="background:{c}"></span>'
-            for c in colors[:5]
-        )
+        dots = "".join(f'<span class="swatch-dot" style="background:{c}"></span>' for c in colors[:5])
         label = _THEME_LABELS.get(tid, tid)
         active_cls = ' class="swatch-btn active"' if tid == active_palette else ' class="swatch-btn"'
         swatch_btns += (
@@ -304,7 +306,7 @@ def _toolbar_html(active_palette: str) -> str:
         f'<span class="toolbar-label">Theme</span>'
         f'<div class="swatch-group">{swatch_btns}</div>'
         f'<button class="dark-toggle" id="dark-toggle-btn" onclick="_toggleDark()">Dark mode</button>'
-        f'</div>'
+        f"</div>"
     )
 
 
@@ -372,7 +374,9 @@ def safe_id(s: str) -> str:
 
 def collapsible(label: str, content: str, *, open: bool = False) -> str:
     open_attr = " open" if open else ""
-    return f'<details{open_attr}><summary>{label}</summary><div class="details-body">{content}</div></details>'
+    return (
+        f'<details{open_attr}><summary>{label}</summary><div class="details-body">{content}</div></details>'
+    )
 
 
 def fmt_value(v: Any) -> str:
@@ -489,7 +493,7 @@ def legend_table_html(
         if multi_metric:
             cells += f"<td>{resolve_metric(pretty_map, s['metric'])}</td>"
         for k in varying_keys:
-            raw_val = s['vals'].get(k, '')
+            raw_val = s["vals"].get(k, "")
             cells += f"<td>{resolve_var_value(pretty_map, k, raw_val)}</td>"
         body_rows += f"<tr>{cells}</tr>"
     return (

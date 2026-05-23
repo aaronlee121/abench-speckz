@@ -1,4 +1,5 @@
 """Tests for executive-level features: _select, KPI blocks, headline blocks, normalize."""
+
 import io
 
 import pytest
@@ -6,14 +7,12 @@ import pytest
 from abench_speckz import plots, query, store
 from abench_speckz.model import RunError
 from abench_speckz.plots import (
-    Block,
     HeadlineDef,
     KpiCard,
     KpiCompare,
     NormalizeSpec,
 )
 from abench_speckz.report._select import higher_is_better_map, rank_by, resolve_value
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -51,6 +50,7 @@ def _make_tools_dir(results_dir, higher_is_better: dict):
     tools_dir = results_dir / "tools"
     tools_dir.mkdir(exist_ok=True)
     import yaml
+
     (tools_dir / "mytool.yaml").write_text(
         yaml.dump({"name": "mytool", "command": "x", "higher_is_better": higher_is_better})
     )
@@ -73,10 +73,15 @@ class TestHigherIsBetterMap:
 
     def test_first_tool_wins_on_conflict(self, tmp_path):
         import yaml
+
         tools_dir = tmp_path / "tools"
         tools_dir.mkdir()
-        (tools_dir / "a.yaml").write_text(yaml.dump({"name": "a", "command": "x", "higher_is_better": {"rps": True}}))
-        (tools_dir / "b.yaml").write_text(yaml.dump({"name": "b", "command": "x", "higher_is_better": {"rps": False}}))
+        (tools_dir / "a.yaml").write_text(
+            yaml.dump({"name": "a", "command": "x", "higher_is_better": {"rps": True}})
+        )
+        (tools_dir / "b.yaml").write_text(
+            yaml.dump({"name": "b", "command": "x", "higher_is_better": {"rps": False}})
+        )
         hib = higher_is_better_map(tmp_path)
         assert hib["rps"] is True
 
@@ -149,18 +154,13 @@ class TestKpiBlockParsing:
     def _section_yaml(self, blocks_yaml: str) -> str:
         return (
             "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
-            "sections:\n  - title: KPIs\n    blocks:\n"
-            + blocks_yaml
+            "sections:\n  - title: KPIs\n    blocks:\n" + blocks_yaml
         )
 
     def test_parse_minimal_kpi(self, tmp_path):
         p = tmp_path / "plots.yaml"
         p.write_text(
-            self._section_yaml(
-                "      - kpi:\n"
-                "          - label: Peak RPS\n"
-                "            metric: rps\n"
-            )
+            self._section_yaml("      - kpi:\n          - label: Peak RPS\n            metric: rps\n")
         )
         doc = plots.load_plots_file(p)
         block = doc.sections[0].blocks[0]
@@ -203,8 +203,7 @@ class TestKpiBlockParsing:
         p = tmp_path / "plots.yaml"
         p.write_text(
             self._section_yaml(
-                "      - kpi:\n"
-                "          - label: X\n            metric: rps\n            stat: p95\n"
+                "      - kpi:\n          - label: X\n            metric: rps\n            stat: p95\n"
             )
         )
         with pytest.raises(RunError, match="stat must be one of"):
@@ -212,17 +211,13 @@ class TestKpiBlockParsing:
 
     def test_kpi_missing_label(self, tmp_path):
         p = tmp_path / "plots.yaml"
-        p.write_text(
-            self._section_yaml("      - kpi:\n          - metric: rps\n")
-        )
+        p.write_text(self._section_yaml("      - kpi:\n          - metric: rps\n"))
         with pytest.raises(RunError, match="label must be a non-empty string"):
             plots.load_plots_file(p)
 
     def test_kpi_missing_metric(self, tmp_path):
         p = tmp_path / "plots.yaml"
-        p.write_text(
-            self._section_yaml("      - kpi:\n          - label: X\n")
-        )
+        p.write_text(self._section_yaml("      - kpi:\n          - label: X\n"))
         with pytest.raises(RunError, match="metric must be a non-empty string"):
             plots.load_plots_file(p)
 
@@ -238,9 +233,7 @@ class TestKpiBlockParsing:
 
     def test_kpi_not_list(self, tmp_path):
         p = tmp_path / "plots.yaml"
-        p.write_text(
-            self._section_yaml("      - kpi: not_a_list\n")
-        )
+        p.write_text(self._section_yaml("      - kpi: not_a_list\n"))
         with pytest.raises(RunError, match="kpi must be a list"):
             plots.load_plots_file(p)
 
@@ -264,8 +257,7 @@ class TestHeadlineBlockParsing:
     def _section_yaml(self, blocks_yaml: str) -> str:
         return (
             "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
-            "sections:\n  - title: Headlines\n    blocks:\n"
-            + blocks_yaml
+            "sections:\n  - title: Headlines\n    blocks:\n" + blocks_yaml
         )
 
     def test_parse_minimal_headline(self, tmp_path):
@@ -305,20 +297,14 @@ class TestHeadlineBlockParsing:
     def test_headline_missing_metric(self, tmp_path):
         p = tmp_path / "plots.yaml"
         p.write_text(
-            self._section_yaml(
-                "      - headline:\n          compare: backend\n          template: x\n"
-            )
+            self._section_yaml("      - headline:\n          compare: backend\n          template: x\n")
         )
         with pytest.raises(RunError, match="headline.metric must be a non-empty string"):
             plots.load_plots_file(p)
 
     def test_headline_missing_compare(self, tmp_path):
         p = tmp_path / "plots.yaml"
-        p.write_text(
-            self._section_yaml(
-                "      - headline:\n          metric: rps\n          template: x\n"
-            )
-        )
+        p.write_text(self._section_yaml("      - headline:\n          metric: rps\n          template: x\n"))
         with pytest.raises(RunError, match="headline.compare must be a non-empty string"):
             plots.load_plots_file(p)
 
@@ -366,13 +352,15 @@ class TestKpiRendering:
         from abench_speckz.report._kpi import render_kpi_block
 
         compare = KpiCompare(where=["backend=mysql"])
-        cards = [KpiCard(
-            label="RPS vs mysql",
-            metric="rps",
-            stat="mean",
-            where=["backend=postgres"],
-            compare=compare,
-        )]
+        cards = [
+            KpiCard(
+                label="RPS vs mysql",
+                metric="rps",
+                stat="mean",
+                where=["backend=postgres"],
+                compare=compare,
+            )
+        ]
         html = render_kpi_block(cards, tmp_path, {})
         # postgres > mysql so delta should be positive/good
         assert "kpi-delta-good" in html
@@ -452,19 +440,13 @@ class TestNormalizeParsing:
 
     def test_normalize_missing_against(self, tmp_path):
         p = tmp_path / "plots.yaml"
-        p.write_text(
-            "- id: p1\n  type: bar\n  x: w\n  y: rps\n"
-            "  normalize:\n    reference: postgres\n"
-        )
+        p.write_text("- id: p1\n  type: bar\n  x: w\n  y: rps\n  normalize:\n    reference: postgres\n")
         with pytest.raises(RunError, match="normalize.against must be a non-empty string"):
             plots.load_plots_file(p)
 
     def test_normalize_missing_reference(self, tmp_path):
         p = tmp_path / "plots.yaml"
-        p.write_text(
-            "- id: p1\n  type: bar\n  x: w\n  y: rps\n"
-            "  normalize:\n    against: backend\n"
-        )
+        p.write_text("- id: p1\n  type: bar\n  x: w\n  y: rps\n  normalize:\n    against: backend\n")
         with pytest.raises(RunError, match="normalize.reference must be a non-empty value"):
             plots.load_plots_file(p)
 
@@ -510,8 +492,34 @@ class TestNormalizeChart:
         # postgres rps=1000 (mean over read+write: (1000+600)/2=800),
         # mysql rps=500 (mean over read+write: (500+300)/2=400)
         rows = [
-            {"workload": "read", "backend": "postgres", "metric": "rps", "mean": 1000.0, "stddev": 0.0, "n": 3, "n_failed": 0, "p50": 1000.0, "p95": 1000.0, "p99": 1000.0, "ci95_low": 1000.0, "ci95_high": 1000.0},
-            {"workload": "read", "backend": "mysql", "metric": "rps", "mean": 500.0, "stddev": 0.0, "n": 3, "n_failed": 0, "p50": 500.0, "p95": 500.0, "p99": 500.0, "ci95_low": 500.0, "ci95_high": 500.0},
+            {
+                "workload": "read",
+                "backend": "postgres",
+                "metric": "rps",
+                "mean": 1000.0,
+                "stddev": 0.0,
+                "n": 3,
+                "n_failed": 0,
+                "p50": 1000.0,
+                "p95": 1000.0,
+                "p99": 1000.0,
+                "ci95_low": 1000.0,
+                "ci95_high": 1000.0,
+            },
+            {
+                "workload": "read",
+                "backend": "mysql",
+                "metric": "rps",
+                "mean": 500.0,
+                "stddev": 0.0,
+                "n": 3,
+                "n_failed": 0,
+                "p50": 500.0,
+                "p95": 500.0,
+                "p99": 500.0,
+                "ci95_low": 500.0,
+                "ci95_high": 500.0,
+            },
         ]
         plot = PlotSpec(
             id="speedup",
@@ -522,8 +530,13 @@ class TestNormalizeChart:
             normalize=NormalizeSpec(against="backend", reference="postgres"),
         )
         config, _ = build_bar_or_line_config(
-            plot, rows, {}, chart_type="bar", stacked=False,
-            group_by=["backend"], varying_keys=["backend"],
+            plot,
+            rows,
+            {},
+            chart_type="bar",
+            stacked=False,
+            group_by=["backend"],
+            varying_keys=["backend"],
         )
         datasets = config["data"]["datasets"]
         # postgres should be 1.0, mysql should be ~0.5
@@ -537,16 +550,51 @@ class TestNormalizeChart:
         from abench_speckz.report._charts import build_bar_or_line_config
 
         rows = [
-            {"workload": "read", "backend": "postgres", "metric": "rps", "mean": 100.0, "stddev": 0.0, "n": 1, "n_failed": 0, "p50": 100.0, "p95": 100.0, "p99": 100.0, "ci95_low": 100.0, "ci95_high": 100.0},
-            {"workload": "read", "backend": "mysql", "metric": "rps", "mean": 50.0, "stddev": 0.0, "n": 1, "n_failed": 0, "p50": 50.0, "p95": 50.0, "p99": 50.0, "ci95_low": 50.0, "ci95_high": 50.0},
+            {
+                "workload": "read",
+                "backend": "postgres",
+                "metric": "rps",
+                "mean": 100.0,
+                "stddev": 0.0,
+                "n": 1,
+                "n_failed": 0,
+                "p50": 100.0,
+                "p95": 100.0,
+                "p99": 100.0,
+                "ci95_low": 100.0,
+                "ci95_high": 100.0,
+            },
+            {
+                "workload": "read",
+                "backend": "mysql",
+                "metric": "rps",
+                "mean": 50.0,
+                "stddev": 0.0,
+                "n": 1,
+                "n_failed": 0,
+                "p50": 50.0,
+                "p95": 50.0,
+                "p99": 50.0,
+                "ci95_low": 50.0,
+                "ci95_high": 50.0,
+            },
         ]
         plot = PlotSpec(
-            id="speedup", type="bar", x="workload", y=["rps"], group_by=["backend"],
+            id="speedup",
+            type="bar",
+            x="workload",
+            y=["rps"],
+            group_by=["backend"],
             normalize=NormalizeSpec(against="backend", reference="postgres"),
         )
         config, _ = build_bar_or_line_config(
-            plot, rows, {}, chart_type="bar", stacked=False,
-            group_by=["backend"], varying_keys=["backend"],
+            plot,
+            rows,
+            {},
+            chart_type="bar",
+            stacked=False,
+            group_by=["backend"],
+            varying_keys=["backend"],
         )
         y_scale = config["options"]["scales"]["y"]
         assert "× speedup" in y_scale.get("title", {}).get("text", "")
@@ -558,16 +606,38 @@ class TestNormalizeChart:
         from abench_speckz.report._charts import build_bar_or_line_config
 
         rows = [
-            {"workload": "read", "backend": "postgres", "metric": "rps", "mean": 100.0, "stddev": 0.0, "n": 1, "n_failed": 0, "p50": 100.0, "p95": 100.0, "p99": 100.0, "ci95_low": 100.0, "ci95_high": 100.0},
+            {
+                "workload": "read",
+                "backend": "postgres",
+                "metric": "rps",
+                "mean": 100.0,
+                "stddev": 0.0,
+                "n": 1,
+                "n_failed": 0,
+                "p50": 100.0,
+                "p95": 100.0,
+                "p99": 100.0,
+                "ci95_low": 100.0,
+                "ci95_high": 100.0,
+            },
         ]
         plot = PlotSpec(
-            id="p1", type="bar", x="workload", y=["rps"], group_by=["workload"],
+            id="p1",
+            type="bar",
+            x="workload",
+            y=["rps"],
+            group_by=["workload"],
             normalize=NormalizeSpec(against="backend", reference="postgres"),
         )
         with pytest.raises(RunError, match="normalize.against"):
             build_bar_or_line_config(
-                plot, rows, {}, chart_type="bar", stacked=False,
-                group_by=["workload"], varying_keys=["workload"],
+                plot,
+                rows,
+                {},
+                chart_type="bar",
+                stacked=False,
+                group_by=["workload"],
+                varying_keys=["workload"],
             )
 
 
@@ -596,7 +666,7 @@ class TestExecutiveBlocksE2E:
             "            precision: 0\n"
         )
         report_path = tmp_path / "report.html"
-        doc = plots.load_plots_file(plots_yaml)
+        plots.load_plots_file(plots_yaml)
         query.stats(
             tmp_path,
             report=report_path,

@@ -393,7 +393,9 @@ def test_y_title_non_string_rejected(tmp_path):
 
 def test_series_label_parsed(tmp_path):
     p = tmp_path / "plots.yaml"
-    p.write_text("- id: p1\n  type: line\n  x: concurrency\n  y: rps\n  group_by: backend\n  series_label: '${backend}'\n")
+    p.write_text(
+        "- id: p1\n  type: line\n  x: concurrency\n  y: rps\n  group_by: backend\n  series_label: '${backend}'\n"
+    )
     doc = plots.load_plots_file(p)
     assert doc.plots[0].series_label == "${backend}"
 
@@ -428,9 +430,7 @@ def test_theme_defaults(tmp_path):
 
 def test_theme_explicit_palette(tmp_path):
     p = tmp_path / "plots.yaml"
-    p.write_text(
-        "theme:\n  palette: vivid\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
-    )
+    p.write_text("theme:\n  palette: vivid\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n")
     doc = plots.load_plots_file(p)
     assert doc.theme.palette == "vivid"
 
@@ -455,9 +455,7 @@ def test_theme_dark_mode_false(tmp_path):
 
 def test_theme_switcher_true(tmp_path):
     p = tmp_path / "plots.yaml"
-    p.write_text(
-        "theme:\n  switcher: true\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
-    )
+    p.write_text("theme:\n  switcher: true\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n")
     doc = plots.load_plots_file(p)
     assert doc.theme.switcher is True
 

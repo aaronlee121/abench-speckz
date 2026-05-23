@@ -1,4 +1,5 @@
 """Render headline callout blocks (Phase 2 of executive-level features)."""
+
 from __future__ import annotations
 
 from pathlib import Path

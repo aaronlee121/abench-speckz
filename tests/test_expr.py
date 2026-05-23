@@ -5,7 +5,6 @@ import pytest
 from abench_speckz.expr import eval_expr, extract_names, is_expr, validate_expr_syntax
 from abench_speckz.model import RunError
 
-
 # --- is_expr -----------------------------------------------------------------
 
 
@@ -212,8 +211,8 @@ def test_resolve_y_axes_expression_with_var():
 
 
 def test_resolve_y_axes_ambiguous_multiple_metrics_raises():
-    from abench_speckz.report._plots import _resolve_y_axes
     from abench_speckz.model import RunError
+    from abench_speckz.report._plots import _resolve_y_axes
 
     with pytest.raises(RunError, match="exactly one metric"):
         _resolve_y_axes(["metric1 + metric2"], set())

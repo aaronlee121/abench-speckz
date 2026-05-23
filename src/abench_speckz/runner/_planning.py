@@ -132,9 +132,7 @@ def validate_per_sweep(
         for var in per_sweep_vars:
             missing = [e for e in selected_entries if var not in (e.get("vars") or {})]
             if missing:
-                raise RunError(
-                    f"tool.per_sweep_var={var!r} not present in {len(missing)} selected combo(s)"
-                )
+                raise RunError(f"tool.per_sweep_var={var!r} not present in {len(missing)} selected combo(s)")
 
 
 def resolve_scopes(raw_scopes: list[ScopeEntry], all_var_names: list[str]) -> list[ResolvedScope]:
@@ -178,9 +176,7 @@ def validate_scopes(
             for j, step in enumerate(steps):
                 for ref in interpolate.find_combo_var_refs(step):
                     if ref not in allowed:
-                        allowed_names = ", ".join(
-                            f"${{{v}}}" for v in sorted(accumulated)
-                        )
+                        allowed_names = ", ".join(f"${{{v}}}" for v in sorted(accumulated))
                         raise RunError(
                             f"tool.scopes[{i}].{phase_name}[{j}] references combo var ${{{ref}}}; "
                             f"at scope level {i} only {allowed_names}, "
@@ -189,9 +185,7 @@ def validate_scopes(
         for v in scope.vars:
             missing = [e for e in selected_entries if v not in (e.get("vars") or {})]
             if missing:
-                raise RunError(
-                    f"tool.scopes[{i}].vars={v!r} not present in {len(missing)} selected combo(s)"
-                )
+                raise RunError(f"tool.scopes[{i}].vars={v!r} not present in {len(missing)} selected combo(s)")
 
 
 def existing_counts(results_dir: Path) -> Counter:

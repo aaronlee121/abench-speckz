@@ -63,11 +63,9 @@ def execute_sweep(
     manifest_dir = actual_manifest_path.parent
     tool = tools.load_tool(tool_path)
 
-    all_var_names = sorted({
-        k
-        for e in manifest_entries
-        for k in (e.get("varying_keys") or e.get("vars") or {})
-    })
+    all_var_names = sorted(
+        {k for e in manifest_entries for k in (e.get("varying_keys") or e.get("vars") or {})}
+    )
 
     resolved_scopes = resolve_scopes(tool.scopes, all_var_names) if tool.scopes else []
     per_sweep_vars = resolve_per_sweep_vars(tool.per_sweep_var, all_var_names)
@@ -231,7 +229,11 @@ def _run_groups(
         )
         first_env_file = manifest_dir / items[0][0]["filename"]
         phase_vars: dict[str, Any] = {
-            **(dict(zip(per_sweep_vars, group_key)) if per_sweep_vars else {}),
+            **(
+                dict(zip(per_sweep_vars, group_key, strict=True))
+                if (per_sweep_vars and group_key is not None)
+                else {}
+            ),
             "_run_id": str(uuid.uuid4()),
             "_envfile": str(first_env_file.resolve()),
             "_results_dir": str(results_dir.resolve()),
@@ -420,6 +422,7 @@ def _record_scope_setup_failures(
     counts = {"succeeded": 0, "failed": 0, "skipped": 0}
     from abench_speckz.runner._probes import config_hash
     from abench_speckz.runner._rep import make_row
+
     for entry, _r, is_warmup in items:
         state["sweep_idx"] += 1
         ch = config_hash(entry["vars"])
@@ -431,9 +434,17 @@ def _record_scope_setup_failures(
         if is_warmup:
             tags.append("warmup")
         row = make_row(
-            run_id=str(uuid.uuid4()), entry=entry, ch=ch, tags=tags,
-            tool=tool, tool_version=tool_version, command="<not-run>",
-            result=None, parsed={}, failure_reason=failure, probe_results={},
+            run_id=str(uuid.uuid4()),
+            entry=entry,
+            ch=ch,
+            tags=tags,
+            tool=tool,
+            tool_version=tool_version,
+            command="<not-run>",
+            result=None,
+            parsed={},
+            failure_reason=failure,
+            probe_results={},
         )
         store.append_run(results_dir, row)
         store.update_aggregates_for_hash(results_dir, ch)
@@ -471,6 +482,7 @@ def _run_innermost_group_reps(
     Returns ``(counts, teardown_failure, teardown_records, monitor_records)``.
     """
     from abench_speckz.runner._probes import config_hash
+
     counts = {"succeeded": 0, "failed": 0, "skipped": 0}
     teardown_failure: str | None = None
     teardown_records: list = []
@@ -492,15 +504,26 @@ def _run_innermost_group_reps(
                 continue
 
             _maybe_collect_combo_probes(
-                tool=tool, entry=entry, ch=ch, manifest_dir=manifest_dir,
-                results_dir=results_dir, probed_hashes=probed_hashes, cache=combo_probe_cache,
+                tool=tool,
+                entry=entry,
+                ch=ch,
+                manifest_dir=manifest_dir,
+                results_dir=results_dir,
+                probed_hashes=probed_hashes,
+                cache=combo_probe_cache,
             )
 
             try:
                 row = execute_one_rep(
-                    entry=entry, is_warmup=is_warmup, tool=tool, tool_version=tool_version,
-                    manifest_dir=manifest_dir, results_dir=results_dir, executor=executor,
-                    keep_raw=keep_raw, probe_results=combo_probe_cache.get(ch, {}),
+                    entry=entry,
+                    is_warmup=is_warmup,
+                    tool=tool,
+                    tool_version=tool_version,
+                    manifest_dir=manifest_dir,
+                    results_dir=results_dir,
+                    executor=executor,
+                    keep_raw=keep_raw,
+                    probe_results=combo_probe_cache.get(ch, {}),
                 )
             except KeyboardInterrupt:
                 _progress(progress_stream, state["sweep_idx"], state["total"], state["t_sweep"], "INT", ch)
@@ -512,7 +535,11 @@ def _run_innermost_group_reps(
                     group_monitor_procs = []
                 if scope_teardown:
                     teardown_failure, teardown_records = run_phase(
-                        "per_sweep_teardown", scope_teardown, phase_vars, base_env, tool.setup_timeout_seconds,
+                        "per_sweep_teardown",
+                        scope_teardown,
+                        phase_vars,
+                        base_env,
+                        tool.setup_timeout_seconds,
                     )
                     if teardown_failure:
                         prior = row.get("failure_reason")
@@ -534,10 +561,15 @@ def _run_innermost_group_reps(
             run_phase("per_sweep_teardown", scope_teardown, phase_vars, base_env, tool.setup_timeout_seconds)
         raise
 
-    return counts, teardown_failure, teardown_records, {
-        "start": group_monitor_start_records,
-        "stop": group_monitor_stop_records,
-    }
+    return (
+        counts,
+        teardown_failure,
+        teardown_records,
+        {
+            "start": group_monitor_start_records,
+            "stop": group_monitor_stop_records,
+        },
+    )
 
 
 def _run_nested_groups(
@@ -573,15 +605,17 @@ def _run_nested_groups(
     outer scopes are written to a raw file keyed by scope index and group slug.
     """
     from abench_speckz.runner._probes import config_hash
+
     scope = scopes[scope_idx]
     is_innermost = scope_idx == len(scopes) - 1
     counts = {"succeeded": 0, "failed": 0, "skipped": 0}
 
     for group_key, group_items in group_work(work, scope.vars):
+        assert group_key is not None
         first_env_file = manifest_dir / group_items[0][0]["filename"]
         phase_vars: dict = {
             **inherited_phase_vars,
-            **dict(zip(scope.vars, group_key)),
+            **dict(zip(scope.vars, group_key, strict=True)),
             "_run_id": str(uuid.uuid4()),
             "_envfile": str(first_env_file.resolve()),
             "_results_dir": str(results_dir.resolve()),
@@ -596,25 +630,43 @@ def _run_nested_groups(
             for entry, _r, _ in group_items:
                 state["sweep_idx"] += 1
                 counts["skipped"] += 1
-                _progress(progress_stream, state["sweep_idx"], state["total"], state["t_sweep"], "skip", config_hash(entry["vars"]))
+                _progress(
+                    progress_stream,
+                    state["sweep_idx"],
+                    state["total"],
+                    state["t_sweep"],
+                    "skip",
+                    config_hash(entry["vars"]),
+                )
             continue
 
         setup_failure, setup_records = (
             run_phase("per_sweep_setup", scope.setup, phase_vars, base_env, tool.setup_timeout_seconds)
-            if scope.setup else (None, [])
+            if scope.setup
+            else (None, [])
         )
         teardown_failure: str | None = None
         teardown_records: list = []
 
         if setup_failure:
             teardown_failure, teardown_records = (
-                run_phase("per_sweep_teardown", scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds)
-                if scope.teardown else (None, [])
+                run_phase(
+                    "per_sweep_teardown", scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds
+                )
+                if scope.teardown
+                else (None, [])
             )
             sub_counts = _record_scope_setup_failures(
-                items=group_items, results_dir=results_dir, tool=tool, tool_version=tool_version,
-                failure=setup_failure, skip_existing=skip_existing, skip_counts=skip_counts,
-                repeat=repeat, state=state, progress_stream=progress_stream,
+                items=group_items,
+                results_dir=results_dir,
+                tool=tool,
+                tool_version=tool_version,
+                failure=setup_failure,
+                skip_existing=skip_existing,
+                skip_counts=skip_counts,
+                repeat=repeat,
+                state=state,
+                progress_stream=progress_stream,
             )
             group_slug = _group_slug(group_key)
             scope_slug = f"scope{scope_idx}-{group_slug}" if group_slug else f"scope{scope_idx}"
@@ -622,17 +674,32 @@ def _run_nested_groups(
 
         elif is_innermost:
             sub_counts, teardown_failure, teardown_records, monitor_records = _run_innermost_group_reps(
-                items=group_items, phase_vars=phase_vars, scope_teardown=scope.teardown,
-                tool=tool, tool_version=tool_version, manifest_dir=manifest_dir,
-                results_dir=results_dir, executor=executor, keep_raw=keep_raw,
-                skip_existing=skip_existing, skip_counts=skip_counts, repeat=repeat,
-                state=state, base_env=base_env, probed_hashes=probed_hashes,
-                combo_probe_cache=combo_probe_cache, per_group_cmds=per_group_cmds,
-                runnable_idx=runnable_idx, progress_stream=progress_stream,
+                items=group_items,
+                phase_vars=phase_vars,
+                scope_teardown=scope.teardown,
+                tool=tool,
+                tool_version=tool_version,
+                manifest_dir=manifest_dir,
+                results_dir=results_dir,
+                executor=executor,
+                keep_raw=keep_raw,
+                skip_existing=skip_existing,
+                skip_counts=skip_counts,
+                repeat=repeat,
+                state=state,
+                base_env=base_env,
+                probed_hashes=probed_hashes,
+                combo_probe_cache=combo_probe_cache,
+                per_group_cmds=per_group_cmds,
+                runnable_idx=runnable_idx,
+                progress_stream=progress_stream,
             )
             group_slug = _group_slug(group_key)
             _maybe_write_sweep_raw(
-                results_dir, group_slug, setup_records, teardown_records,
+                results_dir,
+                group_slug,
+                setup_records,
+                teardown_records,
                 force=bool(teardown_failure or keep_raw),
                 monitor_start=monitor_records.get("start"),
                 monitor_stop=monitor_records.get("stop"),
@@ -640,22 +707,40 @@ def _run_nested_groups(
 
         else:
             sub_counts = _run_nested_groups(
-                work=group_items, scopes=scopes, scope_idx=scope_idx + 1,
-                inherited_phase_vars=phase_vars, tool=tool, tool_version=tool_version,
-                manifest_dir=manifest_dir, results_dir=results_dir,
-                executor=executor, keep_raw=keep_raw, skip_existing=skip_existing,
-                skip_counts=skip_counts, repeat=repeat, state=state, base_env=base_env,
-                probed_hashes=probed_hashes, combo_probe_cache=combo_probe_cache,
-                per_group_cmds=per_group_cmds, progress_stream=progress_stream,
+                work=group_items,
+                scopes=scopes,
+                scope_idx=scope_idx + 1,
+                inherited_phase_vars=phase_vars,
+                tool=tool,
+                tool_version=tool_version,
+                manifest_dir=manifest_dir,
+                results_dir=results_dir,
+                executor=executor,
+                keep_raw=keep_raw,
+                skip_existing=skip_existing,
+                skip_counts=skip_counts,
+                repeat=repeat,
+                state=state,
+                base_env=base_env,
+                probed_hashes=probed_hashes,
+                combo_probe_cache=combo_probe_cache,
+                per_group_cmds=per_group_cmds,
+                progress_stream=progress_stream,
             )
             teardown_failure, teardown_records = (
-                run_phase("per_sweep_teardown", scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds)
-                if scope.teardown else (None, [])
+                run_phase(
+                    "per_sweep_teardown", scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds
+                )
+                if scope.teardown
+                else (None, [])
             )
             group_slug = _group_slug(group_key)
             scope_slug = f"scope{scope_idx}-{group_slug}" if group_slug else f"scope{scope_idx}"
             _maybe_write_scope_raw(
-                results_dir, scope_slug, setup_records, teardown_records,
+                results_dir,
+                scope_slug,
+                setup_records,
+                teardown_records,
                 force=bool(teardown_failure or keep_raw),
             )
 
@@ -693,7 +778,6 @@ def _dry_run_nested(
     results_dir: Any,
 ) -> None:
     """Print a dry-run preview for nested scopes, showing scope hierarchy with indentation."""
-    from abench_speckz.runner._probes import config_hash
     _dry_run_nested_level(work, scopes, 0, {}, tool, stream, manifest_dir, results_dir, indent=0)
 
 
@@ -709,15 +793,17 @@ def _dry_run_nested_level(
     indent: int,
 ) -> None:
     from abench_speckz.runner._probes import config_hash
+
     scope = scopes[scope_idx]
     is_innermost = scope_idx == len(scopes) - 1
     pad = "  " * indent
 
     for group_key, group_items in group_work(work, scope.vars):
+        assert group_key is not None
         first_env_file = manifest_dir / group_items[0][0]["filename"]
         phase_vars = {
             **inherited_vars,
-            **dict(zip(scope.vars, group_key)),
+            **dict(zip(scope.vars, group_key, strict=True)),
             "_run_id": "<run_id>",
             "_envfile": str(first_env_file.resolve()),
             "_results_dir": str(results_dir.resolve()) if results_dir else "<results_dir>",
@@ -734,8 +820,15 @@ def _dry_run_nested_level(
                 print(f"{pad}  {ch} rep={rep}{tag}: {cmd}", file=stream)
         else:
             _dry_run_nested_level(
-                group_items, scopes, scope_idx + 1, phase_vars, tool,
-                stream, manifest_dir, results_dir, indent=indent + 1,
+                group_items,
+                scopes,
+                scope_idx + 1,
+                phase_vars,
+                tool,
+                stream,
+                manifest_dir,
+                results_dir,
+                indent=indent + 1,
             )
         for k, template in enumerate(scope.teardown):
             cmd = interpolate.resolve_string(template, phase_vars, env=os.environ)
@@ -756,7 +849,11 @@ def _maybe_collect_combo_probes(
     if not tool.combo_probes or ch in probed_hashes:
         return
     env_file = manifest_dir / entry["filename"]
-    probe_vars = {**entry["vars"], "_envfile": str(env_file.resolve()), "_results_dir": str(results_dir.resolve())}
+    probe_vars = {
+        **entry["vars"],
+        "_envfile": str(env_file.resolve()),
+        "_results_dir": str(results_dir.resolve()),
+    }
     probe_env = (
         {**os.environ, **load_envfile(env_file)}
         if env_file.exists()
@@ -856,14 +953,18 @@ def _dry_run_preview(
     for group_key, items in groups:
         first_env_file = manifest_dir / items[0][0]["filename"]
         phase_vars: dict[str, Any] = {
-            **(dict(zip(per_sweep_vars, group_key)) if per_sweep_vars else {}),
+            **(
+                dict(zip(per_sweep_vars, group_key, strict=True))
+                if (per_sweep_vars and group_key is not None)
+                else {}
+            ),
             "_run_id": str(uuid.uuid4()),
             "_envfile": str(first_env_file.resolve()),
             "_results_dir": str(results_dir.resolve()) if results_dir else "<results_dir>",
         }
         label = (
             ", " + ", ".join(f"{v}={group_key[i]}" for i, v in enumerate(per_sweep_vars))
-            if per_sweep_vars
+            if (per_sweep_vars and group_key is not None)
             else ""
         )
         for k, template in enumerate(tool.setup_per_sweep):

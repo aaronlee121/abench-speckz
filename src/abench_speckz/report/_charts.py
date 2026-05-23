@@ -74,7 +74,11 @@ def build_bar_or_line_config(
             mapped_vals = {k: resolve_var_value(pretty_map, k, str(v)) for k, v in vals.items()}
             group_label = _apply_series_label(series_label_tpl, mapped_vals)
             metric_display = resolve_metric(pretty_map, metric)
-            label = f"{metric_display} / {group_label}" if len(set(m for m, _ in series_keys)) > 1 else group_label
+            label = (
+                f"{metric_display} / {group_label}"
+                if len(set(m for m, _ in series_keys)) > 1
+                else group_label
+            )
         else:
             varying_parts = [resolve_var_value(pretty_map, k, str(vals[k])) for k in label_keys if k in vals]
             label_parts = [resolve_metric(pretty_map, metric)]
@@ -130,7 +134,7 @@ def build_bar_or_line_config(
                         ref_lookup[(metric, x)] = v
 
         # Divide each dataset's data by its reference series' value
-        for ds, (metric, gb_tuple) in zip(datasets, series_keys):
+        for ds, (metric, _gb_tuple) in zip(datasets, series_keys, strict=True):
             new_data: list[float | None] = []
             for j, x in enumerate(x_values):
                 orig = ds["data"][j]

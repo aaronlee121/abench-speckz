@@ -73,12 +73,14 @@ def _interpolate_doc(doc, vars_: dict[str, str], env: dict[str, str]):
             else blk
             for blk in sec.blocks
         ]
-        new_sections.append(dataclasses.replace(
-            sec,
-            title=_interp(sec.title, vars_, env),
-            description=_interp(sec.description, vars_, env),
-            blocks=new_blocks,
-        ))
+        new_sections.append(
+            dataclasses.replace(
+                sec,
+                title=_interp(sec.title, vars_, env),
+                description=_interp(sec.description, vars_, env),
+                blocks=new_blocks,
+            )
+        )
     return dataclasses.replace(
         doc,
         plots=new_plots,
@@ -169,14 +171,16 @@ def generate_plots_html(
     )
 
     title = doc.report_title or "abench_speckz report"
-    output_path.write_text(html_shell(
-        sections,
-        scripts,
-        title=title,
-        palette=doc.theme.palette,
-        dark_mode=doc.theme.dark_mode,
-        switcher=doc.theme.switcher,
-    ))
+    output_path.write_text(
+        html_shell(
+            sections,
+            scripts,
+            title=title,
+            palette=doc.theme.palette,
+            dark_mode=doc.theme.dark_mode,
+            switcher=doc.theme.switcher,
+        )
+    )
 
 
 def _group_rows_by_metric(rows: list[dict[str, Any]]) -> dict[str, list[dict]]:

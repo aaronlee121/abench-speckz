@@ -448,8 +448,7 @@ def test_grafana_links_url_required(tmp_path):
 def test_grafana_links_unknown_key_rejected(tmp_path):
     p = tmp_path / "t.yaml"
     p.write_text(
-        "name: t\ncommand: x\ngrafana_links:\n"
-        "  - label: Dash\n    url: 'https://x.com'\n    bogus: 1\n"
+        "name: t\ncommand: x\ngrafana_links:\n  - label: Dash\n    url: 'https://x.com'\n    bogus: 1\n"
     )
     with pytest.raises(RunError, match="unknown keys"):
         tools.load_tool(p)

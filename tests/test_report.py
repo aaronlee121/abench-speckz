@@ -1,5 +1,4 @@
 import io
-import os
 
 from abench_speckz import query, store
 
@@ -901,9 +900,7 @@ def test_interp_env_var_in_plot_title(tmp_path, monkeypatch):
 def test_x_title_appears_in_chart_config(tmp_path):
     _seed(tmp_path)
     plots_path = tmp_path / "plots.yaml"
-    plots_path.write_text(
-        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n  x_title: 'Workload type'\n"
-    )
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  x_title: 'Workload type'\n")
     report_path = tmp_path / "r.html"
     query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
     html = report_path.read_text()
@@ -913,9 +910,7 @@ def test_x_title_appears_in_chart_config(tmp_path):
 def test_y_title_appears_in_chart_config(tmp_path):
     _seed(tmp_path)
     plots_path = tmp_path / "plots.yaml"
-    plots_path.write_text(
-        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n  y_title: 'Throughput (req/s)'\n"
-    )
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  y_title: 'Throughput (req/s)'\n")
     report_path = tmp_path / "r.html"
     query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
     html = report_path.read_text()
@@ -941,8 +936,7 @@ def test_x_title_interpolates_env_var(tmp_path, monkeypatch):
     monkeypatch.setenv("AXIS_UNIT", "threads")
     plots_path = tmp_path / "plots.yaml"
     plots_path.write_text(
-        "- id: p1\n  type: line\n  x: workload\n  y: rps\n"
-        "  x_title: 'Concurrency (${env:AXIS_UNIT})'\n"
+        "- id: p1\n  type: line\n  x: workload\n  y: rps\n  x_title: 'Concurrency (${env:AXIS_UNIT})'\n"
     )
     report_path = tmp_path / "r.html"
     query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
@@ -960,6 +954,7 @@ def test_interp_varying_var_not_substituted(tmp_path):
     )
     report_path = tmp_path / "r.html"
     import pytest
+
     with pytest.raises(Exception, match="interpolation|unknown"):
         query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
 
@@ -1007,6 +1002,7 @@ def _seed_var_values(results_dir):
         )
         store.update_aggregates_for_hash(results_dir, hash_)
     from abench_speckz import prettynames
+
     prettynames.write(
         results_dir / "pretty_names.json",
         {
@@ -1044,6 +1040,7 @@ def test_var_values_in_legend_table(tmp_path):
 def test_var_values_in_fixed_vars_block(tmp_path):
     # Single backend value → collapses into the "Fixed:" block
     from abench_speckz import prettynames
+
     store.init_results_dir(tmp_path)
     store.append_run(
         tmp_path,
@@ -1074,9 +1071,7 @@ def test_var_values_in_fixed_vars_block(tmp_path):
 def test_var_values_in_scatter_labels(tmp_path):
     _seed_var_values(tmp_path)
     plots_path = tmp_path / "plots.yaml"
-    plots_path.write_text(
-        "- id: sc\n  type: scatter\n  x: rps\n  y: rps\n  group_by: workload\n"
-    )
+    plots_path.write_text("- id: sc\n  type: scatter\n  x: rps\n  y: rps\n  group_by: workload\n")
     report_path = tmp_path / "r.html"
     query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
     html = report_path.read_text()
@@ -1106,8 +1101,7 @@ def test_series_label_no_legend_table(tmp_path):
     _seed_three_vars(tmp_path)
     plots_path = tmp_path / "plots.yaml"
     plots_path.write_text(
-        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n"
-        "  group_by: backend\n  series_label: '${backend}'\n"
+        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n  group_by: backend\n  series_label: '${backend}'\n"
     )
     report_path = tmp_path / "r.html"
     query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
@@ -1121,8 +1115,7 @@ def test_series_label_applies_var_values(tmp_path):
     _seed_var_values(tmp_path)
     plots_path = tmp_path / "plots.yaml"
     plots_path.write_text(
-        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n"
-        "  group_by: backend\n  series_label: '${backend}'\n"
+        "- id: p1\n  type: bar\n  x: workload\n  y: rps\n  group_by: backend\n  series_label: '${backend}'\n"
     )
     report_path = tmp_path / "r.html"
     query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
@@ -1292,7 +1285,10 @@ def _seed_with_grafana_links(results_dir, run_id=_RUN_ID):
             "started_at": "2026-05-14T10:00:00Z",
             "failure_reason": None,
             "grafana_links": [
-                {"label": "Overview", "url": "https://grafana.example.com/d/abc?from=1747216800000&to=1747216800001"},
+                {
+                    "label": "Overview",
+                    "url": "https://grafana.example.com/d/abc?from=1747216800000&to=1747216800001",
+                },
                 {"label": "CPU", "url": "https://grafana.example.com/d/cpu?from=1747216800000"},
                 {"label": "Broken", "url": None},
             ],
@@ -1334,9 +1330,7 @@ def test_grafana_links_with_html_reports_shows_per_run_reports_title(tmp_path):
             "exit_code": 0,
             "started_at": "2026-05-14T10:00:00Z",
             "failure_reason": None,
-            "grafana_links": [
-                {"label": "Overview", "url": "https://grafana.example.com/d/abc?from=123"}
-            ],
+            "grafana_links": [{"label": "Overview", "url": "https://grafana.example.com/d/abc?from=123"}],
         },
     )
     run_reports = _discover_run_reports(tmp_path)

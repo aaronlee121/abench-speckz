@@ -1083,7 +1083,10 @@ def test_scopes_two_levels_correct_execution_order(tmp_path):
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=2,
     )
     assert summary["succeeded"] == 6
     lines = marker.read_text().splitlines()
@@ -1127,7 +1130,10 @@ def test_scopes_reps_run_within_innermost_group(tmp_path):
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=3,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=3,
     )
     assert summary["succeeded"] == 3
     lines = marker.read_text().splitlines()
@@ -1156,7 +1162,10 @@ def test_scopes_outer_var_accessible_in_inner_steps(tmp_path):
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     assert summary["succeeded"] == 1
     assert marker.read_text().splitlines() == ["outer-pg", "inner-pg-read"]
@@ -1183,7 +1192,10 @@ def test_scopes_setup_failure_records_inner_reps_as_failed(tmp_path):
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=2,
     )
     # pg group fails (2 combos × 2 reps = 4), mysql succeeds (1 combo × 2 reps = 2)
     assert summary["failed"] == 4
@@ -1210,7 +1222,10 @@ def test_scopes_inner_setup_failure_records_only_inner_group(tmp_path):
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=2,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=2,
     )
     # read succeeds (2 reps), write fails (2 reps)
     assert summary["succeeded"] == 2
@@ -1231,7 +1246,10 @@ def test_scopes_innermost_teardown_folds_into_last_rep(tmp_path):
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=3,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=3,
     )
     runs = store.read_runs(results)
     assert len(runs) == 3
@@ -1257,7 +1275,10 @@ def test_scopes_rejects_outer_var_in_outer_steps_only_rule(tmp_path):
     results = tmp_path / "results"
     with pytest.raises(RunError) as ei:
         runner.execute_sweep(
-            manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+            manifest_path=manifest_dir,
+            tool_path=tool_path,
+            results_dir=results,
+            repeat=1,
         )
     assert "${workload}" in str(ei.value)
     assert "scopes[0].setup[0]" in str(ei.value)
@@ -1280,6 +1301,7 @@ scopes:
     )
     with pytest.raises(RunError) as ei:
         from abench_speckz import tools
+
         tools.load_tool(p)
     assert "scopes" in str(ei.value)
     assert "per_sweep_var" in str(ei.value)
@@ -1310,7 +1332,10 @@ def test_scopes_negation_in_vars(tmp_path):
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     assert summary["succeeded"] == 3
     lines = marker.read_text().splitlines()
@@ -1344,8 +1369,12 @@ def test_scopes_dry_run_shows_nested_structure(tmp_path):
     results = tmp_path / "results"
     buf = io.StringIO()
     runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results,
-        repeat=1, dry_run=True, progress_stream=buf,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+        dry_run=True,
+        progress_stream=buf,
     )
     out = buf.getvalue()
     assert "[scope0 setup 0, backend=pg]: echo outer-setup-pg" in out
@@ -1368,7 +1397,10 @@ def test_scopes_var_missing_from_combos_raises(tmp_path):
     results = tmp_path / "results"
     with pytest.raises(RunError) as ei:
         runner.execute_sweep(
-            manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+            manifest_path=manifest_dir,
+            tool_path=tool_path,
+            results_dir=results,
+            repeat=1,
         )
     assert "missing_var" in str(ei.value)
     assert not (results / "runs.jsonl").exists()
@@ -1397,7 +1429,10 @@ def test_scopes_scope_without_setup_teardown_is_valid(tmp_path):
     )
     results = tmp_path / "results"
     summary = runner.execute_sweep(
-        manifest_path=manifest_dir, tool_path=tool_path, results_dir=results, repeat=1,
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
     )
     assert summary["succeeded"] == 2
     lines = sorted(marker.read_text().splitlines())
@@ -2172,9 +2207,7 @@ monitor:
     raw_dir = results / "raw"
     sweep_files = list(raw_dir.glob("sweep-*.json"))
     assert sweep_files, "per-group sweep raw files should exist with keep_raw=True"
-    all_have_monitor = all(
-        "monitor_start" in json.loads(f.read_text()) for f in sweep_files
-    )
+    all_have_monitor = all("monitor_start" in json.loads(f.read_text()) for f in sweep_files)
     assert all_have_monitor, "each group's sweep raw file should contain monitor_start"
 
 
@@ -2262,6 +2295,7 @@ grafana_links:
     assert "workload=read" in url
     # Timestamps should be numeric ms strings (not empty)
     import re
+
     ms_matches = re.findall(r"(?:from|to)=(\d+)", url)
     assert len(ms_matches) == 2
     assert all(len(ms) > 10 for ms in ms_matches)  # epoch ms is >10 digits since ~2001

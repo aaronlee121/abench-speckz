@@ -1,4 +1,5 @@
 """Shared value-selection helpers: Phase 0 of executive-level features."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -40,7 +41,7 @@ def resolve_value(
     from abench_speckz import query
 
     rows = query.compute_rows(results_dir, metrics=[metric], where=where or [])
-    vals = [r.get("mean") for r in rows if r.get("metric") == metric and r.get("mean") is not None]
+    vals: list[float] = [r["mean"] for r in rows if r.get("metric") == metric and r.get("mean") is not None]
     if not vals:
         return None
     if stat == "max":

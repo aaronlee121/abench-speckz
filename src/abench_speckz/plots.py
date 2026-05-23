@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from abench_speckz.expr import is_expr, validate_expr_syntax
+from abench_speckz.expr import validate_expr_syntax
 from abench_speckz.model import RunError
 
 ALLOWED_TYPES = {"bar", "stacked-bar", "line", "scatter"}
@@ -18,7 +18,7 @@ _KPI_STATS = {"max", "min", "mean"}
 
 @dataclass
 class NormalizeSpec:
-    against: str   # group_by variable whose reference value pins to 1.0×
+    against: str  # group_by variable whose reference value pins to 1.0×
     reference: str  # the variable value that becomes the denominator
 
 
@@ -31,7 +31,7 @@ class KpiCompare:
 class KpiCard:
     label: str
     metric: str
-    stat: str = "mean"                   # max | min | mean across matching combos
+    stat: str = "mean"  # max | min | mean across matching combos
     where: list[str] = field(default_factory=list)
     unit: str = ""
     precision: int = 2
@@ -41,7 +41,7 @@ class KpiCard:
 @dataclass
 class HeadlineDef:
     metric: str
-    compare: str                          # variable whose values are ranked
+    compare: str  # variable whose values are ranked
     template: str
     where: list[str] = field(default_factory=list)
 
@@ -243,14 +243,46 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
                 raise RunError(f"{source}: plot {plot_id!r}: normalize.reference must be a non-empty value")
             unknown_norm = set(normalize_raw) - {"against", "reference"}
             if unknown_norm:
-                raise RunError(f"{source}: plot {plot_id!r}: normalize: unknown fields {sorted(unknown_norm)}")
+                raise RunError(
+                    f"{source}: plot {plot_id!r}: normalize: unknown fields {sorted(unknown_norm)}"
+                )
             normalize = NormalizeSpec(against=str(against), reference=str(reference))
 
-        unknown = set(item) - {"id", "type", "x", "y", "title", "group_by", "smooth", "fixed_vars", "series_label", "data_table", "x_title", "y_title", "normalize"}
+        unknown = set(item) - {
+            "id",
+            "type",
+            "x",
+            "y",
+            "title",
+            "group_by",
+            "smooth",
+            "fixed_vars",
+            "series_label",
+            "data_table",
+            "x_title",
+            "y_title",
+            "normalize",
+        }
         if unknown:
             raise RunError(f"{source}: plot {plot_id!r}: unknown fields {sorted(unknown)}")
 
-        out.append(PlotSpec(id=plot_id, type=ptype, x=x, y=y, title=title, group_by=group_by, smooth=smooth, fixed_vars=fixed_vars, series_label=series_label, data_table=data_table, x_title=x_title, y_title=y_title, normalize=normalize))
+        out.append(
+            PlotSpec(
+                id=plot_id,
+                type=ptype,
+                x=x,
+                y=y,
+                title=title,
+                group_by=group_by,
+                smooth=smooth,
+                fixed_vars=fixed_vars,
+                series_label=series_label,
+                data_table=data_table,
+                x_title=x_title,
+                y_title=y_title,
+                normalize=normalize,
+            )
+        )
     return out
 
 
@@ -351,7 +383,9 @@ def _parse_kpi_card(item: Any, index: int, *, source: str, ctx: str) -> KpiCard:
     if unknown:
         raise RunError(f"{source}: {loc}: unknown fields {sorted(unknown)}")
 
-    return KpiCard(label=label, metric=metric, stat=stat, where=where, unit=unit, precision=precision, compare=compare)
+    return KpiCard(
+        label=label, metric=metric, stat=stat, where=where, unit=unit, precision=precision, compare=compare
+    )
 
 
 def _parse_headline(item: Any, *, source: str, ctx: str) -> HeadlineDef:

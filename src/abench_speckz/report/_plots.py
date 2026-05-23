@@ -19,9 +19,7 @@ from abench_speckz.report._html import (
 _EXPR_STAT_COLS = ("mean", "stddev", "p50", "p95", "p99", "ci95_low", "ci95_high")
 
 
-def _resolve_y_axes(
-    y_list: list[str], all_vars_set: set[str]
-) -> tuple[list[str], dict[str, str]]:
+def _resolve_y_axes(y_list: list[str], all_vars_set: set[str]) -> tuple[list[str], dict[str, str]]:
     """Return (query_metrics, expr_map) separating plain metric names from expressions.
 
     expr_map maps base_metric_name → expression string for any y entry that is an
@@ -48,9 +46,7 @@ def _resolve_y_axes(
     return query_metrics, expr_map
 
 
-def _apply_y_exprs(
-    rows: list[dict], expr_map: dict[str, str], all_vars_set: set[str]
-) -> list[dict]:
+def _apply_y_exprs(rows: list[dict], expr_map: dict[str, str], all_vars_set: set[str]) -> list[dict]:
     """Rename expression metrics and apply the expression to every stat column."""
     result: list[dict] = []
     for r in rows:

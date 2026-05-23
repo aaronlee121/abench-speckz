@@ -1,4 +1,5 @@
 """Render KPI scorecard blocks (Phase 1 of executive-level features)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,9 +30,7 @@ def render_kpi_block(cards: list[KpiCard], results_dir: Path, pretty_map: dict) 
 
         delta_html = ""
         if card.compare is not None and val is not None:
-            cmp_val = resolve_value(
-                results_dir, card.metric, where=card.compare.where, stat=card.stat
-            )
+            cmp_val = resolve_value(results_dir, card.metric, where=card.compare.where, stat=card.stat)
             if cmp_val is not None and cmp_val != 0.0:
                 delta = val - cmp_val
                 delta_pct = delta / abs(cmp_val) * 100.0
@@ -45,9 +44,9 @@ def render_kpi_block(cards: list[KpiCard], results_dir: Path, pretty_map: dict) 
         card_htmls.append(
             f'<div class="kpi-card">'
             f'<div class="kpi-value">{val_str}{unit_html}</div>'
-            f'{delta_html}'
+            f"{delta_html}"
             f'<div class="kpi-label">{label}</div>'
-            f'</div>'
+            f"</div>"
         )
 
     return f'<div class="kpi-grid">{"".join(card_htmls)}</div>'

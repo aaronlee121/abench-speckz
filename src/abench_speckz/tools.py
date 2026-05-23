@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 from abench_speckz.model import RunError
-from abench_speckz.runspec import MonitorEntry, ScopeEntry, ToolSpec, _MONITOR_SPANS
+from abench_speckz.runspec import _MONITOR_SPANS, MonitorEntry, ScopeEntry, ToolSpec
 
 _FIELDS = {
     "name",
@@ -77,9 +77,7 @@ def _load_grafana_links(raw: dict, path) -> list[dict]:
     entries: list[dict] = []
     for i, item in enumerate(value):
         if not isinstance(item, dict):
-            raise RunError(
-                f"{path}: tool.grafana_links[{i}] must be a mapping, got {type(item).__name__}"
-            )
+            raise RunError(f"{path}: tool.grafana_links[{i}] must be a mapping, got {type(item).__name__}")
         label = item.get("label")
         url = item.get("url")
         if not isinstance(label, str) or not label:
@@ -88,9 +86,7 @@ def _load_grafana_links(raw: dict, path) -> list[dict]:
             raise RunError(f"{path}: tool.grafana_links[{i}].url must be a non-empty string")
         unknown = set(item) - {"label", "url"}
         if unknown:
-            raise RunError(
-                f"{path}: tool.grafana_links[{i}] has unknown keys: {sorted(unknown)}"
-            )
+            raise RunError(f"{path}: tool.grafana_links[{i}] has unknown keys: {sorted(unknown)}")
         entries.append({"label": label, "url": url})
     return entries
 
@@ -226,14 +222,10 @@ def load_tool(path: str | Path) -> ToolSpec:
             raise RunError(f"{path}: tool.per_sweep_var must be a non-empty string or list of strings")
         for i, entry in enumerate(entries):
             if not isinstance(entry, str) or not entry:
-                raise RunError(
-                    f"{path}: tool.per_sweep_var[{i}] must be a non-empty string"
-                )
+                raise RunError(f"{path}: tool.per_sweep_var[{i}] must be a non-empty string")
             bare = entry[1:] if entry.startswith("!") else entry
             if not bare:
-                raise RunError(
-                    f"{path}: tool.per_sweep_var[{i}] '!' must be followed by a variable name"
-                )
+                raise RunError(f"{path}: tool.per_sweep_var[{i}] '!' must be followed by a variable name")
 
     setup_timeout = raw.get("setup_timeout_seconds", 120)
     if not isinstance(setup_timeout, int) or isinstance(setup_timeout, bool) or setup_timeout <= 0:

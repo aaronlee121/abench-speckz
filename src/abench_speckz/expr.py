@@ -2,8 +2,9 @@
 
 import ast
 import operator as _op
+from collections.abc import Callable
 
-_SAFE_BIN_OPS: dict[type, object] = {
+_SAFE_BIN_OPS: dict[type, Callable[..., float]] = {
     ast.Add: _op.add,
     ast.Sub: _op.sub,
     ast.Mult: _op.mul,
@@ -12,7 +13,7 @@ _SAFE_BIN_OPS: dict[type, object] = {
     ast.FloorDiv: _op.floordiv,
     ast.Mod: _op.mod,
 }
-_SAFE_UNARY_OPS: dict[type, object] = {
+_SAFE_UNARY_OPS: dict[type, Callable[..., float]] = {
     ast.USub: _op.neg,
     ast.UAdd: _op.pos,
 }
