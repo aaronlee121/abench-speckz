@@ -102,6 +102,12 @@ _CSS = """
     [data-theme="dark"] .kpi-delta-good { color: #4ec97b; }
     [data-theme="dark"] .kpi-delta-bad { color: #e57373; }
     .callout { margin: 1rem 0; padding: 1rem 1.25rem; background: var(--surface-2); border-left: 4px solid var(--border-2); border-radius: 0 8px 8px 0; font-size: 1.05rem; color: var(--text-2); }
+    .cmp-regressed td { background: rgba(192,57,43,0.10); }
+    .cmp-improved  td { background: rgba(45,138,78,0.10); }
+    .cmp-ns { color: var(--text-muted); }
+    [data-theme="dark"] .cmp-regressed td { background: rgba(229,115,115,0.15); }
+    [data-theme="dark"] .cmp-improved  td { background: rgba(78,201,123,0.15); }
+    .regression-summary th, .regression-summary td { white-space: nowrap; }
     .toolbar { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; padding: 0.5rem 0.75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
     .toolbar-label { font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; }
     .swatch-group { display: flex; gap: 0.375rem; align-items: center; flex-wrap: wrap; }
@@ -258,6 +264,10 @@ def _theme_js(palette: str, dark_mode: bool | str, switcher: bool) -> str:
       Chart.defaults.borderColor = 'rgba(0,0,0,0.1)';
     }}
   }}
+  function _hexToRgba(hex, alpha) {{
+    var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    return 'rgba('+r+','+g+','+b+','+alpha+')';
+  }}
   function _resolveConfig(config) {{
     var cfg = JSON.parse(JSON.stringify(config));
     if (cfg.data && cfg.data.datasets) {{
@@ -267,6 +277,15 @@ def _theme_js(palette: str, dark_mode: bool | str, switcher: bool) -> str:
           ds.backgroundColor = c;
           ds.borderColor = c;
           delete ds._colorIdx;
+        }}
+      }});
+      cfg.data.datasets.forEach(function(ds) {{
+        if (typeof ds._baselineOf === 'number') {{
+          var parent = cfg.data.datasets[ds._baselineOf];
+          var c = parent ? (parent.borderColor || parent.backgroundColor || '#888') : '#888';
+          ds.borderColor = c;
+          ds.backgroundColor = ds.borderDash ? c : _hexToRgba(c, 0.35);
+          delete ds._baselineOf;
         }}
       }});
     }}
@@ -546,3 +565,58 @@ def render_markdown(src: str) -> str:
     import markdown
 
     return markdown.markdown(src, extensions=["extra", "sane_lists"])
+
+
+def comparison_table_html(comparisons: list, group_by: list[str], pretty_map: dict) -> str:
+    """Render a per-plot comparison table with Δ / Δ% columns and status row classes."""
+    if not comparisons:
+        return '<p class="meta">(no comparison data)</p>'
+
+    group_headers = "".join(f"<th>{resolve_metric(pretty_map, k)}</th>" for k in group_by)
+    header_cells = (
+        f"{group_headers}<th>metric</th><th>current</th><th>baseline</th><th>Δ</th><th>Δ%</th>"
+    )
+    body_rows = ""
+    for c in comparisons:
+        if c.status == "regressed":
+            row_cls = ' class="cmp-regressed"'
+        elif c.status == "improved":
+            row_cls = ' class="cmp-improved"'
+        else:
+            row_cls = ""
+
+        group_cells = "".join(
+            f"<td>{resolve_var_value(pretty_map, k, c.keys.get(k, ''))}</td>" for k in group_by
+        )
+        metric_cell = f"<td>{resolve_metric(pretty_map, c.metric)}</td>"
+        cur_cell = f"<td>{fmt_value(c.current)}</td>"
+        base_cell = f"<td>{fmt_value(c.baseline)}</td>"
+
+        if c.delta is not None:
+            delta_cell = f"<td>{fmt_value(c.delta)}</td>"
+        else:
+            delta_cell = "<td></td>"
+
+        if c.delta_pct is not None:
+            sign = "+" if c.delta_pct >= 0 else ""
+            pct_str = f"{sign}{c.delta_pct * 100:.1f}%"
+            if not c.significant:
+                pct_cell = f'<td class="cmp-ns">{pct_str}&nbsp;n.s.</td>'
+            else:
+                pct_cell = f"<td>{pct_str}</td>"
+        elif c.status in ("new", "removed"):
+            pct_cell = f"<td>{c.status}</td>"
+        else:
+            pct_cell = "<td></td>"
+
+        body_rows += (
+            f"<tr{row_cls}>{group_cells}{metric_cell}"
+            f"{cur_cell}{base_cell}{delta_cell}{pct_cell}</tr>"
+        )
+
+    return (
+        f'<div class="table-wrap"><table>'
+        f"<thead><tr>{header_cells}</tr></thead>"
+        f"<tbody>{body_rows}</tbody>"
+        f"</table></div>"
+    )

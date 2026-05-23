@@ -8,6 +8,7 @@ from abench_speckz.report._charts import build_bar_or_line_config, build_scatter
 from abench_speckz.report._html import (
     STAT_COLS,
     collapsible,
+    comparison_table_html,
     fixed_vars_html,
     legend_table_html,
     resolve_group_by,
@@ -86,6 +87,8 @@ def build_plot_artifacts(
     where: list[str] | None = None,
     require_tags: list[str] | None = None,
     exclude_tags: list[str] | None = None,
+    baseline_dir: Path | None = None,
+    regression_threshold: float = 0.05,
 ):
     """Compute everything needed to render a plot, independent of where it lands in the page.
 
@@ -117,6 +120,13 @@ def build_plot_artifacts(
     )
     if y_expr_map:
         rows = _apply_y_exprs(rows, y_expr_map, all_vars_set)
+
+    baseline_rows: list[dict] | None = None
+    if baseline_dir is not None and plot.type in ("bar", "line"):
+        baseline_rows = query.compute_rows(baseline_dir, group_by=group_by, metrics=metrics)
+        if y_expr_map:
+            baseline_rows = _apply_y_exprs(baseline_rows, y_expr_map, all_vars_set)
+
     static_vars, varying_keys = split_group_by_vars(rows, gb_keys)
     multi_metric = len(plot.y) > 1
 
@@ -138,6 +148,7 @@ def build_plot_artifacts(
             group_by=gb_keys,
             varying_keys=varying_keys,
             smooth=False,
+            baseline_rows=baseline_rows,
         )
     elif plot.type == "line":
         chart_config, series_meta = build_bar_or_line_config(
@@ -149,6 +160,7 @@ def build_plot_artifacts(
             group_by=gb_keys,
             varying_keys=varying_keys,
             smooth=getattr(plot, "smooth", False),
+            baseline_rows=baseline_rows,
         )
     else:
         return None
@@ -176,13 +188,30 @@ def build_plot_artifacts(
         fixed_html = fixed_vars_html(static_vars, pretty_map) if show_fixed else ""
         legend_html = legend_table_html(series_meta, varying_keys, pretty_map, multi_metric)
 
+    if baseline_rows is not None:
+        from abench_speckz.report._baseline import compare_rows, load_higher_is_better
+
+        hib = load_higher_is_better(results_dir)
+        comparisons = compare_rows(
+            rows,
+            baseline_rows,
+            gb_keys,
+            higher_is_better=hib,
+            threshold=regression_threshold,
+        )
+        data_table = comparison_table_html(comparisons, gb_keys, pretty_map)
+    else:
+        comparisons = None
+        data_table = table_html(rows, list(group_by) + ["metric"] + list(STAT_COLS) if rows else [])
+
     return {
         "plot": plot,
         "fixed_html": fixed_html,
         "legend_html": legend_html,
         "chart_config": chart_config,
-        "table_html_inner": table_html(rows, list(group_by) + ["metric"] + list(STAT_COLS) if rows else []),
+        "table_html_inner": data_table,
         "title": plot.title or plot.id,
+        "comparisons": comparisons,
     }
 
 

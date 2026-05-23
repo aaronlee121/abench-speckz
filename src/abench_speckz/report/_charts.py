@@ -49,10 +49,12 @@ def build_bar_or_line_config(
     group_by: list[str],
     varying_keys: list[str],
     smooth: bool = False,
+    baseline_rows: list[dict] | None = None,
 ) -> tuple[dict, list[dict]]:
     """Return (chart_config, series_meta) for a bar/line/stacked-bar plot."""
     get_x = _make_x_getter(plot.x)
-    x_values_raw = sorted({get_x(r) for r in rows})
+    all_rows_for_x = rows + (baseline_rows or [])
+    x_values_raw = sorted({get_x(r) for r in all_rows_for_x})
     x_values = try_numeric_sort(x_values_raw) if chart_type == "line" else x_values_raw
     if not is_expr(plot.x):
         x_labels = [resolve_var_value(pretty_map, plot.x, v) for v in x_values]
@@ -122,6 +124,25 @@ def build_bar_or_line_config(
             ds["_errHigh"] = err_high
         datasets.append(ds)
         series_meta.append({"metric": metric, "vals": vals, "color": c})
+
+    if baseline_rows:
+        b_indexed, _ = _index_series(baseline_rows, get_x, group_by)
+        for i, (metric, gb_tuple) in enumerate(series_keys):
+            b_data = [
+                r.get("mean") if (r := b_indexed.get((x, metric, gb_tuple))) is not None else None
+                for x in x_values
+            ]
+            b_ds: dict[str, Any] = {
+                "label": datasets[i]["label"] + " (baseline)",
+                "data": b_data,
+                "borderWidth": 1,
+                "_baselineOf": i,
+            }
+            if chart_type == "line":
+                b_ds["fill"] = False
+                b_ds["tension"] = 0.4 if smooth else 0.1
+                b_ds["borderDash"] = [5, 5]
+            datasets.append(b_ds)
 
     x_scale: dict[str, Any] = {"title": {"display": True, "text": plot.x_title if plot.x_title else plot.x}}
     y_scale: dict[str, Any] = {"beginAtZero": True}

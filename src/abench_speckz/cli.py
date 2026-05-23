@@ -58,6 +58,20 @@ def main(argv: list[str] | None = None) -> int:
         metavar="PATH",
         help="YAML file with plot definitions (overrides tool YAML plots)",
     )
+    stats.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="results directory to compare against (enables comparison mode)",
+    )
+    stats.add_argument(
+        "--regression-threshold",
+        type=float,
+        default=0.05,
+        metavar="FRAC",
+        help="minimum relative delta to flag as regression/improvement (default: 0.05)",
+    )
     rpt_mode = stats.add_mutually_exclusive_group()
     rpt_mode.add_argument(
         "--link-run-reports",
@@ -175,6 +189,8 @@ def _stats(args: argparse.Namespace) -> int:
         report=args.report,
         plots=args.plots,
         run_reports_mode=run_reports_mode,
+        baseline=args.baseline,
+        regression_threshold=args.regression_threshold,
     )
     return 0
 

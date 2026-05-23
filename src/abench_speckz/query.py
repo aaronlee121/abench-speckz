@@ -92,6 +92,8 @@ def stats(
     report: Path | None = None,
     plots: Path | None = None,
     run_reports_mode: str = "embedded",
+    baseline: Path | None = None,
+    regression_threshold: float = 0.05,
     out=sys.stdout,
 ) -> None:
     group_by = group_by or []
@@ -131,6 +133,8 @@ def stats(
                 where=where,
                 require_tags=require_tags,
                 exclude_tags=exclude_tags,
+                baseline_dir=baseline,
+                regression_threshold=regression_threshold,
             )
         else:
             _report.generate_html(

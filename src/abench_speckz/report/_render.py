@@ -12,6 +12,7 @@ from abench_speckz.report._html import (
     COLORS,
     STAT_COLS,
     collapsible,
+    comparison_table_html,
     fixed_vars_html,
     html_shell,
     render_markdown,
@@ -133,6 +134,8 @@ def generate_plots_html(
     where: list[str] | None = None,
     require_tags: list[str] | None = None,
     exclude_tags: list[str] | None = None,
+    baseline_dir: Path | None = None,
+    regression_threshold: float = 0.05,
 ) -> None:
     """Render a PlotsDoc (declarative plots ± editorial sections) to HTML."""
     from abench_speckz import query
@@ -154,9 +157,16 @@ def generate_plots_html(
             where=where,
             require_tags=require_tags,
             exclude_tags=exclude_tags,
+            baseline_dir=baseline_dir,
+            regression_threshold=regression_threshold,
         )
         if art is not None:
             artifacts_by_id[plot.id] = art
+
+    if baseline_dir is not None:
+        _prepend_regression_summary(
+            sections, scripts, results_dir, baseline_dir, all_vars, pretty_map, regression_threshold
+        )
 
     if doc.sections:
         _render_sectioned(doc, artifacts_by_id, sections, scripts, results_dir, pretty_map)
@@ -181,6 +191,43 @@ def generate_plots_html(
             switcher=doc.theme.switcher,
         )
     )
+
+
+def _prepend_regression_summary(
+    sections: list[str],
+    scripts: list[str],
+    results_dir: Path,
+    baseline_dir: Path,
+    all_vars: list[str],
+    pretty_map: dict,
+    threshold: float,
+) -> None:
+    """Build and prepend the Regression Summary section to the report."""
+    from abench_speckz import query
+    from abench_speckz.report._baseline import compare_rows, load_higher_is_better, sort_summary
+
+    current_rows = query.compute_rows(results_dir, group_by=all_vars)
+    baseline_rows = query.compute_rows(baseline_dir, group_by=all_vars)
+    hib = load_higher_is_better(results_dir)
+
+    comparisons = compare_rows(current_rows, baseline_rows, all_vars, higher_is_better=hib, threshold=threshold)
+    comparisons = sort_summary(comparisons, hib)
+
+    if not comparisons:
+        return
+
+    n_reg = sum(1 for c in comparisons if c.status == "regressed")
+    n_imp = sum(1 for c in comparisons if c.status == "improved")
+    summary_line = f"{n_reg} regression{'s' if n_reg != 1 else ''}, {n_imp} improvement{'s' if n_imp != 1 else ''}"
+    table = comparison_table_html(comparisons, all_vars, pretty_map)
+    section_html = (
+        f'\n  <section class="regression-summary">\n'
+        f"    <h2>Regression Summary</h2>\n"
+        f'    <p class="meta">{summary_line}</p>\n'
+        f"    {table}\n"
+        f"  </section>"
+    )
+    sections.insert(0, section_html)
 
 
 def _group_rows_by_metric(rows: list[dict[str, Any]]) -> dict[str, list[dict]]:

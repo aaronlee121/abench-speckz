@@ -23,6 +23,7 @@ abench-speckz gen examples/full.yaml --dry-run
 abench-speckz gen examples/full.yaml --out out
 abench-speckz run out/ --tool mytool.yaml --repeat 3
 abench-speckz stats results/
+abench-speckz stats results/ --baseline runs/v1.4-baseline/ --report report.html
 ```
 
 ## Architecture
@@ -146,6 +147,8 @@ Metric extraction (`extract.py`): reads stdout (or `output_file`) as JSON or JSO
 ### 3. `stats` — Aggregate queries
 
 `query.stats()` uses DuckDB to query `aggregates.jsonl` (fast path) or `runs.jsonl` (when `--from-raw` or `--group-by` is used, since percentiles aren't additive across pre-aggregated rows).
+
+**Comparison mode** — pass `--baseline <dir>` to compare the results directory against a baseline directory. When active the HTML report gains: a **Regression Summary** section (auto-injected at the top, every combo×metric sorted worst-delta-first, regressed rows red / improved green / `n.s.` greyed); **ghost overlay series** on every bar/line chart (dashed for line, ~35% alpha for bar, labeled ` (baseline)`); and **Δ / Δ%** columns in every per-plot data table. A delta is only flagged as `regressed` or `improved` when it (a) exceeds `--regression-threshold` (default `0.05`, i.e. 5%) in the bad/good direction **and** (b) is statistically significant (CI bands disjoint). Direction is read from `higher_is_better` in the `tools/*.yaml` snapshots; defaults to higher-is-better when absent.
 
 ### Key data structures
 
