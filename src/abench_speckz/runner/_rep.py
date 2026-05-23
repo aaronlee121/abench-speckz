@@ -107,7 +107,7 @@ def execute_one_rep(
             results_dir,
             row["run_id"],
             build_raw(
-                result=None, output_file_record=None, setup=setup_steps, teardown=teardown_steps, post_run=[]
+                command=cmd, result=None, output_file_record=None, setup=setup_steps, teardown=teardown_steps, post_run=[]
             ),
         )
         row["raw_output_path"] = str(raw_path.relative_to(results_dir))
@@ -198,6 +198,7 @@ def execute_one_rep(
             results_dir,
             row["run_id"],
             build_raw(
+                command=cmd,
                 result=result,
                 output_file_record=output_file_record,
                 setup=setup_steps,
@@ -288,6 +289,7 @@ def _resolve_grafana_links(
 
 def build_raw(
     *,
+    command: str,
     result,
     output_file_record: dict[str, Any] | None,
     setup: list[dict[str, Any]],
@@ -298,6 +300,7 @@ def build_raw(
 ) -> dict[str, Any]:
     """Assemble the document persisted to ``raw/{run_id}.json``."""
     raw: dict[str, Any] = {
+        "command": command,
         "stdout": result.stdout if result is not None else "",
         "stderr": result.stderr if result is not None else "",
     }
