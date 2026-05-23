@@ -146,7 +146,7 @@ Variable names starting with `_` are reserved and will be rejected at load time.
 | Variable | Available in | Description |
 |---|---|---|
 | `${_envfile}` | `command`, `setup`, `teardown`, `post_run`, `monitor`, `output_file`, `setup_per_sweep`, `teardown_per_sweep` | Absolute path to the current combo's env file. In per_sweep phases, resolves to the first entry's env file in the group. |
-| `${_run_id}` | `command`, `setup`, `teardown`, `post_run`, `monitor`, `setup_per_sweep`, `teardown_per_sweep` | UUID for this rep — same value written to `runs.jsonl`. In per_sweep phases, one UUID is generated per group and shared between `setup_per_sweep` and `teardown_per_sweep`. |
+| `${_run_id}` | `command`, `setup`, `teardown`, `post_run`, `monitor`, `output_file`, `setup_per_sweep`, `teardown_per_sweep` | UUID for this rep — same value written to `runs.jsonl`. In per_sweep phases, one UUID is generated per group and shared between `setup_per_sweep` and `teardown_per_sweep`. |
 | `${_results_dir}` | `command`, `setup`, `teardown`, `post_run`, `output_file`, `setup_per_sweep`, `teardown_per_sweep`, `combo_probes`, `monitor` | Absolute path to the results directory. |
 | `${_exit_code}` | `post_run` | Benchmark exit code |
 | `${_started_at}` | `post_run` | ISO timestamp when the benchmark started |

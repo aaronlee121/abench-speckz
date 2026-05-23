@@ -182,7 +182,7 @@ results/
 
 Built-in synthetic variables (injected per-rep, not user-definable):
 - `${_envfile}` — absolute path to the current combo's env file. Available in `command`, `setup`, `teardown`, `post_run`, `output_file`, `setup_per_sweep`, and `teardown_per_sweep`. For per_sweep phases, resolves to the first entry's env file in the group.
-- `${_run_id}` — UUID for this rep (same value written to `runs.jsonl`). Available in `command`, `setup`, `teardown`, `post_run`, `setup_per_sweep`, and `teardown_per_sweep`. For per_sweep phases, a single UUID is generated per group and shared between `setup_per_sweep` and `teardown_per_sweep`.
+- `${_run_id}` — UUID for this rep (same value written to `runs.jsonl`). Available in `command`, `setup`, `teardown`, `post_run`, `output_file`, `setup_per_sweep`, and `teardown_per_sweep`. For per_sweep phases, a single UUID is generated per group and shared between `setup_per_sweep` and `teardown_per_sweep`.
 - `${_results_dir}` — absolute path to the results directory. Available in `command`, `setup`, `teardown`, `post_run`, `output_file`, `setup_per_sweep`, `teardown_per_sweep`, `combo_probes`, and all `monitor` spans.
 - `${_exit_code}`, `${_started_at}`, `${_finished_at}`, `${_duration_ms}` — benchmark result fields. Available in `post_run` only (result isn't known earlier).
 - `${_started_at_ms}`, `${_finished_at_ms}` — run start/end as Unix milliseconds. Available in `grafana_links` URL templates only.
