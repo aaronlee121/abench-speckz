@@ -1885,6 +1885,60 @@ monitor:
     assert elapsed < 30, f"sweep took {elapsed:.1f}s — likely hung stopping pipe monitor"
 
 
+def test_monitor_log_file_created_in_results_logs(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+monitor:
+  - "sleep 30"
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+    )
+
+    log_files = list((results / "logs").glob("monitor-*.log"))
+    assert len(log_files) == 1, f"expected one monitor log, got: {log_files}"
+
+
+def test_monitor_log_file_contains_output(tmp_path):
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    marker = tmp_path / "started"
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+monitor:
+  - "echo monitor-output-marker && sleep 30"
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+    )
+
+    log_file = next((results / "logs").glob("monitor-*.log"))
+    content = log_file.read_text()
+    assert "monitor-output-marker" in content
+
+
 def test_monitor_does_not_abort_benchmark_on_start_failure(tmp_path):
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
     tool_path = tmp_path / "tool.yaml"

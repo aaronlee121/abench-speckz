@@ -36,7 +36,6 @@ def run_monitors(
             cmd = interpolate.resolve_string(template, vars_, env=env)
         except Exception as e:
             records.append({"command": template, "pid": None, "error": f"interpolation: {e}"})
-            log_files.append(None)
             continue
 
         log_file: IO | None = None
@@ -69,7 +68,6 @@ def run_monitors(
             if log_file is not None:
                 log_file.close()
             records.append({"command": cmd, "pid": None, "error": str(e)})
-            log_files.append(None)
     return procs, records, log_files
 
 
