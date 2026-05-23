@@ -108,13 +108,16 @@ def execute_sweep(
         sweep_monitor_procs: list = []
         sweep_monitor_start_records: list[dict] = []
         sweep_monitor_stop_records: list[dict] = []
+        sweep_log_files: list = []
         per_sweep_cmds = [m.command for m in tool.monitor if m.span == "per_sweep"]
         if per_sweep_cmds:
             sweep_run_id = str(uuid.uuid4())
-            sweep_monitor_procs, sweep_monitor_start_records = run_monitors(
+            sweep_monitor_procs, sweep_monitor_start_records, sweep_log_files = run_monitors(
                 per_sweep_cmds,
                 {"_run_id": sweep_run_id, "_results_dir": str(results_dir.resolve())},
                 dict(os.environ),
+                log_dir=results_dir / "logs",
+                log_prefix="monitor-sweep",
             )
 
         try:
@@ -166,7 +169,7 @@ def execute_sweep(
                 )
         finally:
             if sweep_monitor_procs:
-                sweep_monitor_stop_records = stop_monitors(sweep_monitor_procs)
+                sweep_monitor_stop_records = stop_monitors(sweep_monitor_procs, sweep_log_files)
             has_error = any(r.get("error") for r in sweep_monitor_start_records)
             if sweep_monitor_start_records and (keep_raw or has_error):
                 store.write_raw_sweep_monitors(
@@ -262,6 +265,7 @@ def _run_groups(
         group_monitor_procs: list = []
         group_monitor_start_records: list[dict[str, Any]] = []
         group_monitor_stop_records: list[dict[str, Any]] = []
+        group_log_files: list = []
 
         sweep_teardown_failure: str | None = None
         sweep_teardown_records: list[dict[str, Any]] = []
@@ -302,8 +306,12 @@ def _run_groups(
             continue
 
         if per_group_cmds:
-            group_monitor_procs, group_monitor_start_records = run_monitors(
-                per_group_cmds, phase_vars, base_env
+            group_monitor_procs, group_monitor_start_records, group_log_files = run_monitors(
+                per_group_cmds,
+                phase_vars,
+                base_env,
+                log_dir=results_dir / "logs",
+                log_prefix=f"monitor-group-{group_slug or 'default'}",
             )
 
         last_runnable = runnable_idx[-1]
@@ -344,7 +352,7 @@ def _run_groups(
 
                 if j == last_runnable:
                     if group_monitor_procs:
-                        group_monitor_stop_records = stop_monitors(group_monitor_procs)
+                        group_monitor_stop_records = stop_monitors(group_monitor_procs, group_log_files)
                         group_monitor_procs = []
                     if tool.teardown_per_sweep:
                         sweep_teardown_failure, sweep_teardown_records = run_phase(
@@ -370,7 +378,7 @@ def _run_groups(
                     _progress(progress_stream, sweep_idx, total, t_sweep, "ok", ch)
         except KeyboardInterrupt:
             if group_monitor_procs:
-                stop_monitors(group_monitor_procs)
+                stop_monitors(group_monitor_procs, group_log_files)
             if tool.teardown_per_sweep:
                 run_phase(
                     "per_sweep_teardown",
@@ -490,8 +498,16 @@ def _run_innermost_group_reps(
     group_monitor_procs: list = []
     group_monitor_start_records: list = []
     group_monitor_stop_records: list = []
+    group_log_files: list = []
     if per_group_cmds:
-        group_monitor_procs, group_monitor_start_records = run_monitors(per_group_cmds, phase_vars, base_env)
+        group_run_id = phase_vars.get("_run_id", "group")
+        group_monitor_procs, group_monitor_start_records, group_log_files = run_monitors(
+            per_group_cmds,
+            phase_vars,
+            base_env,
+            log_dir=results_dir / "logs",
+            log_prefix=f"monitor-group-{str(group_run_id)[:8]}",
+        )
 
     last_runnable = runnable_idx[-1]
     try:
@@ -531,7 +547,7 @@ def _run_innermost_group_reps(
 
             if j == last_runnable:
                 if group_monitor_procs:
-                    group_monitor_stop_records = stop_monitors(group_monitor_procs)
+                    group_monitor_stop_records = stop_monitors(group_monitor_procs, group_log_files)
                     group_monitor_procs = []
                 if scope_teardown:
                     teardown_failure, teardown_records = run_phase(
@@ -556,7 +572,7 @@ def _run_innermost_group_reps(
 
     except KeyboardInterrupt:
         if group_monitor_procs:
-            stop_monitors(group_monitor_procs)
+            stop_monitors(group_monitor_procs, group_log_files)
         if scope_teardown:
             run_phase("per_sweep_teardown", scope_teardown, phase_vars, base_env, tool.setup_timeout_seconds)
         raise

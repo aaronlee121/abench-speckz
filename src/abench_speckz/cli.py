@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from abench_speckz import generate, query, runner, slug, spec, store, validate, writers
+from abench_speckz import generate, query, runner, slug, spec, store, tail as tail_mod, validate, writers
 from abench_speckz.model import Combo, RunError, SpecError
 
 
@@ -74,6 +74,9 @@ def main(argv: list[str] | None = None) -> int:
     rebuild = sub.add_parser("rebuild-aggregates", help="regenerate aggregates.jsonl from runs.jsonl")
     rebuild.add_argument("results_dir", type=Path)
 
+    tail_p = sub.add_parser("tail", help="live-follow a running sweep: print each run as it completes")
+    tail_p.add_argument("results_dir", type=Path, help="results directory containing runs.jsonl")
+
     args = parser.parse_args(argv)
 
     try:
@@ -85,6 +88,8 @@ def main(argv: list[str] | None = None) -> int:
             return _stats(args)
         if args.cmd == "rebuild-aggregates":
             return _rebuild(args)
+        if args.cmd == "tail":
+            return _tail(args)
     except (SpecError, RunError) as e:
         print(f"abench-speckz: error: {e}", file=sys.stderr)
         return 2
@@ -171,6 +176,14 @@ def _stats(args: argparse.Namespace) -> int:
 def _rebuild(args: argparse.Namespace) -> int:
     n = store.rebuild_aggregates(args.results_dir)
     print(f"wrote {n} aggregate rows to {args.results_dir}/aggregates.jsonl")
+    return 0
+
+
+def _tail(args: argparse.Namespace) -> int:
+    try:
+        tail_mod.tail(args.results_dir)
+    except KeyboardInterrupt:
+        print()
     return 0
 
 

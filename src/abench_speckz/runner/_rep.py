@@ -116,9 +116,16 @@ def execute_one_rep(
     monitor_procs: list[subprocess.Popen] = []
     monitor_start_records: list[dict[str, Any]] = []
     monitor_stop_records: list[dict[str, Any]] = []
+    monitor_log_files: list = []
     per_rep_cmds = [m.command for m in tool.monitor if m.span == "per_rep"]
     if per_rep_cmds:
-        monitor_procs, monitor_start_records = run_monitors(per_rep_cmds, combo_vars, env)
+        monitor_procs, monitor_start_records, monitor_log_files = run_monitors(
+            per_rep_cmds,
+            combo_vars,
+            env,
+            log_dir=results_dir / "logs",
+            log_prefix=f"monitor-{run_id}",
+        )
 
     result = None
     teardown_failure: str | None = None
@@ -126,7 +133,7 @@ def execute_one_rep(
         result = executor.execute(request)
     finally:
         if monitor_procs:
-            monitor_stop_records = stop_monitors(monitor_procs)
+            monitor_stop_records = stop_monitors(monitor_procs, monitor_log_files)
         if tool.teardown:
             teardown_failure, teardown_steps = run_phase(
                 "teardown",
