@@ -43,6 +43,7 @@ Each combination is written as a Docker env-file (`KEY=value` per line). A `mani
 ```sh
 abench-speckz run out/ --tool oha.tool.yaml
 abench-speckz run out/ --tool oha.tool.yaml --repeat 5 --warmup 1
+abench-speckz run out/ --tool oha.tool.yaml --ci-target rps=0.05 --min-repeat 3 --max-repeat 20
 abench-speckz run out/ --tool oha.tool.yaml --filter workload=read
 abench-speckz run out/ --tool oha.tool.yaml --filter-tag stress
 abench-speckz run out/ --tool oha.tool.yaml --filter-exclude-tag slow
@@ -51,6 +52,8 @@ abench-speckz run out/ --tool oha.tool.yaml --dry-run   # print planned commands
 ```
 
 Results are written to `results/` (configurable with `--results`).
+
+**Adaptive stopping.** `--ci-target METRIC=THRESHOLD` (repeatable) stops a combo once every named metric's 95% CI half-width is within `THRESHOLD * |mean|`, bounded by `--min-repeat` (default 3) and `--max-repeat` (default `max(--repeat, 30)`). Combos with stable metrics finish in `--min-repeat` reps; noisy combos use more, up to `--max-repeat`. Stopping decisions are scoped to one per_sweep group at a time.
 
 ### `stats` — aggregate and display results
 

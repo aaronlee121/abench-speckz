@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Adaptive `--ci-target` stopping** — `abench-speckz run --ci-target METRIC=THRESHOLD` (repeatable) stops a combo as soon as every named metric's 95% CI half-width is within `THRESHOLD * |mean|`, bounded by new `--min-repeat` (default 3) and `--max-repeat` (default `max(--repeat, 30)`) flags. Stable combos finish in the minimum; noisy combos use more, up to the cap. Stopping decisions are scoped to one per_sweep / scope group at a time.
+- **`Scheduler` protocol** (`src/abench_speckz/scheduling.py`) — `FixedScheduler` (preserves the historical pre-flattened plan) and `CITargetScheduler` (the new stopping rule) share a `next(state) -> WorkItem | None` interface. The runner now drives every rep through a scheduler; future benchmark-specific planner plugins will plug into the same seam.
+
+### Changed
+
+- The `run` command now reports `sweep: up to N rep(s) across …` instead of a fixed N — `N` is the per-combo upper bound (`warmup + repeat` for Fixed, `warmup + max_repeat` for CI-target).
+
 ## [0.10.0] - 2026-05-22
 
 ### Added

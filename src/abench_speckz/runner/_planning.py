@@ -45,6 +45,29 @@ def resolve_per_sweep_vars(
     return positives + expanded
 
 
+def select_entries(
+    manifest_entries: list[dict[str, Any]],
+    where: list[str],
+    require_tags: list[str],
+    exclude_tags: list[str],
+    per_sweep_vars: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Filter manifest entries and sort by ``per_sweep_vars`` (if set).
+
+    Stable sort by the composite key ensures all entries sharing a
+    per_sweep_vars value are contiguous — what the runner needs to bracket
+    them with setup/teardown_per_sweep.
+    """
+    fn = make_filter(where=where, require_tags=require_tags, exclude_tags=exclude_tags)
+    selected = [e for e in manifest_entries if fn(e.get("vars", {}), e.get("tags", []))]
+    if per_sweep_vars is not None:
+        selected = sorted(
+            selected,
+            key=lambda e: tuple(str((e.get("vars") or {}).get(v, "")) for v in per_sweep_vars),
+        )
+    return selected
+
+
 def plan_sweep(
     manifest_entries: list[dict[str, Any]],
     repeat: int,
@@ -54,24 +77,44 @@ def plan_sweep(
     exclude_tags: list[str],
     per_sweep_vars: list[str] | None = None,
 ) -> list[Work]:
-    """Select and order the manifest entries, then expand them into reps.
+    """Select, order, and expand entries into a flat ``(entry, rep, is_warmup)`` list.
 
-    When ``per_sweep_vars`` is set, selected entries are stably sorted by the
-    composite key of those variables so all reps for one combination are
-    contiguous — letting the runner fire per_sweep setup/teardown once per group.
+    Used by the dry-run preview and any caller wanting the pre-flattened plan.
+    The scheduler-driven sweep path uses ``select_entries`` + ``group_entries`` instead.
     """
-    fn = make_filter(where=where, require_tags=require_tags, exclude_tags=exclude_tags)
-    selected = [e for e in manifest_entries if fn(e.get("vars", {}), e.get("tags", []))]
-    if per_sweep_vars is not None:
-        selected = sorted(
-            selected,
-            key=lambda e: tuple(str((e.get("vars") or {}).get(v, "")) for v in per_sweep_vars),
-        )
+    selected = select_entries(manifest_entries, where, require_tags, exclude_tags, per_sweep_vars)
     work: list[Work] = []
     for entry in selected:
         for rep in range(warmup + repeat):
             work.append((entry, rep, rep < warmup))
     return work
+
+
+def group_entries(
+    entries: list[dict[str, Any]],
+    per_sweep_vars: list[str] | None,
+) -> list[tuple[tuple[str, ...] | None, list[dict[str, Any]]]]:
+    """Partition (already-sorted) entries into contiguous groups sharing the
+    composite ``per_sweep_vars`` value. With no scoping vars, returns a single
+    group keyed by ``None``."""
+    if per_sweep_vars is None:
+        return [(None, list(entries))]
+    groups: list[tuple[tuple[str, ...] | None, list[dict[str, Any]]]] = []
+    current_key: tuple[str, ...] | None = None
+    current_items: list[dict[str, Any]] = []
+    started = False
+    for entry in entries:
+        k = tuple(str(entry["vars"][v]) for v in per_sweep_vars)
+        if not started or k != current_key:
+            if current_items:
+                groups.append((current_key, current_items))
+            current_key = k
+            current_items = []
+            started = True
+        current_items.append(entry)
+    if current_items:
+        groups.append((current_key, current_items))
+    return groups
 
 
 def group_work(work: list[Work], per_sweep_vars: list[str] | None) -> list[WorkGroup]:

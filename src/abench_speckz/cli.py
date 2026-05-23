@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from abench_speckz import generate, query, runner, slug, spec, store, tui, validate, writers
+from abench_speckz import generate, query, runner, scheduling, slug, spec, store, tui, validate, writers
 from abench_speckz import tail as tail_mod
 from abench_speckz.model import Combo, RunError, SpecError
 
@@ -30,6 +30,27 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--tool", type=Path, required=True, help="tool YAML")
     run.add_argument("--repeat", type=int, default=1, help="reps per combo (default: 1)")
     run.add_argument("--warmup", type=int, default=0, help="warmup reps (excluded from aggregates)")
+    run.add_argument(
+        "--ci-target",
+        action="append",
+        default=[],
+        metavar="METRIC=THRESHOLD",
+        help="stop a combo when relative CI half-width <= THRESHOLD for METRIC "
+        "(repeatable; e.g. --ci-target rps=0.05)",
+    )
+    run.add_argument(
+        "--min-repeat",
+        type=int,
+        default=3,
+        help="minimum reps per combo when --ci-target is set (default: 3)",
+    )
+    run.add_argument(
+        "--max-repeat",
+        type=int,
+        default=None,
+        help="maximum reps per combo when --ci-target is set "
+        "(default: max(--repeat, 30))",
+    )
     run.add_argument("--results", type=Path, default=Path("results"))
     run.add_argument("--filter", action="append", default=[], help="K=V combo filter (AND)")
     run.add_argument("--filter-tag", action="append", default=[])
@@ -141,6 +162,34 @@ def _gen(args: argparse.Namespace) -> int:
 
 
 def _run(args: argparse.Namespace) -> int:
+    scheduler_factory = None
+    if args.ci_target:
+        try:
+            targets = [scheduling.parse_ci_target(s) for s in args.ci_target]
+        except ValueError as e:
+            print(f"abench-speckz: {e}", file=sys.stderr)
+            return 2
+        max_repeat = args.max_repeat if args.max_repeat is not None else max(args.repeat, 30)
+        if max_repeat < args.min_repeat:
+            print(
+                f"abench-speckz: --max-repeat ({max_repeat}) must be >= --min-repeat ({args.min_repeat})",
+                file=sys.stderr,
+            )
+            return 2
+        skip_existing = args.skip_existing
+        warmup = args.warmup
+
+        def scheduler_factory(entries, skip_counts):
+            return scheduling.CITargetScheduler(
+                entries,
+                targets,
+                min_repeat=args.min_repeat,
+                max_repeat=max_repeat,
+                warmup=warmup,
+                skip_counts=skip_counts,
+                skip_existing=skip_existing,
+            )
+
     try:
         summary = runner.execute_sweep(
             manifest_path=args.manifest,
@@ -154,6 +203,7 @@ def _run(args: argparse.Namespace) -> int:
             keep_raw=args.keep_raw,
             skip_existing=args.skip_existing,
             dry_run=args.dry_run,
+            scheduler_factory=scheduler_factory,
         )
     except KeyboardInterrupt:
         print("\nabench-speckz: interrupted", file=sys.stderr)

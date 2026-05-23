@@ -108,6 +108,47 @@ capture:
     assert table == {}
 
 
+def test_ci_target_stops_at_min_repeat_when_converged(tmp_path):
+    """fake_tool emits deterministic output → CI converges immediately, sweep
+    stops at min_repeat per combo even though max_repeat is much higher."""
+    from abench_speckz.scheduling import CITarget, CITargetScheduler
+
+    manifest_dir = _make_manifest(
+        tmp_path,
+        [
+            {"workload": "read", "concurrency": "1"},
+            {"workload": "write", "concurrency": "8"},
+        ],
+    )
+    tool = _tool_yaml(tmp_path)
+    results = tmp_path / "results"
+
+    def factory(entries, skip_counts):
+        return CITargetScheduler(
+            entries,
+            [CITarget("rps", 0.05)],
+            min_repeat=3,
+            max_repeat=20,
+            warmup=0,
+            skip_counts=skip_counts,
+        )
+
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool,
+        results_dir=results,
+        repeat=20,
+        scheduler_factory=factory,
+    )
+    # 2 combos × min_repeat (3) each = 6, far below max_repeat × combos = 40
+    assert summary["succeeded"] == 6
+    assert summary["failed"] == 0
+    table = store.load_aggregates(results)
+    for rows in table.values():
+        for r in rows:
+            assert r.n == 3
+
+
 def test_warmup_excluded_from_aggregate(tmp_path):
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read", "concurrency": "8"}])
     tool = _tool_yaml(tmp_path)

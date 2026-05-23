@@ -5,6 +5,7 @@ import sys
 import time
 import uuid
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -19,16 +20,21 @@ from abench_speckz.runner._planning import (
     WorkGroup,
     all_scope_sort_vars,
     existing_counts,
+    group_entries,
     group_work,
     plan_sweep,
     resolve_per_sweep_vars,
     resolve_scopes,
+    select_entries,
     validate_per_sweep,
     validate_scopes,
 )
 from abench_speckz.runner._probes import collect_probe_results, config_hash
 from abench_speckz.runner._rep import execute_one_rep, make_row
 from abench_speckz.runspec import ToolSpec
+from abench_speckz.scheduling import FixedScheduler, Scheduler, SweepState
+
+SchedulerFactory = Callable[[list[dict[str, Any]], dict[str, int]], Scheduler]
 
 
 def execute_sweep(
@@ -46,6 +52,7 @@ def execute_sweep(
     dry_run: bool = False,
     executor: Executor | None = None,
     progress_stream=sys.stderr,
+    scheduler_factory: SchedulerFactory | None = None,
 ) -> dict[str, int]:
     """Run the benchmark tool across every combo in the manifest.
 
@@ -53,6 +60,11 @@ def execute_sweep(
     interpolated tool command → optional teardown steps. Teardown always runs
     (even on benchmark failure or KeyboardInterrupt). Results are appended to
     ``runs.jsonl`` and aggregates are rewritten after every run.
+
+    The ``scheduler_factory`` controls how reps are scheduled within each
+    per_sweep group (called with that group's entries and a skip-counts dict).
+    When omitted, a ``FixedScheduler`` is built from ``repeat``/``warmup``/
+    ``skip_existing`` — preserving the historical pre-flattened plan.
     """
     where = where or []
     require_tags = require_tags or []
@@ -71,26 +83,34 @@ def execute_sweep(
     per_sweep_vars = resolve_per_sweep_vars(tool.per_sweep_var, all_var_names)
 
     sort_vars = all_scope_sort_vars(resolved_scopes) if resolved_scopes else per_sweep_vars
-    work = plan_sweep(
+    selected = select_entries(
         manifest_entries,
-        repeat,
-        warmup,
         where,
         require_tags,
         exclude_tags,
         per_sweep_vars=sort_vars,
     )
-    if not work:
+    if not selected:
         print("no combos selected after filters", file=progress_stream)
         return _empty_summary()
 
-    selected = [e for (e, _, _) in work]
     if resolved_scopes:
         validate_scopes(resolved_scopes, selected)
     else:
         validate_per_sweep(tool, selected, per_sweep_vars)
 
     if dry_run:
+        # Dry-run preview uses the historical pre-flattened plan — schedulers
+        # only matter at execution time.
+        work = plan_sweep(
+            manifest_entries,
+            repeat,
+            warmup,
+            where,
+            require_tags,
+            exclude_tags,
+            per_sweep_vars=sort_vars,
+        )
         if resolved_scopes:
             _dry_run_nested(work, resolved_scopes, tool, progress_stream, manifest_dir, results_dir)
         else:
@@ -98,12 +118,35 @@ def execute_sweep(
             _dry_run_preview(groups, tool, per_sweep_vars, progress_stream, manifest_dir, results_dir)
         return _empty_summary()
 
-    groups = group_work(work, per_sweep_vars) if not resolved_scopes else []
+    if scheduler_factory is None:
+        def _default_factory(
+            entries: list[dict[str, Any]], skip_counts: dict[str, int]
+        ) -> Scheduler:
+            return FixedScheduler(
+                entries,
+                warmup=warmup,
+                repeat=repeat,
+                skip_counts=skip_counts,
+                skip_existing=skip_existing,
+            )
+        scheduler_factory = _default_factory
 
-    total = len(work)
-    n_combos = len({config_hash(e["vars"]) for e, _, _ in work})
+    # Pre-instantiate schedulers per group only to (a) compute total for
+    # progress display and (b) early-validate against the tool. The execution
+    # path re-instantiates per group so each one starts with a clean cursor.
+    n_combos = len({config_hash(e["vars"]) for e in selected})
+    _preview_skip = existing_counts(results_dir) if skip_existing else Counter()
+    if resolved_scopes:
+        preview_groups = group_entries(selected, sort_vars)
+    else:
+        preview_groups = group_entries(selected, per_sweep_vars)
+    total = 0
+    for _gk, group_es in preview_groups:
+        sched = scheduler_factory(group_es, dict(_preview_skip))
+        sched.validate(tool)
+        total += sched.expected_max_reps()
     print(
-        f"sweep: {total} rep(s) across {n_combos} combo(s)",
+        f"sweep: up to {total} rep(s) across {n_combos} combo(s)",
         file=progress_stream,
         flush=True,
     )
@@ -130,10 +173,10 @@ def execute_sweep(
 
         try:
             if resolved_scopes:
-                state = {"sweep_idx": 0, "total": len(work), "t_sweep": time.monotonic()}
+                state = {"sweep_idx": 0, "total": total, "t_sweep": time.monotonic()}
                 per_group_cmds = [m.command for m in tool.monitor if m.span == "per_group"]
                 summary = _run_nested_groups(
-                    work=work,
+                    entries=selected,
                     scopes=resolved_scopes,
                     scope_idx=0,
                     inherited_phase_vars={},
@@ -143,9 +186,8 @@ def execute_sweep(
                     results_dir=results_dir,
                     executor=executor,
                     keep_raw=keep_raw,
-                    skip_existing=skip_existing,
                     skip_counts=skip_counts,
-                    repeat=repeat,
+                    scheduler_factory=scheduler_factory,
                     state=state,
                     base_env=dict(os.environ),
                     probed_hashes=set(),
@@ -154,12 +196,13 @@ def execute_sweep(
                     progress_stream=progress_stream,
                 )
                 return {
-                    "runs": len(work) - summary["skipped"],
+                    "runs": summary["succeeded"] + summary["failed"],
                     "failed": summary["failed"],
                     "skipped": summary["skipped"],
                     "succeeded": summary["succeeded"],
                 }
             else:
+                groups = group_entries(selected, per_sweep_vars)
                 return _run_groups(
                     groups=groups,
                     tool=tool,
@@ -169,10 +212,9 @@ def execute_sweep(
                     results_dir=results_dir,
                     executor=executor,
                     keep_raw=keep_raw,
-                    skip_existing=skip_existing,
                     skip_counts=skip_counts,
-                    repeat=repeat,
-                    total=len(work),
+                    scheduler_factory=scheduler_factory,
+                    total=total,
                     progress_stream=progress_stream,
                 )
         finally:
@@ -215,7 +257,7 @@ def _init_sweep(
 
 def _run_groups(
     *,
-    groups: list[WorkGroup],
+    groups: list[tuple[tuple[str, ...] | None, list[dict[str, Any]]]],
     tool: ToolSpec,
     tool_version: str | None,
     per_sweep_vars: list[str] | None,
@@ -223,28 +265,29 @@ def _run_groups(
     results_dir: Path,
     executor: Executor,
     keep_raw: bool,
-    skip_existing: bool,
     skip_counts: Counter,
-    repeat: int,
+    scheduler_factory: SchedulerFactory,
     total: int,
     progress_stream,
 ) -> dict[str, int]:
     """Walk each per_sweep group: run per_sweep setup/teardown, then each rep."""
     counts = {"succeeded": 0, "failed": 0, "skipped": 0}
-    sweep_idx = 0
+    sweep_idx_ref = [0]
     t_sweep = time.monotonic()
     base_env = {**os.environ}
     probed_hashes: set[str] = set()
     combo_probe_cache: dict[str, dict[str, Any]] = {}
     per_group_cmds = [m.command for m in tool.monitor if m.span == "per_group"]
 
-    for group_key, items in groups:
+    for group_key, entries in groups:
+        scheduler = scheduler_factory(entries, dict(skip_counts))
+        runnable = scheduler.runnable_entries()
         group_slug = (
             "-".join(slug_mod.slug(v) for v in group_key)
             if (per_sweep_vars and group_key is not None)
             else None
         )
-        first_env_file = manifest_dir / items[0][0]["filename"]
+        first_env_file = manifest_dir / entries[0]["filename"]
         phase_vars: dict[str, Any] = {
             **(
                 dict(zip(per_sweep_vars, group_key, strict=True))
@@ -256,16 +299,20 @@ def _run_groups(
             "_results_dir": str(results_dir.resolve()),
         }
 
-        runnable_idx = [
-            j
-            for j, (entry, _r, is_warmup) in enumerate(items)
-            if not (skip_existing and skip_counts[config_hash(entry["vars"])] >= repeat)
-        ]
-        if not runnable_idx:
-            for entry, _r, _is_warmup in items:
-                sweep_idx += 1
-                counts["skipped"] += 1
-                _progress(progress_stream, sweep_idx, total, t_sweep, "skip", config_hash(entry["vars"]))
+        if not runnable:
+            for entry in entries:
+                n_total = scheduler.planned_warmup_for(entry) + scheduler.planned_measured_for(entry)
+                for _ in range(n_total):
+                    sweep_idx_ref[0] += 1
+                    counts["skipped"] += 1
+                    _progress(
+                        progress_stream,
+                        sweep_idx_ref[0],
+                        total,
+                        t_sweep,
+                        "skip",
+                        config_hash(entry["vars"]),
+                    )
             continue
 
         if tool.setup_per_sweep:
@@ -288,11 +335,6 @@ def _run_groups(
             else (None, [])
         )
 
-        group_monitor_procs: list = []
-        group_monitor_start_records: list[dict[str, Any]] = []
-        group_monitor_stop_records: list[dict[str, Any]] = []
-        group_log_files: list = []
-
         sweep_teardown_failure: str | None = None
         sweep_teardown_records: list[dict[str, Any]] = []
         if sweep_setup_failure:
@@ -307,17 +349,15 @@ def _run_groups(
                 if tool.teardown_per_sweep
                 else (None, [])
             )
-            sweep_idx = _record_sweep_setup_failures(
-                items=items,
+            _record_setup_failures(
+                entries=entries,
+                scheduler=scheduler,
                 results_dir=results_dir,
                 tool=tool,
                 tool_version=tool_version,
-                sweep_setup_failure=sweep_setup_failure,
-                skip_existing=skip_existing,
-                skip_counts=skip_counts,
-                repeat=repeat,
+                failure=sweep_setup_failure,
                 counts=counts,
-                sweep_idx=sweep_idx,
+                sweep_idx_ref=sweep_idx_ref,
                 total=total,
                 t_sweep=t_sweep,
                 progress_stream=progress_stream,
@@ -331,90 +371,28 @@ def _run_groups(
             )
             continue
 
-        if per_group_cmds:
-            group_monitor_procs, group_monitor_start_records, group_log_files = run_monitors(
-                per_group_cmds,
-                phase_vars,
-                base_env,
-                log_dir=results_dir / "logs",
-                log_prefix=f"monitor-group-{group_slug or 'default'}",
-            )
-
-        last_runnable = runnable_idx[-1]
-        try:
-            for j, (entry, _r, is_warmup) in enumerate(items):
-                sweep_idx += 1
-                ch = config_hash(entry["vars"])
-                if skip_existing and skip_counts[ch] >= repeat:
-                    counts["skipped"] += 1
-                    _progress(progress_stream, sweep_idx, total, t_sweep, "skip", ch)
-                    continue
-
-                _maybe_collect_combo_probes(
-                    tool=tool,
-                    entry=entry,
-                    ch=ch,
-                    manifest_dir=manifest_dir,
-                    results_dir=results_dir,
-                    probed_hashes=probed_hashes,
-                    cache=combo_probe_cache,
-                )
-
-                _progress_start(progress_stream, sweep_idx, total, ch, is_warmup)
-                try:
-                    row = execute_one_rep(
-                        entry=entry,
-                        is_warmup=is_warmup,
-                        tool=tool,
-                        tool_version=tool_version,
-                        manifest_dir=manifest_dir,
-                        results_dir=results_dir,
-                        executor=executor,
-                        keep_raw=keep_raw,
-                        probe_results=combo_probe_cache.get(ch, {}),
-                    )
-                except KeyboardInterrupt:
-                    _progress(progress_stream, sweep_idx, total, t_sweep, "INT", ch)
-                    raise
-
-                if j == last_runnable:
-                    if group_monitor_procs:
-                        group_monitor_stop_records = stop_monitors(group_monitor_procs, group_log_files)
-                        group_monitor_procs = []
-                    if tool.teardown_per_sweep:
-                        sweep_teardown_failure, sweep_teardown_records = run_phase(
-                            "per_sweep_teardown",
-                            tool.teardown_per_sweep,
-                            phase_vars,
-                            base_env,
-                            tool.setup_timeout_seconds,
-                        )
-                        if sweep_teardown_failure:
-                            prior = row.get("failure_reason")
-                            row["failure_reason"] = (
-                                f"{prior}; {sweep_teardown_failure}" if prior else sweep_teardown_failure
-                            )
-
-                store.append_run(results_dir, row)
-                store.update_aggregates_for_hash(results_dir, ch)
-                if row.get("failure_reason") or row.get("exit_code", -1) != 0:
-                    counts["failed"] += 1
-                    _progress(progress_stream, sweep_idx, total, t_sweep, "FAIL", ch)
-                else:
-                    counts["succeeded"] += 1
-                    _progress(progress_stream, sweep_idx, total, t_sweep, "ok", ch)
-        except KeyboardInterrupt:
-            if group_monitor_procs:
-                stop_monitors(group_monitor_procs, group_log_files)
-            if tool.teardown_per_sweep:
-                run_phase(
-                    "per_sweep_teardown",
-                    tool.teardown_per_sweep,
-                    phase_vars,
-                    base_env,
-                    tool.setup_timeout_seconds,
-                )
-            raise
+        sweep_teardown_failure, sweep_teardown_records, monitor_records = _drive_scheduler_loop(
+            scheduler=scheduler,
+            results_dir=results_dir,
+            tool=tool,
+            tool_version=tool_version,
+            manifest_dir=manifest_dir,
+            executor=executor,
+            keep_raw=keep_raw,
+            phase_vars=phase_vars,
+            base_env=base_env,
+            teardown_steps=tool.teardown_per_sweep,
+            per_group_cmds=per_group_cmds,
+            group_log_prefix=f"monitor-group-{group_slug or 'default'}",
+            probed_hashes=probed_hashes,
+            combo_probe_cache=combo_probe_cache,
+            counts=counts,
+            sweep_idx_ref=sweep_idx_ref,
+            total=total,
+            t_sweep=t_sweep,
+            progress_stream=progress_stream,
+            seed_rows=store.read_runs(results_dir),
+        )
 
         _maybe_write_sweep_raw(
             results_dir,
@@ -422,145 +400,107 @@ def _run_groups(
             sweep_setup_records,
             sweep_teardown_records,
             force=bool(sweep_teardown_failure or keep_raw),
-            monitor_start=group_monitor_start_records,
-            monitor_stop=group_monitor_stop_records,
+            monitor_start=monitor_records.get("start"),
+            monitor_stop=monitor_records.get("stop"),
         )
 
     return {
-        "runs": total - counts["skipped"],
+        "runs": counts["succeeded"] + counts["failed"],
         "failed": counts["failed"],
         "skipped": counts["skipped"],
         "succeeded": counts["succeeded"],
     }
 
 
-def _group_slug(group_key: tuple[str, ...] | None) -> str | None:
-    if not group_key:
-        return None
-    return "-".join(slug_mod.slug(v) for v in group_key)
-
-
-def _record_scope_setup_failures(
+def _drive_scheduler_loop(
     *,
-    items: list,
-    results_dir: Any,
+    scheduler: Scheduler,
+    results_dir: Path,
     tool: ToolSpec,
     tool_version: str | None,
-    failure: str,
-    skip_existing: bool,
-    skip_counts: Counter,
-    repeat: int,
-    state: dict,
-    progress_stream,
-) -> dict[str, int]:
-    """Record every rep in a scope group as failed when setup aborted."""
-    counts = {"succeeded": 0, "failed": 0, "skipped": 0}
-    from abench_speckz.runner._probes import config_hash
-    from abench_speckz.runner._rep import make_row
-
-    for entry, _r, is_warmup in items:
-        state["sweep_idx"] += 1
-        ch = config_hash(entry["vars"])
-        if skip_existing and skip_counts[ch] >= repeat:
-            counts["skipped"] += 1
-            _progress(progress_stream, state["sweep_idx"], state["total"], state["t_sweep"], "skip", ch)
-            continue
-        tags = list(entry.get("tags") or [])
-        if is_warmup:
-            tags.append("warmup")
-        row = make_row(
-            run_id=str(uuid.uuid4()),
-            entry=entry,
-            ch=ch,
-            tags=tags,
-            tool=tool,
-            tool_version=tool_version,
-            command="<not-run>",
-            result=None,
-            parsed={},
-            failure_reason=failure,
-            probe_results={},
-        )
-        store.append_run(results_dir, row)
-        store.update_aggregates_for_hash(results_dir, ch)
-        counts["failed"] += 1
-        _progress(progress_stream, state["sweep_idx"], state["total"], state["t_sweep"], "FAIL", ch)
-    return counts
-
-
-def _run_innermost_group_reps(
-    *,
-    items: list,
-    phase_vars: dict,
-    scope_teardown: list[str],
-    tool: ToolSpec,
-    tool_version: str | None,
-    manifest_dir: Any,
-    results_dir: Any,
-    executor: Any,
+    manifest_dir: Path,
+    executor: Executor,
     keep_raw: bool,
-    skip_existing: bool,
-    skip_counts: Counter,
-    repeat: int,
-    state: dict,
-    base_env: dict,
-    probed_hashes: set,
-    combo_probe_cache: dict,
+    phase_vars: dict[str, Any],
+    base_env: dict[str, str],
+    teardown_steps: list[str],
     per_group_cmds: list[str],
-    runnable_idx: list[int],
+    group_log_prefix: str,
+    probed_hashes: set[str],
+    combo_probe_cache: dict[str, dict[str, Any]],
+    counts: dict[str, int],
+    sweep_idx_ref: list[int],
+    total: int,
+    t_sweep: float,
     progress_stream,
-) -> tuple[dict[str, int], str | None, list, dict]:
-    """Run all reps for the innermost scope group.
+    seed_rows: list[dict[str, Any]],
+) -> tuple[str | None, list[dict[str, Any]], dict[str, list]]:
+    """Drive a Scheduler within an already-setup per_sweep group.
 
-    Mirrors the per-rep loop in ``_run_groups`` — teardown failure is folded into
-    the last rep's row before it is written (same contract as the flat path).
-    Returns ``(counts, teardown_failure, teardown_records, monitor_records)``.
+    Writes are deferred by one rep so that ``teardown_per_sweep`` failures can
+    still be folded into the *last* rep's row (the historical contract). When
+    the scheduler returns ``None``, we know the previously-produced row was
+    the final one — run teardown, fold any failure in, then write.
     """
-    from abench_speckz.runner._probes import config_hash
-
-    counts = {"succeeded": 0, "failed": 0, "skipped": 0}
-    teardown_failure: str | None = None
-    teardown_records: list = []
+    state = SweepState(seed_rows=seed_rows)
 
     group_monitor_procs: list = []
     group_monitor_start_records: list = []
     group_monitor_stop_records: list = []
     group_log_files: list = []
     if per_group_cmds:
-        group_run_id = phase_vars.get("_run_id", "group")
         group_monitor_procs, group_monitor_start_records, group_log_files = run_monitors(
             per_group_cmds,
             phase_vars,
             base_env,
             log_dir=results_dir / "logs",
-            log_prefix=f"monitor-group-{str(group_run_id)[:8]}",
+            log_prefix=group_log_prefix,
         )
 
-    last_runnable = runnable_idx[-1]
-    try:
-        for j, (entry, _r, is_warmup) in enumerate(items):
-            state["sweep_idx"] += 1
-            ch = config_hash(entry["vars"])
-            if skip_existing and skip_counts[ch] >= repeat:
-                counts["skipped"] += 1
-                _progress(progress_stream, state["sweep_idx"], state["total"], state["t_sweep"], "skip", ch)
-                continue
+    prev_row: dict[str, Any] | None = None
+    prev_ch: str | None = None
+    teardown_failure: str | None = None
+    teardown_records: list[dict[str, Any]] = []
 
+    try:
+        while True:
+            if prev_row is not None:
+                # Update the in-memory state immediately so the scheduler's
+                # next decision sees this rep. Disk write is still deferred
+                # until we know whether this is the final rep (so any
+                # teardown_per_sweep failure can be folded in).
+                state.record(prev_ch, prev_row)
+            item = scheduler.next(state)
+            if item is None:
+                break
+            if prev_row is not None:
+                # Not the last rep — commit the previous one to disk now.
+                _commit_disk(
+                    prev_row,
+                    prev_ch,
+                    results_dir=results_dir,
+                    counts=counts,
+                    sweep_idx_ref=sweep_idx_ref,
+                    total=total,
+                    t_sweep=t_sweep,
+                    progress_stream=progress_stream,
+                )
+            ch = config_hash(item.entry["vars"])
             _maybe_collect_combo_probes(
                 tool=tool,
-                entry=entry,
+                entry=item.entry,
                 ch=ch,
                 manifest_dir=manifest_dir,
                 results_dir=results_dir,
                 probed_hashes=probed_hashes,
                 cache=combo_probe_cache,
             )
-
-            _progress_start(progress_stream, state["sweep_idx"], state["total"], ch, is_warmup)
+            sweep_idx_ref[0] += 1
+            _progress_start(progress_stream, sweep_idx_ref[0], total, ch, item.is_warmup)
             try:
-                row = execute_one_rep(
-                    entry=entry,
-                    is_warmup=is_warmup,
+                prev_row = execute_one_rep(
+                    entry=item.entry,
+                    is_warmup=item.is_warmup,
                     tool=tool,
                     tool_version=tool_version,
                     manifest_dir=manifest_dir,
@@ -569,56 +509,150 @@ def _run_innermost_group_reps(
                     keep_raw=keep_raw,
                     probe_results=combo_probe_cache.get(ch, {}),
                 )
+                prev_ch = ch
             except KeyboardInterrupt:
-                _progress(progress_stream, state["sweep_idx"], state["total"], state["t_sweep"], "INT", ch)
+                _progress(progress_stream, sweep_idx_ref[0], total, t_sweep, "INT", ch)
                 raise
 
-            if j == last_runnable:
-                if group_monitor_procs:
-                    group_monitor_stop_records = stop_monitors(group_monitor_procs, group_log_files)
-                    group_monitor_procs = []
-                if scope_teardown:
-                    teardown_failure, teardown_records = run_phase(
-                        "per_sweep_teardown",
-                        scope_teardown,
-                        phase_vars,
-                        base_env,
-                        tool.setup_timeout_seconds,
+        # Scheduler exhausted — fold teardown into the final row before writing.
+        if prev_row is not None:
+            if group_monitor_procs:
+                group_monitor_stop_records = stop_monitors(group_monitor_procs, group_log_files)
+                group_monitor_procs = []
+            if teardown_steps:
+                teardown_failure, teardown_records = run_phase(
+                    "per_sweep_teardown",
+                    teardown_steps,
+                    phase_vars,
+                    base_env,
+                    tool.setup_timeout_seconds,
+                )
+                if teardown_failure:
+                    prior = prev_row.get("failure_reason")
+                    prev_row["failure_reason"] = (
+                        f"{prior}; {teardown_failure}" if prior else teardown_failure
                     )
-                    if teardown_failure:
-                        prior = row.get("failure_reason")
-                        row["failure_reason"] = f"{prior}; {teardown_failure}" if prior else teardown_failure
-
-            store.append_run(results_dir, row)
-            store.update_aggregates_for_hash(results_dir, ch)
-            if row.get("failure_reason") or row.get("exit_code", -1) != 0:
-                counts["failed"] += 1
-                _progress(progress_stream, state["sweep_idx"], state["total"], state["t_sweep"], "FAIL", ch)
-            else:
-                counts["succeeded"] += 1
-                _progress(progress_stream, state["sweep_idx"], state["total"], state["t_sweep"], "ok", ch)
-
+            _commit_disk(
+                prev_row,
+                prev_ch,
+                results_dir=results_dir,
+                counts=counts,
+                sweep_idx_ref=sweep_idx_ref,
+                total=total,
+                t_sweep=t_sweep,
+                progress_stream=progress_stream,
+            )
     except KeyboardInterrupt:
         if group_monitor_procs:
             stop_monitors(group_monitor_procs, group_log_files)
-        if scope_teardown:
-            run_phase("per_sweep_teardown", scope_teardown, phase_vars, base_env, tool.setup_timeout_seconds)
+        if teardown_steps:
+            run_phase(
+                "per_sweep_teardown",
+                teardown_steps,
+                phase_vars,
+                base_env,
+                tool.setup_timeout_seconds,
+            )
         raise
 
     return (
-        counts,
         teardown_failure,
         teardown_records,
-        {
-            "start": group_monitor_start_records,
-            "stop": group_monitor_stop_records,
-        },
+        {"start": group_monitor_start_records, "stop": group_monitor_stop_records},
     )
+
+
+def _commit_disk(
+    row: dict[str, Any],
+    ch: str | None,
+    *,
+    results_dir: Path,
+    counts: dict[str, int],
+    sweep_idx_ref: list[int],
+    total: int,
+    t_sweep: float,
+    progress_stream,
+) -> None:
+    """Persist a rep to disk and emit its progress line.
+
+    In-memory ``SweepState`` is updated separately, immediately after the rep
+    finishes — so the scheduler's next decision is never stale by one rep.
+    """
+    assert ch is not None
+    store.append_run(results_dir, row)
+    store.update_aggregates_for_hash(results_dir, ch)
+    if row.get("failure_reason") or row.get("exit_code", -1) != 0:
+        counts["failed"] += 1
+        _progress(progress_stream, sweep_idx_ref[0], total, t_sweep, "FAIL", ch)
+    else:
+        counts["succeeded"] += 1
+        _progress(progress_stream, sweep_idx_ref[0], total, t_sweep, "ok", ch)
+
+
+def _record_setup_failures(
+    *,
+    entries: list[dict[str, Any]],
+    scheduler: Scheduler,
+    results_dir: Path,
+    tool: ToolSpec,
+    tool_version: str | None,
+    failure: str,
+    counts: dict[str, int],
+    sweep_idx_ref: list[int],
+    total: int,
+    t_sweep: float,
+    progress_stream,
+) -> None:
+    """Emit one failure row per planned rep for every runnable entry.
+
+    Used when per_sweep_setup aborted before any rep ran. The scheduler
+    advises how many reps were planned per entry (warmup + measured); for
+    dynamic schedulers, "measured" is the guaranteed minimum.
+    """
+    runnable = {config_hash(e["vars"]): e for e in scheduler.runnable_entries()}
+    for entry in entries:
+        ch = config_hash(entry["vars"])
+        if ch not in runnable:
+            sweep_idx_ref[0] += 1
+            counts["skipped"] += 1
+            _progress(progress_stream, sweep_idx_ref[0], total, t_sweep, "skip", ch)
+            continue
+        n_warmup = scheduler.planned_warmup_for(entry)
+        n_measured = scheduler.planned_measured_for(entry)
+        for i in range(n_warmup + n_measured):
+            is_warmup = i < n_warmup
+            sweep_idx_ref[0] += 1
+            tags = list(entry.get("tags") or [])
+            if is_warmup:
+                tags.append("warmup")
+            row = make_row(
+                run_id=str(uuid.uuid4()),
+                entry=entry,
+                ch=ch,
+                tags=tags,
+                tool=tool,
+                tool_version=tool_version,
+                command="<not-run>",
+                result=None,
+                parsed={},
+                failure_reason=failure,
+                probe_results={},
+            )
+            store.append_run(results_dir, row)
+            store.update_aggregates_for_hash(results_dir, ch)
+            counts["failed"] += 1
+            _progress(progress_stream, sweep_idx_ref[0], total, t_sweep, "FAIL", ch)
+
+
+def _group_slug(group_key: tuple[str, ...] | None) -> str | None:
+    if not group_key:
+        return None
+    return "-".join(slug_mod.slug(v) for v in group_key)
 
 
 def _run_nested_groups(
     *,
-    work: list,
+    entries: list[dict[str, Any]],
     scopes: list[ResolvedScope],
     scope_idx: int,
     inherited_phase_vars: dict,
@@ -628,9 +662,8 @@ def _run_nested_groups(
     results_dir: Any,
     executor: Any,
     keep_raw: bool,
-    skip_existing: bool,
     skip_counts: Counter,
-    repeat: int,
+    scheduler_factory: SchedulerFactory,
     state: dict,
     base_env: dict,
     probed_hashes: set,
@@ -640,7 +673,7 @@ def _run_nested_groups(
 ) -> dict[str, int]:
     """Recursively execute nested scope levels.
 
-    At each scope level, work is partitioned into groups by that scope's vars.
+    At each scope level, entries are partitioned into groups by that scope's vars.
     Setup/teardown for the scope run once per group; the next scope (or the actual
     reps, at the innermost level) runs inside each group.
 
@@ -648,15 +681,13 @@ def _run_nested_groups(
     ``failure_reason`` (same contract as the flat path). Teardown failures at
     outer scopes are written to a raw file keyed by scope index and group slug.
     """
-    from abench_speckz.runner._probes import config_hash
-
     scope = scopes[scope_idx]
     is_innermost = scope_idx == len(scopes) - 1
     counts = {"succeeded": 0, "failed": 0, "skipped": 0}
 
-    for group_key, group_items in group_work(work, scope.vars):
+    for group_key, group_entries_list in group_entries(entries, scope.vars):
         assert group_key is not None
-        first_env_file = manifest_dir / group_items[0][0]["filename"]
+        first_env_file = manifest_dir / group_entries_list[0]["filename"]
         phase_vars: dict = {
             **inherited_phase_vars,
             **dict(zip(scope.vars, group_key, strict=True)),
@@ -665,23 +696,23 @@ def _run_nested_groups(
             "_results_dir": str(results_dir.resolve()),
         }
 
-        runnable_idx = [
-            j
-            for j, (entry, _r, _) in enumerate(group_items)
-            if not (skip_existing and skip_counts[config_hash(entry["vars"])] >= repeat)
-        ]
-        if not runnable_idx:
-            for entry, _r, _ in group_items:
-                state["sweep_idx"] += 1
-                counts["skipped"] += 1
-                _progress(
-                    progress_stream,
-                    state["sweep_idx"],
-                    state["total"],
-                    state["t_sweep"],
-                    "skip",
-                    config_hash(entry["vars"]),
-                )
+        # Build a scheduler even at outer scopes — needed for runnable_entries()
+        # and per-entry planned-rep counts on the skip / setup-failure paths.
+        scheduler = scheduler_factory(group_entries_list, dict(skip_counts))
+        if not scheduler.runnable_entries():
+            for entry in group_entries_list:
+                n_total = scheduler.planned_warmup_for(entry) + scheduler.planned_measured_for(entry)
+                for _ in range(n_total):
+                    state["sweep_idx"] += 1
+                    counts["skipped"] += 1
+                    _progress(
+                        progress_stream,
+                        state["sweep_idx"],
+                        state["total"],
+                        state["t_sweep"],
+                        "skip",
+                        config_hash(entry["vars"]),
+                    )
             continue
 
         if scope.setup:
@@ -707,44 +738,54 @@ def _run_nested_groups(
                 if scope.teardown
                 else (None, [])
             )
-            sub_counts = _record_scope_setup_failures(
-                items=group_items,
+            sweep_idx_ref = [state["sweep_idx"]]
+            _record_setup_failures(
+                entries=group_entries_list,
+                scheduler=scheduler,
                 results_dir=results_dir,
                 tool=tool,
                 tool_version=tool_version,
                 failure=setup_failure,
-                skip_existing=skip_existing,
-                skip_counts=skip_counts,
-                repeat=repeat,
-                state=state,
+                counts=counts,
+                sweep_idx_ref=sweep_idx_ref,
+                total=state["total"],
+                t_sweep=state["t_sweep"],
                 progress_stream=progress_stream,
             )
+            state["sweep_idx"] = sweep_idx_ref[0]
+            sub_counts = {"succeeded": 0, "failed": 0, "skipped": 0}
             group_slug = _group_slug(group_key)
             scope_slug = f"scope{scope_idx}-{group_slug}" if group_slug else f"scope{scope_idx}"
             _maybe_write_scope_raw(results_dir, scope_slug, setup_records, teardown_records, force=True)
 
         elif is_innermost:
-            sub_counts, teardown_failure, teardown_records, monitor_records = _run_innermost_group_reps(
-                items=group_items,
-                phase_vars=phase_vars,
-                scope_teardown=scope.teardown,
+            sub_counts = {"succeeded": 0, "failed": 0, "skipped": 0}
+            sweep_idx_ref = [state["sweep_idx"]]
+            inner_counts = {"succeeded": 0, "failed": 0, "skipped": 0}
+            teardown_failure, teardown_records, monitor_records = _drive_scheduler_loop(
+                scheduler=scheduler,
+                results_dir=results_dir,
                 tool=tool,
                 tool_version=tool_version,
                 manifest_dir=manifest_dir,
-                results_dir=results_dir,
                 executor=executor,
                 keep_raw=keep_raw,
-                skip_existing=skip_existing,
-                skip_counts=skip_counts,
-                repeat=repeat,
-                state=state,
+                phase_vars=phase_vars,
                 base_env=base_env,
+                teardown_steps=scope.teardown,
+                per_group_cmds=per_group_cmds,
+                group_log_prefix=f"monitor-group-{str(phase_vars.get('_run_id', 'group'))[:8]}",
                 probed_hashes=probed_hashes,
                 combo_probe_cache=combo_probe_cache,
-                per_group_cmds=per_group_cmds,
-                runnable_idx=runnable_idx,
+                counts=inner_counts,
+                sweep_idx_ref=sweep_idx_ref,
+                total=state["total"],
+                t_sweep=state["t_sweep"],
                 progress_stream=progress_stream,
+                seed_rows=store.read_runs(results_dir),
             )
+            state["sweep_idx"] = sweep_idx_ref[0]
+            sub_counts = inner_counts
             group_slug = _group_slug(group_key)
             _maybe_write_sweep_raw(
                 results_dir,
@@ -758,7 +799,7 @@ def _run_nested_groups(
 
         else:
             sub_counts = _run_nested_groups(
-                work=group_items,
+                entries=group_entries_list,
                 scopes=scopes,
                 scope_idx=scope_idx + 1,
                 inherited_phase_vars=phase_vars,
@@ -768,9 +809,8 @@ def _run_nested_groups(
                 results_dir=results_dir,
                 executor=executor,
                 keep_raw=keep_raw,
-                skip_existing=skip_existing,
                 skip_counts=skip_counts,
-                repeat=repeat,
+                scheduler_factory=scheduler_factory,
                 state=state,
                 base_env=base_env,
                 probed_hashes=probed_hashes,
@@ -918,53 +958,6 @@ def _maybe_collect_combo_probes(
     )
     store.update_combo_probes(results_dir, ch, cache[ch])
     probed_hashes.add(ch)
-
-
-def _record_sweep_setup_failures(
-    *,
-    items: list,
-    results_dir: Path,
-    tool: ToolSpec,
-    tool_version: str | None,
-    sweep_setup_failure: str,
-    skip_existing: bool,
-    skip_counts: Counter,
-    repeat: int,
-    counts: dict[str, int],
-    sweep_idx: int,
-    total: int,
-    t_sweep: float,
-    progress_stream,
-) -> int:
-    """Per_sweep_setup failed: record every rep in this group as failed and return new sweep_idx."""
-    for entry, _r, is_warmup in items:
-        sweep_idx += 1
-        ch = config_hash(entry["vars"])
-        if skip_existing and skip_counts[ch] >= repeat:
-            counts["skipped"] += 1
-            _progress(progress_stream, sweep_idx, total, t_sweep, "skip", ch)
-            continue
-        tags = list(entry.get("tags") or [])
-        if is_warmup:
-            tags.append("warmup")
-        row = make_row(
-            run_id=str(uuid.uuid4()),
-            entry=entry,
-            ch=ch,
-            tags=tags,
-            tool=tool,
-            tool_version=tool_version,
-            command="<not-run>",
-            result=None,
-            parsed={},
-            failure_reason=sweep_setup_failure,
-            probe_results={},
-        )
-        store.append_run(results_dir, row)
-        store.update_aggregates_for_hash(results_dir, ch)
-        counts["failed"] += 1
-        _progress(progress_stream, sweep_idx, total, t_sweep, "FAIL", ch)
-    return sweep_idx
 
 
 def _maybe_write_sweep_raw(

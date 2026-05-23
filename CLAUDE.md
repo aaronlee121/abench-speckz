@@ -22,6 +22,7 @@ pytest tests/test_generate.py::test_expand_basic
 abench-speckz gen examples/full.yaml --dry-run
 abench-speckz gen examples/full.yaml --out out
 abench-speckz run out/ --tool mytool.yaml --repeat 3
+abench-speckz run out/ --tool mytool.yaml --ci-target rps=0.05 --min-repeat 3 --max-repeat 20
 abench-speckz stats results/
 abench-speckz stats results/ --baseline runs/v1.4-baseline/ --report report.html
 ```
@@ -49,10 +50,12 @@ Profiles overlay the base spec (variables, static, when, exclude are merged); `d
 
 `runner.execute_sweep()` orchestrates the sweep:
 - Loads `manifest.json` and a **tool YAML** (`ToolSpec` via `tools.load_tool()`)
-- Plans work: each matching combo × repeat+warmup reps
+- Filters and sorts combos, then walks them by per_sweep group; a **Scheduler** (`src/abench_speckz/scheduling.py`) decides which rep to issue next within each group
 - Per run: interpolates the tool `command` template → `executor.execute()` (subprocess) → `extract.apply()` extracts metrics from stdout
 - Writes to `runs.jsonl` (one JSON line per run) and updates `aggregates.jsonl` after each run
 - Results directory is protected by a `flock` during the sweep
+
+**Schedulers:** `FixedScheduler` (default) yields `warmup + --repeat` reps per combo in input order. `CITargetScheduler` (enabled by `--ci-target METRIC=THRESHOLD`) stops a combo early once every named metric's CI half-width is within `THRESHOLD * |mean|`, bounded by `[--min-repeat, --max-repeat]`. Scheduling is **scoped to one per_sweep / scope group at a time** — schedulers can ask for more reps of any combo in the current group but cannot jump back to a combo in a previously-completed group (teardown would have to re-run). The `Scheduler` protocol (`next(state) -> WorkItem | None`) is the seam future benchmark-specific planner plugins will hang off.
 
 **Tool YAML fields:** `name`, `command`, `timeout_seconds`, `version_command`, `capture` (JSONPath expressions keyed to metric names), `parser` (`module:func` alternative to capture), `output_file` (read extraction input from a file the tool writes instead of stdout), `output_format` (`json` default, or `jsonl` for one object per line), `pretty_names`, `var_values` (mapping of variable name → {raw_value: display_label} for friendly legend labels), `units`, `higher_is_better`, `plots` (declarative Chart.js plot definitions consumed by `stats --report`), `env_probes` (mapping of key → shell command run once at sweep start; stdout captured into `env.snapshot.json` under `"probes"`), `combo_probes` (mapping of key → command template run once per unique config hash; stdout captured into `combo_probes.json` and each run row; see below), `setup` / `teardown` (per-rep shell steps), `post_run` (per-rep shell steps that run after teardown with access to run-result vars; see below), `monitor` (list of background-process definitions, each a string or `{command, span}` object; `span` is `per_rep` (default), `per_group`, or `per_sweep`; see below), `setup_timeout_seconds` (per-step timeout, default 120), `per_sweep_var` (string, list of strings, or negation entries like `"!var"` — see below), `scopes` (list of scope entries for nested per-sweep grouping — see below; mutually exclusive with `per_sweep_var`/`setup_per_sweep`/`teardown_per_sweep`), `grafana_links` (list of `{label, url}` entries; URL templates resolved per-run using combo vars and run-result vars including `${_started_at_ms}` / `${_finished_at_ms}`; stored in `runs.jsonl` and rendered as clickable buttons in `stats --report`).
 
