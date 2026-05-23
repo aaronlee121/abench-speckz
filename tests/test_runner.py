@@ -473,7 +473,7 @@ capture:
     assert summary["succeeded"] == 1
 
     run = store.read_runs(results)[0]
-    raw = json.loads((results / run["raw_output_path"]).read_text())
+    raw = store.load_raw_run(results, run["run_id"])
     assert raw["stdout"].strip() == "hello from stdout"
     assert "warn line" in raw["stderr"]
     assert raw["output_file"]["path"] == str(out_file)
@@ -508,7 +508,7 @@ capture:
     )
     run = store.read_runs(results)[0]
     assert run["raw_output_path"]  # written on failure regardless of keep_raw
-    raw = json.loads((results / run["raw_output_path"]).read_text())
+    raw = store.load_raw_run(results, run["run_id"])
     assert raw["setup"][0]["exit_code"] == 7
     assert "setup-stdout" in raw["setup"][0]["stdout"]
     assert raw["teardown"][0]["exit_code"] == 0
@@ -806,8 +806,8 @@ def test_per_sweep_keep_raw_writes_per_group_files(tmp_path):
     )
     assert summary["succeeded"] == 2
 
-    raw_read = json.loads((results / "raw" / "sweep-read.json").read_text())
-    raw_write = json.loads((results / "raw" / "sweep-write.json").read_text())
+    raw_read = store.load_raw_sweep_phase(results, "read")
+    raw_write = store.load_raw_sweep_phase(results, "write")
     assert "hello-read" in raw_read["setup"][0]["stdout"]
     assert "hello-write" in raw_write["setup"][0]["stdout"]
 

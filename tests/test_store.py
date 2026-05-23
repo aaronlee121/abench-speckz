@@ -110,13 +110,26 @@ def test_manifest_snapshot_dedupe(tmp_path):
 # --- raw spilling ---
 
 
-def test_raw_small_content_stays_inline(tmp_path):
+def test_raw_stdout_stderr_always_spilled(tmp_path):
     store.init_results_dir(tmp_path)
     raw = {"stdout": _SMALL, "stderr": _SMALL}
     store.write_raw_run(tmp_path, "run-1", raw)
-    doc = (tmp_path / "raw" / "run-1.json").read_text()
-    assert _SMALL in doc
-    assert "$ref" not in doc
+
+    doc = __import__("json").loads((tmp_path / "raw" / "run-1.json").read_text())
+    assert isinstance(doc["stdout"], dict) and "$ref" in doc["stdout"]
+    assert isinstance(doc["stderr"], dict) and "$ref" in doc["stderr"]
+    assert (tmp_path / doc["stdout"]["$ref"]).read_text() == _SMALL
+    assert (tmp_path / doc["stderr"]["$ref"]).read_text() == _SMALL
+
+
+def test_raw_empty_stdout_stays_inline(tmp_path):
+    store.init_results_dir(tmp_path)
+    raw = {"stdout": "", "stderr": ""}
+    store.write_raw_run(tmp_path, "run-1e", raw)
+
+    doc = __import__("json").loads((tmp_path / "raw" / "run-1e.json").read_text())
+    assert doc["stdout"] == ""
+    assert doc["stderr"] == ""
 
 
 def test_raw_large_stdout_is_spilled(tmp_path):
@@ -126,7 +139,7 @@ def test_raw_large_stdout_is_spilled(tmp_path):
 
     doc = __import__("json").loads((tmp_path / "raw" / "run-2.json").read_text())
     assert isinstance(doc["stdout"], dict) and "$ref" in doc["stdout"]
-    assert doc["stderr"] == _SMALL  # small field stays inline
+    assert isinstance(doc["stderr"], dict) and "$ref" in doc["stderr"]
 
     sidecar = tmp_path / doc["stdout"]["$ref"]
     assert sidecar.exists()

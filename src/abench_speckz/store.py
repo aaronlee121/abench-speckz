@@ -122,6 +122,19 @@ def _maybe_spill(content: str, sidecar_path: Path, results_dir: Path) -> "str | 
     return {"$ref": str(sidecar_path.relative_to(results_dir))}
 
 
+def _always_spill(content: str, sidecar_path: Path, results_dir: Path) -> "str | dict[str, str]":
+    """Always write non-empty *content* to *sidecar_path* as a plain text file.
+
+    Returns a ``{"$ref": rel_path}`` pointer. Empty strings are kept inline to
+    avoid creating empty sidecar files.
+    """
+    if not content:
+        return content
+    sidecar_path.parent.mkdir(parents=True, exist_ok=True)
+    sidecar_path.write_text(content)
+    return {"$ref": str(sidecar_path.relative_to(results_dir))}
+
+
 def _spill_phases(doc: dict[str, Any], base_name: str, raw_dir: Path, results_dir: Path) -> dict[str, Any]:
     """Spill stdout/stderr in setup/teardown/post_run step lists. Returns a new dict."""
     doc = dict(doc)
@@ -133,7 +146,7 @@ def _spill_phases(doc: dict[str, Any], base_name: str, raw_dir: Path, results_di
             step = dict(step)
             for field in ("stdout", "stderr"):
                 if isinstance(step.get(field), str):
-                    step[field] = _maybe_spill(
+                    step[field] = _always_spill(
                         step[field],
                         raw_dir / f"{base_name}.{phase}-{i}.{field}",
                         results_dir,
@@ -175,7 +188,7 @@ def write_raw_run(results_dir: Path, run_id: str, raw: dict[str, Any]) -> Path:
     doc = dict(raw)
     for field in ("stdout", "stderr"):
         if isinstance(doc.get(field), str):
-            doc[field] = _maybe_spill(doc[field], raw_dir / f"{run_id}.{field}", results_dir)
+            doc[field] = _always_spill(doc[field], raw_dir / f"{run_id}.{field}", results_dir)
 
     if isinstance(doc.get("output_file"), dict) and isinstance(doc["output_file"].get("content"), str):
         doc["output_file"] = dict(doc["output_file"])
@@ -193,6 +206,15 @@ def write_raw_run(results_dir: Path, run_id: str, raw: dict[str, Any]) -> Path:
 def load_raw_run(results_dir: Path, run_id: str) -> "dict[str, Any] | None":
     """Load the raw record for *run_id*, resolving any spilled ``{"$ref": …}`` pointers."""
     target = results_dir / "raw" / f"{run_id}.json"
+    if not target.exists():
+        return None
+    return _resolve_refs(json.loads(target.read_text()), results_dir)
+
+
+def load_raw_sweep_phase(results_dir: Path, group_slug: str | None) -> "dict[str, Any] | None":
+    """Load the raw sweep-phase record, resolving any spilled ``{"$ref": …}`` pointers."""
+    base_name = "sweep" if group_slug is None else f"sweep-{group_slug}"
+    target = results_dir / "raw" / f"{base_name}.json"
     if not target.exists():
         return None
     return _resolve_refs(json.loads(target.read_text()), results_dir)
