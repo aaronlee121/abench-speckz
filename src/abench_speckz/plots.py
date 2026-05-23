@@ -46,6 +46,9 @@ class HeadlineDef:
     where: list[str] = field(default_factory=list)
 
 
+_ALLOWED_ERROR_BARS = {"ci95", "stddev"}
+
+
 @dataclass
 class PlotSpec:
     id: str
@@ -61,6 +64,7 @@ class PlotSpec:
     x_title: str | None = None
     y_title: str | None = None
     normalize: NormalizeSpec | None = None
+    error_bars: str | None = None
 
 
 @dataclass
@@ -248,6 +252,21 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
                 )
             normalize = NormalizeSpec(against=str(against), reference=str(reference))
 
+        error_bars_raw = item.get("error_bars")
+        if error_bars_raw is None:
+            error_bars: str | None = None
+        else:
+            if not isinstance(error_bars_raw, str) or error_bars_raw not in _ALLOWED_ERROR_BARS:
+                raise RunError(
+                    f"{source}: plot {plot_id!r}: error_bars must be one of "
+                    f"{sorted(_ALLOWED_ERROR_BARS)}, got {error_bars_raw!r}"
+                )
+            if ptype in ("scatter", "stacked-bar"):
+                raise RunError(
+                    f"{source}: plot {plot_id!r}: error_bars is not allowed on {ptype!r} plots"
+                )
+            error_bars = error_bars_raw
+
         unknown = set(item) - {
             "id",
             "type",
@@ -262,6 +281,7 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
             "x_title",
             "y_title",
             "normalize",
+            "error_bars",
         }
         if unknown:
             raise RunError(f"{source}: plot {plot_id!r}: unknown fields {sorted(unknown)}")
@@ -281,6 +301,7 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
                 x_title=x_title,
                 y_title=y_title,
                 normalize=normalize,
+                error_bars=error_bars,
             )
         )
     return out

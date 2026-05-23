@@ -216,6 +216,34 @@ def _theme_js(palette: str, dark_mode: bool | str, switcher: bool) -> str:
     }}
   }};
   Chart.register(_refLinePlugin);
+  var _errorBarPlugin = {{
+    id: 'abenchErrorBars',
+    afterDatasetsDraw: function(chart) {{
+      var ctx = chart.ctx, yScale = chart.scales.y;
+      if (!yScale) return;
+      chart.data.datasets.forEach(function(ds, di) {{
+        if (!ds._errLow) return;
+        var meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        ctx.save();
+        ctx.strokeStyle = _darkMode ? '#ccc' : '#333';
+        ctx.lineWidth = 1.5;
+        meta.data.forEach(function(el, i) {{
+          var lo = ds._errLow[i], hi = ds._errHigh[i];
+          if (lo == null || hi == null) return;
+          var yLo = yScale.getPixelForValue(lo);
+          var yHi = yScale.getPixelForValue(hi);
+          ctx.beginPath();
+          ctx.moveTo(el.x, yLo); ctx.lineTo(el.x, yHi);
+          ctx.moveTo(el.x - 4, yLo); ctx.lineTo(el.x + 4, yLo);
+          ctx.moveTo(el.x - 4, yHi); ctx.lineTo(el.x + 4, yHi);
+          ctx.stroke();
+        }});
+        ctx.restore();
+      }});
+    }}
+  }};
+  Chart.register(_errorBarPlugin);
   var _charts = [];
   function _themeColor(idx) {{
     var p = _THEMES[_currentTheme] || _THEMES.tableau;

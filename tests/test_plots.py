@@ -488,3 +488,44 @@ def test_theme_not_dict_rejected(tmp_path):
     p.write_text("theme: vivid\nplots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n")
     with pytest.raises(RunError, match="theme must be a mapping"):
         plots.load_plots_file(p)
+
+
+# ---------------------------------------------------------------------------
+# error_bars
+# ---------------------------------------------------------------------------
+
+
+def test_error_bars_ci95_on_bar():
+    raw = [{"id": "p1", "type": "bar", "x": "workload", "y": "rps", "error_bars": "ci95"}]
+    specs = plots.parse_plots(raw, source="<t>")
+    assert specs[0].error_bars == "ci95"
+
+
+def test_error_bars_stddev_on_line():
+    raw = [{"id": "p1", "type": "line", "x": "concurrency", "y": "rps", "error_bars": "stddev"}]
+    specs = plots.parse_plots(raw, source="<t>")
+    assert specs[0].error_bars == "stddev"
+
+
+def test_error_bars_defaults_to_none():
+    raw = [{"id": "p1", "type": "bar", "x": "workload", "y": "rps"}]
+    specs = plots.parse_plots(raw, source="<t>")
+    assert specs[0].error_bars is None
+
+
+def test_error_bars_invalid_value_rejected():
+    raw = [{"id": "p1", "type": "bar", "x": "workload", "y": "rps", "error_bars": "sem"}]
+    with pytest.raises(RunError, match="error_bars must be one of"):
+        plots.parse_plots(raw, source="<t>")
+
+
+def test_error_bars_on_stacked_bar_rejected():
+    raw = [{"id": "p1", "type": "stacked-bar", "x": "workload", "y": ["p50", "p95"], "error_bars": "ci95"}]
+    with pytest.raises(RunError, match="error_bars is not allowed on"):
+        plots.parse_plots(raw, source="<t>")
+
+
+def test_error_bars_on_scatter_rejected():
+    raw = [{"id": "p1", "type": "scatter", "x": "rps", "y": "p95_ms", "error_bars": "stddev"}]
+    with pytest.raises(RunError, match="error_bars is not allowed on"):
+        plots.parse_plots(raw, source="<t>")

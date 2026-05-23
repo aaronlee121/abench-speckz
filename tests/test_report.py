@@ -1338,3 +1338,109 @@ def test_grafana_links_with_html_reports_shows_per_run_reports_title(tmp_path):
     section_html, _ = _runs_section(run_reports, runs, embed=True)
     assert "Per-run reports" in section_html
     assert 'class="grafana-link"' in section_html
+
+
+# ---------------------------------------------------------------------------
+# error_bars — _errLow / _errHigh arrays in chart config
+# ---------------------------------------------------------------------------
+
+
+def _make_row(x_val, mean, stddev=None, ci95_low=None, ci95_high=None):
+    return {
+        "workload": x_val,
+        "metric": "rps",
+        "mean": mean,
+        "stddev": stddev,
+        "ci95_low": ci95_low,
+        "ci95_high": ci95_high,
+    }
+
+
+def test_error_bars_ci95_attaches_err_arrays():
+    from types import SimpleNamespace
+
+    from abench_speckz.report._charts import build_bar_or_line_config
+
+    plot = SimpleNamespace(
+        id="p1",
+        x="workload",
+        y=["rps"],
+        x_title=None,
+        y_title=None,
+        normalize=None,
+        series_label=None,
+        error_bars="ci95",
+    )
+    rows = [
+        _make_row("read", mean=1000.0, ci95_low=950.0, ci95_high=1050.0),
+        _make_row("write", mean=800.0, ci95_low=780.0, ci95_high=820.0),
+    ]
+    config, _ = build_bar_or_line_config(
+        plot, rows, {}, chart_type="bar", stacked=False, group_by=[], varying_keys=[]
+    )
+    ds = config["data"]["datasets"][0]
+    assert ds["_errLow"] == [950.0, 780.0]
+    assert ds["_errHigh"] == [1050.0, 820.0]
+
+
+def test_error_bars_stddev_attaches_err_arrays():
+    from types import SimpleNamespace
+
+    from abench_speckz.report._charts import build_bar_or_line_config
+
+    plot = SimpleNamespace(
+        id="p1",
+        x="workload",
+        y=["rps"],
+        x_title=None,
+        y_title=None,
+        normalize=None,
+        series_label=None,
+        error_bars="stddev",
+    )
+    rows = [
+        _make_row("read", mean=1000.0, stddev=50.0),
+        _make_row("write", mean=800.0, stddev=20.0),
+    ]
+    config, _ = build_bar_or_line_config(
+        plot, rows, {}, chart_type="bar", stacked=False, group_by=[], varying_keys=[]
+    )
+    ds = config["data"]["datasets"][0]
+    assert ds["_errLow"] == [950.0, 780.0]
+    assert ds["_errHigh"] == [1050.0, 820.0]
+
+
+def test_no_error_bars_no_err_keys():
+    from types import SimpleNamespace
+
+    from abench_speckz.report._charts import build_bar_or_line_config
+
+    plot = SimpleNamespace(
+        id="p1",
+        x="workload",
+        y=["rps"],
+        x_title=None,
+        y_title=None,
+        normalize=None,
+        series_label=None,
+        error_bars=None,
+    )
+    rows = [_make_row("read", mean=1000.0, ci95_low=950.0, ci95_high=1050.0)]
+    config, _ = build_bar_or_line_config(
+        plot, rows, {}, chart_type="bar", stacked=False, group_by=[], varying_keys=[]
+    )
+    ds = config["data"]["datasets"][0]
+    assert "_errLow" not in ds
+    assert "_errHigh" not in ds
+
+
+def test_error_bars_ci95_in_full_report(tmp_path):
+    _seed(tmp_path)
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n  error_bars: ci95\n")
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "_errLow" in html
+    assert "_errHigh" in html
+    assert "abenchErrorBars" in html

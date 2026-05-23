@@ -86,7 +86,10 @@ def build_bar_or_line_config(
                 label_parts.append(" / ".join(varying_parts))
             label = " / ".join(label_parts)
 
-        data = [indexed.get((x, metric, gb_tuple)) for x in x_values]
+        data = [
+            r.get("mean") if (r := indexed.get((x, metric, gb_tuple))) is not None else None
+            for x in x_values
+        ]
         ds: dict[str, Any] = {
             "label": label,
             "data": data,
@@ -98,6 +101,25 @@ def build_bar_or_line_config(
         if chart_type == "line":
             ds["fill"] = False
             ds["tension"] = 0.4 if smooth else 0.1
+        error_bars_mode = getattr(plot, "error_bars", None)
+        if error_bars_mode is not None:
+            err_low: list[float | None] = []
+            err_high: list[float | None] = []
+            for x in x_values:
+                row = indexed.get((x, metric, gb_tuple))
+                if row is None:
+                    err_low.append(None)
+                    err_high.append(None)
+                elif error_bars_mode == "ci95":
+                    err_low.append(row.get("ci95_low"))
+                    err_high.append(row.get("ci95_high"))
+                else:  # stddev
+                    mean = row.get("mean")
+                    sd = row.get("stddev")
+                    err_low.append((mean - sd) if mean is not None and sd is not None else None)
+                    err_high.append((mean + sd) if mean is not None and sd is not None else None)
+            ds["_errLow"] = err_low
+            ds["_errHigh"] = err_high
         datasets.append(ds)
         series_meta.append({"metric": metric, "vals": vals, "color": c})
 
@@ -108,6 +130,23 @@ def build_bar_or_line_config(
     if stacked:
         x_scale["stacked"] = True
         y_scale["stacked"] = True
+
+    # Extend y-axis to cover error bar extents so whiskers are never clipped.
+    if getattr(plot, "error_bars", None) is not None:
+        err_all: list[float] = []
+        for ds in datasets:
+            for v in ds.get("_errLow", []):
+                if v is not None:
+                    err_all.append(v)
+            for v in ds.get("_errHigh", []):
+                if v is not None:
+                    err_all.append(v)
+        if err_all:
+            y_scale["suggestedMax"] = max(err_all)
+            low = min(err_all)
+            if low < 0:
+                y_scale["suggestedMin"] = low
+
     options: dict[str, Any] = {
         "responsive": True,
         "plugins": {"legend": {"position": "top"}},
@@ -129,9 +168,11 @@ def build_bar_or_line_config(
         for metric, gb_tuple in series_keys:
             if len(gb_tuple) > against_idx and gb_tuple[against_idx] == ref_val:
                 for x in x_values:
-                    v = indexed.get((x, metric, gb_tuple))
-                    if v is not None:
-                        ref_lookup[(metric, x)] = v
+                    row = indexed.get((x, metric, gb_tuple))
+                    if row is not None:
+                        v = row.get("mean")
+                        if v is not None:
+                            ref_lookup[(metric, x)] = v
 
         # Divide each dataset's data by its reference series' value
         for ds, (metric, _gb_tuple) in zip(datasets, series_keys, strict=True):
@@ -233,9 +274,9 @@ def _index_series(
     rows: list[dict],
     get_x,
     group_by: list[str],
-) -> tuple[dict[tuple, float | None], list[tuple]]:
-    """Build (x, metric, gb_tuple) → mean lookup and ordered list of (metric, gb_tuple) keys."""
-    indexed: dict[tuple, float | None] = {}
+) -> tuple[dict[tuple, dict | None], list[tuple]]:
+    """Build (x, metric, gb_tuple) → row lookup and ordered list of (metric, gb_tuple) keys."""
+    indexed: dict[tuple, dict | None] = {}
     series_keys: list[tuple] = []
     seen: set[tuple] = set()
     for r in rows:
@@ -246,5 +287,5 @@ def _index_series(
         if key not in seen:
             seen.add(key)
             series_keys.append(key)
-        indexed[(x_val, metric, gb_tuple)] = r.get("mean")
+        indexed[(x_val, metric, gb_tuple)] = r
     return indexed, series_keys
