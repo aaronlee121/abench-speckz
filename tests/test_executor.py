@@ -1,6 +1,8 @@
 import os
 import sys
 
+import pytest
+
 from abench_speckz.executor import LocalSubprocessExecutor
 from abench_speckz.runspec import RunRequest
 
@@ -63,6 +65,7 @@ def test_pipe_command_success():
     assert "hello" in r.stdout
 
 
+@pytest.mark.timeout(15)
 def test_timeout_with_pipe_does_not_hang():
     # A pipeline leaves grandchild processes alive after the shell is killed.
     # Without start_new_session+killpg, communicate() hangs indefinitely.

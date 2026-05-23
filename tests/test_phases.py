@@ -1,6 +1,8 @@
 import os
 import time
 
+import pytest
+
 from abench_speckz.runner._phases import run_phase
 
 
@@ -11,6 +13,7 @@ def test_phase_success_with_pipe_command():
     assert "hello" in records[0]["stdout"]
 
 
+@pytest.mark.timeout(15)
 def test_phase_timeout_with_pipe_does_not_hang():
     # A pipeline leaves grandchild processes alive after the shell is killed.
     # Without start_new_session+killpg, communicate() hangs indefinitely.

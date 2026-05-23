@@ -3,7 +3,14 @@
 import os
 import time
 
+import pytest
+
 from abench_speckz.runner._monitors import run_monitors, stop_monitors
+
+# Every test here calls stop_monitors with a live subprocess. If stop_monitors
+# regresses to blocking indefinitely, the test would hang rather than fail.
+# The module-level mark converts any such hang into a test failure.
+pytestmark = pytest.mark.timeout(15)
 
 
 def _env():

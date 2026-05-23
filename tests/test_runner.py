@@ -1853,6 +1853,7 @@ monitor:
     assert raw["monitor_stop"][0]["exit_code"] is not None
 
 
+@pytest.mark.timeout(15)
 def test_monitor_pipe_command_stops_without_hanging(tmp_path):
     # A pipeline monitor leaves grandchild processes alive after the shell is
     # killed. Without start_new_session+killpg, stop_monitors hangs indefinitely.
