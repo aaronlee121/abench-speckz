@@ -69,9 +69,28 @@ abench-speckz stats results/ --report report.html              # self-contained 
 abench-speckz stats results/ --report report.html --plots plots.yaml  # override tool YAML plots
 ```
 
+**Comparison mode.** Pass `--baseline <dir>` to compare the results directory against a baseline directory. When active the HTML report gains:
+- A **Regression Summary** section at the top — every combo×metric sorted worst-delta-first, regressed rows in red, improved in green, statistically-insignificant changes greyed out.
+- **Ghost overlay series** on every bar/line chart (dashed for line, ~35% alpha for bar, labeled ` (baseline)`).
+- **Δ / Δ%** columns in every per-plot data table.
+
+A delta is flagged as `regressed` or `improved` only when it exceeds `--regression-threshold` (default `0.05` = 5%) **and** is statistically significant (CI bands disjoint). Direction follows `higher_is_better` in the tool YAML (defaults to higher-is-better when absent).
+
 `--report` writes a self-contained HTML file with Chart.js plots. Plot definitions come from the tool YAML's `plots:` list (see below), or from a separate YAML file via `--plots`. When no plots are defined, a default per-metric bar chart is rendered.
 
 The report includes a toolbar with a **dark mode toggle** and **six built-in color themes** (Tableau, Vivid, Pastel, Paired, Muted, Accessible). The selected theme and dark/light preference are persisted in `localStorage`, so the report remembers your choice across sessions. Switching a theme or toggling dark mode instantly updates all charts and legend swatches without a page reload.
+
+### `browse` — interactive TUI browser
+
+```sh
+abench-speckz browse results/
+```
+
+Launches a terminal UI for exploring a results directory. The left pane shows a tree of combo configurations grouped by variable; the right pane shows per-metric statistics and individual run rows for the selected combo. Requires the optional `tui` extra:
+
+```sh
+pip install 'abench-speckz[tui]'
+```
 
 ### `rebuild-aggregates` — regenerate aggregates from raw runs
 
@@ -125,6 +144,7 @@ Variable names starting with `_` are reserved and will be rejected at load time.
 |---|---|---|
 | `${_envfile}` | `command`, `setup`, `teardown`, `post_run`, `monitor`, `output_file`, `setup_per_sweep`, `teardown_per_sweep` | Absolute path to the current combo's env file. In per_sweep phases, resolves to the first entry's env file in the group. |
 | `${_run_id}` | `command`, `setup`, `teardown`, `post_run`, `monitor`, `setup_per_sweep`, `teardown_per_sweep` | UUID for this rep — same value written to `runs.jsonl`. In per_sweep phases, one UUID is generated per group and shared between `setup_per_sweep` and `teardown_per_sweep`. |
+| `${_results_dir}` | `command`, `setup`, `teardown`, `post_run`, `output_file`, `setup_per_sweep`, `teardown_per_sweep`, `combo_probes`, `monitor` | Absolute path to the results directory. |
 | `${_exit_code}` | `post_run` | Benchmark exit code |
 | `${_started_at}` | `post_run` | ISO timestamp when the benchmark started |
 | `${_finished_at}` | `post_run` | ISO timestamp when the benchmark finished |
@@ -313,6 +333,39 @@ Expression syntax is validated when the YAML is loaded, so malformed expressions
 
 **Plot titles.** The optional `title` field is used as an `<h3>` heading inside each plot block when sections are present, so multiple plots within one section are individually labelled. Without sections it becomes the section heading instead.
 
+**`normalize` — relative speedup charts.** Pins one series to 1.0× and expresses all others relative to it. Requires `group_by`; `against` must be one of the `group_by` variables; `reference` is the value pinned to 1.0×. The y-axis becomes "× speedup" and a dashed reference line is drawn at 1.0.
+
+```yaml
+- id: speedup
+  type: bar
+  x: workload
+  y: rps
+  group_by: backend
+  normalize:
+    against: backend       # must be a group_by variable
+    reference: postgres    # this series is pinned to 1.0×
+```
+
+**`error_bars` — whiskers on bar/line charts.** Set to `ci95` to draw 95%-CI whiskers or `stddev` to draw ±stddev whiskers on each data point. Only supported on `bar` and `line` plot types.
+
+```yaml
+- id: rps_with_ci
+  type: bar
+  x: workload
+  y: rps
+  error_bars: ci95     # or: stddev
+```
+
+**`data_table` — suppress the collapsible data table.** Each plot renders a "Data" table below the chart by default. Set `data_table: false` to hide it.
+
+```yaml
+- id: rps_by_workload
+  type: bar
+  x: workload
+  y: rps
+  data_table: false
+```
+
 **Static-variable block.** When a `group_by` variable has the same value across every series in a plot, abench-speckz collapses it out of the legend and shows it in a `Fixed: key = value` line above the chart. Set `fixed_vars: false` on a plot to suppress this block entirely:
 
 ```yaml
@@ -404,6 +457,21 @@ sections:
       - include_html: methodology-table.html   # path relative to the YAML file
 ```
 
+**`theme` — report visual theme.** An optional top-level mapping controlling the visual theme of the HTML report. All sub-fields are optional.
+
+| Sub-field | Values | Default | Description |
+|---|---|---|---|
+| `palette` | `tableau`, `vivid`, `pastel`, `paired`, `muted`, `accessible` | `tableau` | Color palette for all chart series. |
+| `dark_mode` | `true`, `false`, `auto` | `auto` | `auto` follows OS preference; `true` always dark; `false` always light. |
+| `switcher` | `true`, `false` | `false` | Show an interactive palette picker and dark-mode toggle in the report header. When shown, `palette` and `dark_mode` serve as initial defaults, overridable by the reader via `localStorage`. |
+
+```yaml
+theme:
+  palette: vivid
+  dark_mode: auto
+  switcher: true
+```
+
 When `sections:` is present:
 - Plots are **not** auto-rendered — only plots referenced by a `plot_id` block appear in the report.
 - `report_description` is rendered as Markdown below the `report_title` heading.
@@ -418,6 +486,37 @@ Each block has exactly one key:
 | `text` | Markdown string | Formatted prose |
 | `html` | Raw HTML string | Inlined verbatim |
 | `include_html` | File path relative to the YAML file | Contents of that file, inlined verbatim |
+| `kpi` | List of scorecard card definitions (see below) | Grid of big-number cards |
+| `headline` | Headline definition (see below) | Auto-generated comparison sentence |
+
+**`kpi` blocks — big-number scorecards.** Each card specifies a metric value to highlight with optional delta comparison. `stat` controls how the value is reduced across matching combos: `max`, `min`, or `mean` (default). `where` is a dict of variable filters. `compare.where` targets a second combo to show Δ%.
+
+```yaml
+- kpi:
+    - label: "Peak throughput"
+      metric: rps
+      stat: max
+      where: {workload: heavy}
+      unit: "req/s"
+      precision: 0
+      compare:
+        where: {workload: light}
+    - label: "p95 latency"
+      metric: p95_ms
+      stat: min
+      where: {workload: read}
+      unit: ms
+```
+
+**`headline` blocks — auto-generated comparison sentences.** Produces a deterministic sentence comparing the best and worst values of a metric across a variable. Sort direction follows `higher_is_better` from the tool YAML. Template tokens: `{best}`, `{worst}`, `{best_value}`, `{worst_value}`, `{ratio}`, `{delta_pct}`.
+
+```yaml
+- headline:
+    metric: rps
+    compare: backend
+    where: {workload: heavy}
+    template: "{best} delivers {ratio} the throughput of {worst}"
+```
 
 **Variable interpolation in text fields.** `report_title`, `report_description`, section `title`, section `description`, `text` blocks, `html` blocks, and plot `title` all support `${env:VAR}` (current environment variable) and `${var}` (combo variable that has exactly one unique value across all results). Multi-valued variables are not available — referencing one raises an error. Use `$$` to write a literal `$` when you need `${...}` to appear verbatim in display text (e.g. `$$${backend}` renders as `${backend}`). Note: `series_label` is a per-series render-time template and is intentionally excluded from this doc-level interpolation.
 
@@ -553,6 +652,32 @@ per_sweep_var: [backend, workload]   # concurrency varies freely within each gro
 - Setup failure: all planned reps in that group get a failure row with `failure_reason="per_sweep_setup[i]: …"`; teardown still runs best-effort. Next group proceeds.
 - Teardown failure: appended to the *last* rep row in the group's `failure_reason`.
 - Raw record: `raw/sweep.json` (no grouping) or `raw/sweep-{slug}.json` (grouped, slug joins all group variable values) — same shape as per-rep raw files.
+
+**`scopes` — nested multi-level per-sweep grouping.** `scopes` provides nested multi-level per-sweep setup/teardown. Each entry has `vars` (required — same string/list/negation syntax as `per_sweep_var`) plus optional `setup` and `teardown` step lists. Scopes are ordered outermost to innermost; setup runs top-down before reps begin, teardown runs bottom-up after reps finish. `scopes` cannot be combined with `per_sweep_var`, `setup_per_sweep`, or `teardown_per_sweep`.
+
+Step variable access follows scope depth: scope `i` steps may reference vars from scopes `0..i` (outer scopes are constant within an inner group), plus `${_envfile}`, `${_run_id}`, `${_results_dir}`, and `${env:VAR}`.
+
+```yaml
+scopes:
+  - vars: backend                        # outer: one group per backend
+    setup:
+      - "deploy.sh ${backend}"
+    teardown:
+      - "stop.sh ${backend}"
+  - vars: [backend, workload]            # inner: one group per (backend, workload)
+    setup:
+      - "load_dataset.sh ${backend} ${workload}"
+    teardown:
+      - "cleanup_dataset.sh ${workload}"
+```
+
+Execution order (e.g. backends `pg`/`mysql`, workloads `read`/`write`):
+1. `deploy.sh pg` → `load_dataset.sh pg read` → all reps → `cleanup_dataset.sh read`
+2. `load_dataset.sh pg write` → all reps → `cleanup_dataset.sh write`
+3. `stop.sh pg`
+4. `deploy.sh mysql` → … → `stop.sh mysql`
+
+Innermost teardown failures are folded into the last rep's `failure_reason`. Outer teardown failures are written to `raw/scope{i}-{slug}.json`. A scope entry with no `setup` or `teardown` is a pure grouping scope (useful as a bracket for `per_group` monitors).
 
 **Raw output records.** When a raw record is written, `raw/{run_id}.json` is a JSON object with:
 
