@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from abench_speckz import generate, query, runner, slug, spec, store, tail as tail_mod, validate, writers
+from abench_speckz import generate, query, runner, slug, spec, store, tail as tail_mod, tui, validate, writers
 from abench_speckz.model import Combo, RunError, SpecError
 
 
@@ -77,6 +77,9 @@ def main(argv: list[str] | None = None) -> int:
     tail_p = sub.add_parser("tail", help="live-follow a running sweep: print each run as it completes")
     tail_p.add_argument("results_dir", type=Path, help="results directory containing runs.jsonl")
 
+    browse_p = sub.add_parser("browse", help="interactive TUI browser for a results directory")
+    browse_p.add_argument("results_dir", type=Path, help="results directory to browse")
+
     args = parser.parse_args(argv)
 
     try:
@@ -90,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
             return _rebuild(args)
         if args.cmd == "tail":
             return _tail(args)
+        if args.cmd == "browse":
+            return _browse(args)
     except (SpecError, RunError) as e:
         print(f"abench-speckz: error: {e}", file=sys.stderr)
         return 2
@@ -184,6 +189,11 @@ def _tail(args: argparse.Namespace) -> int:
         tail_mod.tail(args.results_dir)
     except KeyboardInterrupt:
         print()
+    return 0
+
+
+def _browse(args: argparse.Namespace) -> int:
+    tui.browse(args.results_dir)
     return 0
 
 

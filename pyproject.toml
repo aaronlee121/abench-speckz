@@ -35,12 +35,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+tui = [
+    "textual>=0.60",
+]
 dev = [
     "pytest>=7",
     "pytest-timeout>=2",
     "ruff>=0.6",
     "mypy>=1.10",
     "types-PyYAML",
+    "textual>=0.60",
 ]
 
 [project.urls]
