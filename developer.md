@@ -120,6 +120,25 @@ abench-speckz rebuild-aggregates results/
 | [_plots.py](src/abench_speckz/report/_plots.py) | Per-plot artifact assembly (data + chart + table) |
 | [_render.py](src/abench_speckz/report/_render.py) | Top-level `generate_html` / `generate_plots_html` |
 
+## Platform Support
+
+abench-speckz is developed and tested on **macOS and Linux**. Windows is not currently supported, but the framework code could be ported with the following targeted changes:
+
+### Unix-only APIs and their Windows equivalents
+
+| Location | Unix API | Why it's used | Windows replacement |
+|---|---|---|---|
+| `store.py` | `fcntl.flock` | Exclusive lock on the results dir during a sweep | Replace `lock_results_dir` with the [`filelock`](https://pypi.org/project/filelock/) package — cross-platform drop-in |
+| `executor.py`, `runner/_phases.py`, `runner/_monitors.py` | `os.killpg(os.getpgid(pid), SIGKILL)` | Kill the entire process group on timeout (catches child processes the benchmark spawned) | `subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)])` — `/T` kills the whole process tree |
+| `executor.py`, `runner/_phases.py`, `runner/_monitors.py` | `signal.SIGTERM` | Graceful-stop signal to monitor processes | `proc.terminate()` (calls `TerminateProcess` on Windows; no grace period) |
+| `executor.py`, `runner/_phases.py`, `runner/_monitors.py` | `start_new_session=True` | Isolate the subprocess in its own session/group so `killpg` works | Works on Windows too (maps to `CREATE_NEW_PROCESS_GROUP`), but combine with the `taskkill` approach above for teardown |
+
+A small `_kill_tree(proc)` helper gated on `sys.platform == "win32"` would centralise all three of the signal/killpg call sites.
+
+### What code changes would NOT fix
+
+The `command` fields in tool YAML files are shell commands intended for bash/zsh. Those would need to be rewritten as PowerShell or cmd equivalents by the user — that is a configuration concern, not a framework concern.
+
 ## Adding a New Test
 
 1. Create or open a file in `tests/` matching the module you're testing (e.g., `test_generate.py`).
