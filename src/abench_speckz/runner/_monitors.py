@@ -28,8 +28,8 @@ class _LogHandle:
     ) -> None:
         self._out_file = out_file
         self._err_file = err_file
-        self._out_thread = out_thread
-        self._err_thread = err_thread
+        self._out_thread: threading.Thread | None = out_thread
+        self._err_thread: threading.Thread | None = err_thread
         self._master_fd: int | None = master_fd
 
     @property
@@ -179,6 +179,9 @@ def run_monitors(
                 )
                 out_thread.start()
                 err_thread.start()
+                assert out_file is not None
+                assert err_file is not None
+                assert master_fd is not None
                 handle = _LogHandle(out_file, err_file, out_thread, err_thread, master_fd)
 
             procs.append(proc)

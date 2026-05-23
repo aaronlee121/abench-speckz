@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-22
+
+### Added
+
+- **Progress output during sweep startup** — a startup banner (`sweep: N rep(s) across M combo(s)`) is printed immediately after planning. An env-probe notice prints before `env_probes` run. Per-sweep and scope setup phases print a `setup [vars] (N step(s))...` line before executing. A `run` line is emitted per rep before the benchmark command starts, so the terminal is never silent during long-running benchmarks or slow setup steps.
+- **`abench-speckz tail` monitor log streaming** — monitor log content (`.out.log` / `.err.log` sidecar files) is now streamed inline in `tail` output as new lines appear, interleaved with run result lines.
+- **Separate `.out.log` / `.err.log` sidecar files** — monitor stdout and stderr are now written to distinct `<prefix>.out.log` and `<prefix>.err.log` files instead of a single combined log, making it easier to grep or `tail -f` each stream independently.
+- **PTY relay for monitor log files** — monitor processes are run under a PTY relay so `tail -f` on the sidecar files works correctly (line-buffered output rather than fully-buffered).
+- **Browse TUI tree view** — the combo browser now uses a hierarchical tree view instead of a flat table, grouping combos by varying variable values.
+- **`monitor_start`/`monitor_stop` stdout/stderr sidecar files** — stdout and stderr from monitor start/stop phases are spilled to sidecar files alongside the structured JSON records.
+- **Plain-text stdout/stderr sidecar files** — `monitor_start` and `monitor_stop` output is always written to plain text sidecar files for easy inspection.
+
 ## [0.8.0] - 2026-05-22
 
 ### Added

@@ -110,7 +110,7 @@ def browse(results_dir: Path) -> None:
         ) from exc
 
     def _build_tree_nodes(
-        parent: TreeNode,  # type: ignore[type-arg]
+        parent: TreeNode,
         combos: list[_ComboSummary],
         var_keys: list[str],
         depth: int,
