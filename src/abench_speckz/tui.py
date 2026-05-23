@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -364,4 +365,4 @@ def browse(results_dir: Path) -> None:
             self.notify(f"Rebuilt {n} aggregate rows")
 
     BrowserApp().run()
-    print("\033[2J\033[H", end="", flush=True)
+    os.system("cls" if os.name == "nt" else "clear")
