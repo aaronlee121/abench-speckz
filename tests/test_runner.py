@@ -1853,6 +1853,38 @@ monitor:
     assert raw["monitor_stop"][0]["exit_code"] is not None
 
 
+def test_monitor_pipe_command_stops_without_hanging(tmp_path):
+    # A pipeline monitor leaves grandchild processes alive after the shell is
+    # killed. Without start_new_session+killpg, stop_monitors hangs indefinitely.
+    import time
+
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+monitor:
+  - "sleep 30 | cat"
+"""
+    )
+    results = tmp_path / "results"
+    t0 = time.monotonic()
+    summary = runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+    )
+    elapsed = time.monotonic() - t0
+
+    assert summary["succeeded"] == 1
+    assert elapsed < 30, f"sweep took {elapsed:.1f}s — likely hung stopping pipe monitor"
+
+
 def test_monitor_does_not_abort_benchmark_on_start_failure(tmp_path):
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
     tool_path = tmp_path / "tool.yaml"

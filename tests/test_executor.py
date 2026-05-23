@@ -56,6 +56,27 @@ def test_env_is_passed():
     assert "hello" in r.stdout
 
 
+def test_pipe_command_success():
+    ex = LocalSubprocessExecutor()
+    r = ex.execute(_request("echo hello | cat"))
+    assert r.exit_code == 0
+    assert "hello" in r.stdout
+
+
+def test_timeout_with_pipe_does_not_hang():
+    # A pipeline leaves grandchild processes alive after the shell is killed.
+    # Without start_new_session+killpg, communicate() hangs indefinitely.
+    import time
+
+    ex = LocalSubprocessExecutor()
+    t0 = time.monotonic()
+    r = ex.execute(_request("sleep 30 | cat", timeout=1))
+    elapsed = time.monotonic() - t0
+
+    assert r.failure_reason == "timeout"
+    assert elapsed < 10, f"execute took {elapsed:.1f}s — likely hung on pipe grandchild"
+
+
 def test_to_str_handles_bytes():
     from abench_speckz.executor import _to_str
 
