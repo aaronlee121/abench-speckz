@@ -1,5 +1,7 @@
 """Launch and terminate side-car monitor processes that run alongside the benchmark."""
 
+import os
+import signal
 import subprocess
 from typing import Any
 
@@ -30,6 +32,7 @@ def run_monitors(
             proc = subprocess.Popen(
                 cmd,
                 shell=True,
+                start_new_session=True,
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -47,11 +50,17 @@ def stop_monitors(procs: list[subprocess.Popen]) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for proc in procs:
         try:
-            proc.terminate()
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except ProcessLookupError:
+                pass
             try:
                 stdout, stderr = proc.communicate(timeout=_MONITOR_STOP_GRACE)
             except subprocess.TimeoutExpired:
-                proc.kill()
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
                 stdout, stderr = proc.communicate()
             records.append(
                 {
