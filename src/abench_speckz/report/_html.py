@@ -70,7 +70,10 @@ _CSS = """
     summary:hover { color: var(--text); background: var(--surface-hover); }
     .details-body { padding: 0.75rem; }
     iframe.run-rpt { width: 100%; border: none; min-height: 400px; }
-    .run-group-heading { font-size: 1rem; margin: 1rem 0 0.25rem; color: var(--text-2); }
+    .var-table-wrap { margin: 1rem 0 0.5rem; }
+    .var-table { font-size: 0.8rem; }
+    .var-table td:first-child { color: var(--text-muted); font-weight: 500; text-align: left; }
+    .var-table td:last-child { color: var(--text); font-family: monospace; font-size: 0.8rem; }
     .grafana-links { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0 0.25rem; }
     .grafana-link { display: inline-block; padding: 0.2rem 0.6rem; border: 1px solid var(--border-2); border-radius: 4px; font-size: 0.8rem; color: var(--text-2); text-decoration: none; background: var(--surface-2); }
     .grafana-link:hover { background: var(--surface-hover); color: var(--text); }

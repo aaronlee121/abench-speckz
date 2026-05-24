@@ -120,6 +120,7 @@ def generate_html(
         chart_scripts,
         results_dir=results_dir,
         run_reports_mode=run_reports_mode,
+        pretty_map=pretty_map,
     )
 
     path.write_text(html_shell(sections, chart_scripts))
@@ -179,6 +180,7 @@ def generate_plots_html(
         scripts,
         results_dir=results_dir,
         run_reports_mode=run_reports_mode,
+        pretty_map=pretty_map,
     )
 
     title = doc.report_title or "abench_speckz report"
@@ -358,13 +360,16 @@ def _append_run_reports_section(
     *,
     results_dir: Path | None,
     run_reports_mode: str,
+    pretty_map: dict | None = None,
 ) -> None:
     """Add a 'Per-run reports/links' section if there are run-level HTML reports or grafana_links."""
     if results_dir is None or run_reports_mode == "none":
         return
     run_reports = discover_run_reports(results_dir)
     runs = store.read_runs(results_dir)
-    rpt_html, rpt_js = runs_section(run_reports, runs, embed=(run_reports_mode == "embedded"))
+    rpt_html, rpt_js = runs_section(
+        run_reports, runs, embed=(run_reports_mode == "embedded"), pretty_map=pretty_map
+    )
     if rpt_html:
         sections.append(rpt_html)
         scripts.append(rpt_js)

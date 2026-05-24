@@ -576,6 +576,63 @@ def test_multiple_reports_per_run(tmp_path):
     assert "<summary>profile</summary>" in section_html
 
 
+def test_var_table_in_runs_section(tmp_path):
+    from abench_speckz.report import _discover_run_reports, _runs_section
+
+    store.init_results_dir(tmp_path)
+    (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html/>")
+    runs = [
+        {
+            "run_id": _RUN_ID,
+            "config_hash": "h1",
+            "vars": {"workload": "read", "backend": "postgres"},
+            "tags": ["bench"],
+            "exit_code": 0,
+            "started_at": "2026-05-14T10:00Z",
+        }
+    ]
+    run_reports = _discover_run_reports(tmp_path)
+    section_html, _ = _runs_section(run_reports, runs, embed=True)
+    assert "<summary>Variables</summary>" in section_html
+    assert 'class="var-table"' in section_html
+    assert "<th>Variable</th>" in section_html
+    assert "<th>Value</th>" in section_html
+    assert "workload" in section_html
+    assert "read" in section_html
+    assert "backend" in section_html
+    assert "postgres" in section_html
+
+
+def test_var_table_uses_pretty_names(tmp_path):
+    from abench_speckz import prettynames
+    from abench_speckz.report import _discover_run_reports, _runs_section
+
+    store.init_results_dir(tmp_path)
+    (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html/>")
+    prettynames.write(
+        tmp_path / "pretty_names.json",
+        {
+            "my-tool": {"workload": "Workload Type"},
+            "var_values": {"backend": {"postgres": "PostgreSQL 16"}},
+        },
+    )
+    from abench_speckz import prettynames as pn
+    pretty_map = pn.load(tmp_path / "pretty_names.json")
+    runs = [
+        {
+            "run_id": _RUN_ID,
+            "config_hash": "h1",
+            "vars": {"workload": "read", "backend": "postgres"},
+            "tags": ["bench"],
+            "exit_code": 0,
+            "started_at": "2026-05-14T10:00Z",
+        }
+    ]
+    run_reports = _discover_run_reports(tmp_path)
+    section_html, _ = _runs_section(run_reports, runs, embed=True, pretty_map=pretty_map)
+    assert "PostgreSQL 16" in section_html
+
+
 def test_no_run_reports_mode_skips_section(tmp_path):
     import io
 

@@ -3,7 +3,12 @@
 import json
 from pathlib import Path
 
-from abench_speckz.report._html import escape_for_js_template_literal, safe_id
+from abench_speckz.report._html import (
+    escape_for_js_template_literal,
+    resolve_metric,
+    resolve_var_value,
+    safe_id,
+)
 
 
 def discover_run_reports(results_dir: Path) -> dict[str, list[tuple[str, Path]]]:
@@ -20,11 +25,31 @@ def discover_run_reports(results_dir: Path) -> dict[str, list[tuple[str, Path]]]
     return out
 
 
+def _var_table_html(vars_: dict, pretty_map: dict) -> str:
+    """Render a compact Variable/Value table for a run group heading."""
+    if not vars_:
+        return ""
+    rows = "".join(
+        f"<tr><td>{resolve_metric(pretty_map, k)}</td>"
+        f"<td>{resolve_var_value(pretty_map, k, str(v))}</td></tr>"
+        for k, v in sorted(vars_.items())
+    )
+    table = (
+        f'<div class="var-table-wrap">'
+        f'<table class="var-table">'
+        f"<thead><tr><th>Variable</th><th>Value</th></tr></thead>"
+        f"<tbody>{rows}</tbody>"
+        f"</table></div>"
+    )
+    return f"<details><summary>Variables</summary>{table}</details>\n"
+
+
 def runs_section(
     run_reports: dict[str, list[tuple[str, Path]]],
     runs: list[dict],
     *,
     embed: bool,
+    pretty_map: dict | None = None,
 ) -> tuple[str, str]:
     """Return ``(section_html, script_js)``. Both empty when nothing to show."""
     eligible = [
@@ -46,17 +71,15 @@ def runs_section(
     body_html = ""
     js_data_lines: list[str] = []
 
+    pm = pretty_map or {}
     for group_runs in sorted_groups:
-        vars_ = group_runs[0].get("vars") or {}
-        heading = ", ".join(f"{k}={v}" for k, v in sorted(vars_.items()))
-        body_html += f'<h3 class="run-group-heading">{heading}</h3>\n'
-
         for run in group_runs:
             body_html += _render_run_details(
                 run=run,
                 reports=run_reports.get(run["run_id"]) or [],
                 embed=embed,
                 js_data_lines=js_data_lines,
+                pretty_map=pm,
             )
 
     has_reports = any(r.get("run_id") in run_reports for r in eligible)
@@ -92,6 +115,7 @@ def _render_run_details(
     reports: list[tuple[str, Path]],
     embed: bool,
     js_data_lines: list[str],
+    pretty_map: dict | None = None,
 ) -> str:
     """Render one collapsible block for a single run (with nested per-report blocks)."""
     run_id = run.get("run_id", "")
@@ -99,7 +123,8 @@ def _render_run_details(
     short_id = run_id[:8] if run_id else "?"
     names = [name for name, _ in reports]
 
-    inner_html = _grafana_links_html(run.get("grafana_links") or [])
+    inner_html = _var_table_html(run.get("vars") or {}, pretty_map or {})
+    inner_html += _grafana_links_html(run.get("grafana_links") or [])
     for name, path in reports:
         iframe_id = "rpt-" + run_id.replace("-", "_") + "_" + safe_id(name)
         if embed:
