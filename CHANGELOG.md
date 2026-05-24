@@ -6,9 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-05-24
+
 ### Added
 
 - **Conditional step syntax** — steps in `setup`, `teardown`, `post_run`, `setup_per_sweep`, `teardown_per_sweep`, and `scopes` now accept a `{run, when}` dict form alongside plain strings. The `when` dict is a variable equality filter; steps are silently skipped when any key-value pair does not match the current combo vars. Numeric `when` values are coerced to strings for comparison. Plain-string steps are unchanged.
+- **Auto-axis labels** — bar, line, and scatter plots now automatically derive x/y axis titles from `pretty_names` and `units` in the tool YAML when no explicit `x_title` / `y_title` is set.
+- **Variables table in per-run report blocks** — expanding a run's `<details>` block in the HTML report now shows a collapsible **Variables** table listing all combo key/value pairs, respecting `var_values` display labels. Nested sub-blocks have a left-border accent to indicate hierarchy.
+- **`var_values` labels in `${var}` text interpolation** — `${var}` references in `report_title`, `report_description`, section `title`/`description`, and `text` blocks now expand to the `var_values` display label rather than the raw value.
+- **Setup/teardown/post\_run/command output streamed to log files** — stdout and stderr from these phases are now written to sidecar `.out.log` / `.err.log` files alongside the sweep, making `tail -f` and `abench-speckz tail` output complete.
+- **Interpolated command saved in raw JSON** — `raw/{run_id}.json` now includes the fully-interpolated `command` string, making it easy to reproduce or debug individual runs.
+
+### Fixed
+
+- Fixed embedded flamegraph iframes never loading: the `ontoggle` attribute was double-quoted while `json.dumps` also produces double-quoted strings inside, causing the HTML parser to terminate the attribute early and the `loadRunReport` handler to never fire. Attribute now uses single-quote delimiters.
+- Fixed `grafana_links` not appearing in the report when there are no per-run HTML report files.
+- Fixed `abench-speckz tail` not following monitor log files when started mid-sweep.
+
+### Changed
+
+- **Browse TUI** — runs table is now transposed (runs as columns, metric fields as rows) for easier comparison across reps; panel widths are dynamically rebalanced based on content length.
 
 ## [0.11.0] - 2026-05-23
 
