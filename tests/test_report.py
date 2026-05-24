@@ -1314,6 +1314,17 @@ def test_grafana_links_rendered_in_report(tmp_path):
     assert "Broken" not in section_html
 
 
+def test_grafana_links_appear_in_full_report(tmp_path):
+    import io
+
+    _seed_with_grafana_links(tmp_path)
+    report_path = tmp_path / "report.html"
+    query.stats(tmp_path, group_by=["workload"], report=report_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Per-run links" in html
+    assert "https://grafana.example.com/d/abc" in html
+
+
 def test_grafana_links_with_html_reports_shows_per_run_reports_title(tmp_path):
     from abench_speckz.report import _discover_run_reports, _runs_section
 

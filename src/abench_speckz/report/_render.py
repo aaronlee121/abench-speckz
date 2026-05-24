@@ -358,12 +358,10 @@ def _append_run_reports_section(
     results_dir: Path | None,
     run_reports_mode: str,
 ) -> None:
-    """Add a 'Per-run reports' section if there are run-level HTML reports under raw/."""
+    """Add a 'Per-run reports/links' section if there are run-level HTML reports or grafana_links."""
     if results_dir is None or run_reports_mode == "none":
         return
     run_reports = discover_run_reports(results_dir)
-    if not run_reports:
-        return
     runs = store.read_runs(results_dir)
     rpt_html, rpt_js = runs_section(run_reports, runs, embed=(run_reports_mode == "embedded"))
     if rpt_html:
