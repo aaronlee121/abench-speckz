@@ -103,3 +103,33 @@ def test_from_tool_omits_var_values_when_empty():
     t = ToolSpec(name="mytool", command="x", pretty_names={"rps": "RPS"})
     result = prettynames.from_tool(t)
     assert "var_values" not in result
+
+
+def test_from_tool_includes_units():
+    t = ToolSpec(name="mytool", command="x", pretty_names={"rps": "RPS"}, units={"rps": "req/s"})
+    result = prettynames.from_tool(t)
+    assert result["units"] == {"rps": "req/s"}
+
+
+def test_from_tool_omits_units_when_empty():
+    t = ToolSpec(name="mytool", command="x", pretty_names={"rps": "RPS"})
+    result = prettynames.from_tool(t)
+    assert "units" not in result
+
+
+def test_resolve_unit_found():
+    m = {"units": {"rps": "req/s", "p95_ms": "ms"}}
+    assert prettynames.resolve_unit(m, "rps") == "req/s"
+    assert prettynames.resolve_unit(m, "p95_ms") == "ms"
+
+
+def test_resolve_unit_missing():
+    assert prettynames.resolve_unit({"units": {"rps": "req/s"}}, "unknown") == ""
+    assert prettynames.resolve_unit({}, "rps") == ""
+
+
+def test_merge_units():
+    a = {"units": {"rps": "req/s"}}
+    b = {"units": {"p95_ms": "ms"}}
+    merged = prettynames.merge(a, b)
+    assert merged["units"] == {"rps": "req/s", "p95_ms": "ms"}

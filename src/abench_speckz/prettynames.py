@@ -10,6 +10,8 @@ def from_tool(tool: ToolSpec) -> dict:
     out: dict = {tool.name: dict(tool.pretty_names)}
     if tool.var_values:
         out["var_values"] = {k: dict(v) for k, v in tool.var_values.items()}
+    if tool.units:
+        out["units"] = dict(tool.units)
     return out
 
 
@@ -40,6 +42,14 @@ def write(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
 
 
+def resolve_unit(mapping: dict, key: str) -> str:
+    """Return the unit string for a metric key, or empty string if none."""
+    units = mapping.get("units", {})
+    if isinstance(units, dict):
+        return units.get(key, "")
+    return ""
+
+
 def resolve_var_value(mapping: dict, var: str, value: str) -> str:
     """Return the display label for a combo variable value, or the raw value if no mapping exists."""
     var_values = mapping.get("var_values", {})
@@ -61,7 +71,7 @@ def resolve(mapping: dict, key: str, *, tool: str | None = None) -> str:
         return mapping[tool][key]
     if tool is None:
         for k, v in mapping.items():
-            if k == "vars" or not isinstance(v, dict):
+            if k in ("vars", "var_values", "units") or not isinstance(v, dict):
                 continue
             if key in v:
                 return v[key]

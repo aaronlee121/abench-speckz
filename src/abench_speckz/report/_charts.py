@@ -5,7 +5,14 @@ from typing import Any
 from abench_speckz import interpolate
 from abench_speckz.expr import eval_expr, extract_names, is_expr
 from abench_speckz.model import RunError
-from abench_speckz.report._html import color, resolve_metric, resolve_var_value, try_numeric_sort
+from abench_speckz.report._html import color, resolve_metric, resolve_unit, resolve_var_value, try_numeric_sort
+
+
+def _axis_label(pretty_map: dict, key: str) -> str:
+    """Return pretty name with unit suffix when a unit is defined."""
+    name = resolve_metric(pretty_map, key)
+    unit = resolve_unit(pretty_map, key)
+    return f"{name} ({unit})" if unit else name
 
 
 def _apply_series_label(template: str, mapped_vals: dict[str, str]) -> str:
@@ -143,10 +150,11 @@ def build_bar_or_line_config(
                 b_ds["borderDash"] = [5, 5]
             datasets.append(b_ds)
 
-    x_scale: dict[str, Any] = {"title": {"display": True, "text": plot.x_title if plot.x_title else plot.x}}
+    x_scale: dict[str, Any] = {"title": {"display": True, "text": plot.x_title if plot.x_title else _axis_label(pretty_map, plot.x)}}
     y_scale: dict[str, Any] = {"beginAtZero": True}
-    if plot.y_title:
-        y_scale["title"] = {"display": True, "text": plot.y_title}
+    y_title_text = plot.y_title or (_axis_label(pretty_map, plot.y[0]) if len(plot.y) == 1 else None)
+    if y_title_text:
+        y_scale["title"] = {"display": True, "text": y_title_text}
     if stacked:
         x_scale["stacked"] = True
         y_scale["stacked"] = True
@@ -273,8 +281,8 @@ def build_scatter_config(
         )
         series_meta.append({"metric": y_metric, "vals": vals, "color": c})
 
-    x_title_text = plot.x_title if plot.x_title else resolve_metric(pretty_map, plot.x)
-    y_title_text = plot.y_title if plot.y_title else resolve_metric(pretty_map, y_metric)
+    x_title_text = plot.x_title if plot.x_title else _axis_label(pretty_map, plot.x)
+    y_title_text = plot.y_title if plot.y_title else _axis_label(pretty_map, y_metric)
     config = {
         "type": "scatter",
         "data": {"datasets": datasets},

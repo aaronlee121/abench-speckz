@@ -465,6 +465,10 @@ def resolve_metric(pretty_map: dict, metric: str) -> str:
     return prettynames.resolve(pretty_map, metric)
 
 
+def resolve_unit(pretty_map: dict, key: str) -> str:
+    return prettynames.resolve_unit(pretty_map, key)
+
+
 def resolve_var_value(pretty_map: dict, var: str, value: str) -> str:
     return prettynames.resolve_var_value(pretty_map, var, value)
 
