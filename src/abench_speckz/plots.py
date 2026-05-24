@@ -97,6 +97,59 @@ class PlotsDoc:
     theme: ThemeConfig = field(default_factory=ThemeConfig)
 
 
+def _req_str(item: dict, key: str, *, ctx: str) -> str:
+    """Read a required, non-empty string field (``"X is required (string)"``)."""
+    raw = item.get(key)
+    if not isinstance(raw, str) or not raw:
+        raise RunError(f"{ctx}: {key} is required (string)")
+    return raw
+
+
+def _req_nonempty_str(item: dict, key: str, *, ctx: str, label: str | None = None) -> str:
+    """Required non-empty string with ``"X must be a non-empty string"`` wording.
+
+    ``label`` overrides the displayed key (e.g. ``"headline.metric"`` instead
+    of plain ``"metric"``) when the error needs a dotted prefix.
+    """
+    raw = item.get(key)
+    if not isinstance(raw, str) or not raw:
+        raise RunError(f"{ctx}: {label or key} must be a non-empty string")
+    return raw
+
+
+def _opt_str(item: dict, key: str, *, ctx: str) -> str | None:
+    """Read an optional string field; ``None`` when absent or empty."""
+    raw = item.get(key)
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise RunError(f"{ctx}: {key} must be a string")
+    return raw or None
+
+
+def _opt_bool(item: dict, key: str, default: bool, *, ctx: str) -> bool:
+    """Read an optional boolean field with a default."""
+    raw = item.get(key, default)
+    if not isinstance(raw, bool):
+        raise RunError(f"{ctx}: {key} must be a boolean")
+    return raw
+
+
+def _enum(item: dict, key: str, allowed: set, *, ctx: str, default: Any = ...) -> Any:
+    """Read a field whose value must be in ``allowed``."""
+    raw = item.get(key, default) if default is not ... else item.get(key)
+    if raw not in allowed:
+        raise RunError(f"{ctx}: {key} must be one of {sorted(allowed)}, got {raw!r}")
+    return raw
+
+
+def _check_unknown(item: dict, known: set, *, ctx: str) -> None:
+    """Raise when ``item`` carries any keys outside ``known``."""
+    unknown = set(item) - known
+    if unknown:
+        raise RunError(f"{ctx}: unknown fields {sorted(unknown)}")
+
+
 def parse_theme(raw: Any, source: str) -> ThemeConfig:
     if raw is None:
         return ThemeConfig()
@@ -123,6 +176,12 @@ def parse_theme(raw: Any, source: str) -> ThemeConfig:
     return ThemeConfig(palette=palette, dark_mode=dark_mode, switcher=switcher)
 
 
+_PLOT_FIELDS = {
+    "id", "type", "x", "y", "title", "group_by", "smooth", "fixed_vars",
+    "series_label", "data_table", "x_title", "y_title", "normalize", "error_bars",
+}
+
+
 def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
     if raw is None:
         return []
@@ -135,154 +194,26 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
         if not isinstance(item, dict):
             raise RunError(f"{source}: plots[{i}] must be a mapping")
 
-        plot_id = item.get("id")
-        if not isinstance(plot_id, str) or not plot_id:
-            raise RunError(f"{source}: plots[{i}].id is required (string)")
+        plot_id = _req_str(item, "id", ctx=f"{source}: plots[{i}]")
         if plot_id in seen_ids:
             raise RunError(f"{source}: duplicate plot id {plot_id!r}")
         seen_ids.add(plot_id)
 
-        ptype = item.get("type")
-        if ptype not in ALLOWED_TYPES:
-            raise RunError(
-                f"{source}: plot {plot_id!r}: type must be one of {sorted(ALLOWED_TYPES)}, got {ptype!r}"
-            )
-
-        x = item.get("x")
-        if not isinstance(x, str) or not x:
-            raise RunError(f"{source}: plot {plot_id!r}: x is required (string)")
+        ctx = f"{source}: plot {plot_id!r}"
+        ptype = _enum(item, "type", ALLOWED_TYPES, ctx=ctx)
+        x = _req_str(item, "x", ctx=ctx)
         if not x.strip().isidentifier():
-            validate_expr_syntax(x, f"{source}: plot {plot_id!r}: x")
+            validate_expr_syntax(x, f"{ctx}: x")
+        y = _parse_y_field(item, ctx=ctx, plot_type=ptype)
+        group_by = _parse_group_by_field(item, ctx=ctx)
 
-        y_raw = item.get("y")
-        if y_raw is None:
-            raise RunError(f"{source}: plot {plot_id!r}: y is required")
-        if isinstance(y_raw, str):
-            y = [y_raw]
-        elif isinstance(y_raw, list) and all(isinstance(m, str) and m for m in y_raw):
-            y = list(y_raw)
-        else:
-            raise RunError(f"{source}: plot {plot_id!r}: y must be a string or list of strings")
-        if not y:
-            raise RunError(f"{source}: plot {plot_id!r}: y must not be empty")
-        for j, yi in enumerate(y):
-            if not yi.strip().isidentifier():
-                validate_expr_syntax(yi, f"{source}: plot {plot_id!r}: y[{j}]")
+        smooth = _opt_bool(item, "smooth", False, ctx=ctx)
+        if smooth and ptype != "line":
+            raise RunError(f"{ctx}: smooth is only valid for line plots")
+        normalize = _parse_normalize_field(item, ctx=ctx, plot_type=ptype)
+        error_bars = _parse_error_bars_field(item, ctx=ctx, plot_type=ptype)
 
-        if ptype == "scatter" and len(y) != 1:
-            raise RunError(f"{source}: plot {plot_id!r}: scatter requires exactly one y metric")
-        if ptype == "stacked-bar" and len(y) < 2:
-            raise RunError(f"{source}: plot {plot_id!r}: stacked-bar requires at least two y metrics")
-
-        title = item.get("title")
-        if title is not None and not isinstance(title, str):
-            raise RunError(f"{source}: plot {plot_id!r}: title must be a string")
-
-        group_by_raw = item.get("group_by")
-        if group_by_raw is None:
-            group_by = None
-        else:
-            if isinstance(group_by_raw, str):
-                entries = [group_by_raw]
-            elif isinstance(group_by_raw, list):
-                entries = group_by_raw
-            else:
-                raise RunError(f"{source}: plot {plot_id!r}: group_by must be a string or list of strings")
-            if not entries:
-                raise RunError(f"{source}: plot {plot_id!r}: group_by list must not be empty")
-            for j, k in enumerate(entries):
-                if not isinstance(k, str) or not k:
-                    raise RunError(f"{source}: plot {plot_id!r}: group_by[{j}] must be a non-empty string")
-                if k.startswith("!") and not k[1:]:
-                    raise RunError(
-                        f"{source}: plot {plot_id!r}: group_by[{j}] '!' must be followed by a variable name"
-                    )
-            group_by = list(entries)
-
-        smooth_raw = item.get("smooth", False)
-        if not isinstance(smooth_raw, bool):
-            raise RunError(f"{source}: plot {plot_id!r}: smooth must be a boolean")
-        if smooth_raw and ptype != "line":
-            raise RunError(f"{source}: plot {plot_id!r}: smooth is only valid for line plots")
-        smooth = smooth_raw
-
-        fixed_vars_raw = item.get("fixed_vars", True)
-        if not isinstance(fixed_vars_raw, bool):
-            raise RunError(f"{source}: plot {plot_id!r}: fixed_vars must be a boolean")
-        fixed_vars = fixed_vars_raw
-
-        series_label_raw = item.get("series_label")
-        if series_label_raw is not None and not isinstance(series_label_raw, str):
-            raise RunError(f"{source}: plot {plot_id!r}: series_label must be a string")
-        series_label = series_label_raw or None
-
-        data_table_raw = item.get("data_table", True)
-        if not isinstance(data_table_raw, bool):
-            raise RunError(f"{source}: plot {plot_id!r}: data_table must be a boolean")
-        data_table = data_table_raw
-
-        x_title_raw = item.get("x_title")
-        if x_title_raw is not None and not isinstance(x_title_raw, str):
-            raise RunError(f"{source}: plot {plot_id!r}: x_title must be a string")
-        x_title = x_title_raw or None
-
-        y_title_raw = item.get("y_title")
-        if y_title_raw is not None and not isinstance(y_title_raw, str):
-            raise RunError(f"{source}: plot {plot_id!r}: y_title must be a string")
-        y_title = y_title_raw or None
-
-        normalize_raw = item.get("normalize")
-        if normalize_raw is None:
-            normalize: NormalizeSpec | None = None
-        else:
-            if ptype in ("scatter", "stacked-bar"):
-                raise RunError(f"{source}: plot {plot_id!r}: normalize is not allowed on {ptype!r} plots")
-            if not isinstance(normalize_raw, dict):
-                raise RunError(f"{source}: plot {plot_id!r}: normalize must be a mapping")
-            against = normalize_raw.get("against")
-            reference = normalize_raw.get("reference")
-            if not isinstance(against, str) or not against:
-                raise RunError(f"{source}: plot {plot_id!r}: normalize.against must be a non-empty string")
-            if reference is None or str(reference) == "":
-                raise RunError(f"{source}: plot {plot_id!r}: normalize.reference must be a non-empty value")
-            unknown_norm = set(normalize_raw) - {"against", "reference"}
-            if unknown_norm:
-                raise RunError(
-                    f"{source}: plot {plot_id!r}: normalize: unknown fields {sorted(unknown_norm)}"
-                )
-            normalize = NormalizeSpec(against=str(against), reference=str(reference))
-
-        error_bars_raw = item.get("error_bars")
-        if error_bars_raw is None:
-            error_bars: str | None = None
-        else:
-            if not isinstance(error_bars_raw, str) or error_bars_raw not in _ALLOWED_ERROR_BARS:
-                raise RunError(
-                    f"{source}: plot {plot_id!r}: error_bars must be one of "
-                    f"{sorted(_ALLOWED_ERROR_BARS)}, got {error_bars_raw!r}"
-                )
-            if ptype in ("scatter", "stacked-bar"):
-                raise RunError(f"{source}: plot {plot_id!r}: error_bars is not allowed on {ptype!r} plots")
-            error_bars = error_bars_raw
-
-        unknown = set(item) - {
-            "id",
-            "type",
-            "x",
-            "y",
-            "title",
-            "group_by",
-            "smooth",
-            "fixed_vars",
-            "series_label",
-            "data_table",
-            "x_title",
-            "y_title",
-            "normalize",
-            "error_bars",
-        }
-        if unknown:
-            raise RunError(f"{source}: plot {plot_id!r}: unknown fields {sorted(unknown)}")
+        _check_unknown(item, _PLOT_FIELDS, ctx=ctx)
 
         out.append(
             PlotSpec(
@@ -290,19 +221,92 @@ def parse_plots(raw: Any, source: str) -> list[PlotSpec]:
                 type=ptype,
                 x=x,
                 y=y,
-                title=title,
+                title=_opt_str(item, "title", ctx=ctx),
                 group_by=group_by,
                 smooth=smooth,
-                fixed_vars=fixed_vars,
-                series_label=series_label,
-                data_table=data_table,
-                x_title=x_title,
-                y_title=y_title,
+                fixed_vars=_opt_bool(item, "fixed_vars", True, ctx=ctx),
+                series_label=_opt_str(item, "series_label", ctx=ctx),
+                data_table=_opt_bool(item, "data_table", True, ctx=ctx),
+                x_title=_opt_str(item, "x_title", ctx=ctx),
+                y_title=_opt_str(item, "y_title", ctx=ctx),
                 normalize=normalize,
                 error_bars=error_bars,
             )
         )
     return out
+
+
+def _parse_y_field(item: dict, *, ctx: str, plot_type: str) -> list[str]:
+    y_raw = item.get("y")
+    if y_raw is None:
+        raise RunError(f"{ctx}: y is required")
+    if isinstance(y_raw, str):
+        y = [y_raw]
+    elif isinstance(y_raw, list) and all(isinstance(m, str) and m for m in y_raw):
+        y = list(y_raw)
+    else:
+        raise RunError(f"{ctx}: y must be a string or list of strings")
+    if not y:
+        raise RunError(f"{ctx}: y must not be empty")
+    for j, yi in enumerate(y):
+        if not yi.strip().isidentifier():
+            validate_expr_syntax(yi, f"{ctx}: y[{j}]")
+    if plot_type == "scatter" and len(y) != 1:
+        raise RunError(f"{ctx}: scatter requires exactly one y metric")
+    if plot_type == "stacked-bar" and len(y) < 2:
+        raise RunError(f"{ctx}: stacked-bar requires at least two y metrics")
+    return y
+
+
+def _parse_group_by_field(item: dict, *, ctx: str) -> list[str] | None:
+    raw = item.get("group_by")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        entries = [raw]
+    elif isinstance(raw, list):
+        entries = raw
+    else:
+        raise RunError(f"{ctx}: group_by must be a string or list of strings")
+    if not entries:
+        raise RunError(f"{ctx}: group_by list must not be empty")
+    for j, k in enumerate(entries):
+        if not isinstance(k, str) or not k:
+            raise RunError(f"{ctx}: group_by[{j}] must be a non-empty string")
+        if k.startswith("!") and not k[1:]:
+            raise RunError(f"{ctx}: group_by[{j}] '!' must be followed by a variable name")
+    return list(entries)
+
+
+def _parse_normalize_field(item: dict, *, ctx: str, plot_type: str) -> NormalizeSpec | None:
+    raw = item.get("normalize")
+    if raw is None:
+        return None
+    if plot_type in ("scatter", "stacked-bar"):
+        raise RunError(f"{ctx}: normalize is not allowed on {plot_type!r} plots")
+    if not isinstance(raw, dict):
+        raise RunError(f"{ctx}: normalize must be a mapping")
+    against = raw.get("against")
+    reference = raw.get("reference")
+    if not isinstance(against, str) or not against:
+        raise RunError(f"{ctx}: normalize.against must be a non-empty string")
+    if reference is None or str(reference) == "":
+        raise RunError(f"{ctx}: normalize.reference must be a non-empty value")
+    _check_unknown(raw, {"against", "reference"}, ctx=f"{ctx}: normalize")
+    return NormalizeSpec(against=str(against), reference=str(reference))
+
+
+def _parse_error_bars_field(item: dict, *, ctx: str, plot_type: str) -> str | None:
+    raw = item.get("error_bars")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or raw not in _ALLOWED_ERROR_BARS:
+        raise RunError(
+            f"{ctx}: error_bars must be one of {sorted(_ALLOWED_ERROR_BARS)}, got {raw!r}"
+        )
+    if plot_type in ("scatter", "stacked-bar"):
+        raise RunError(f"{ctx}: error_bars is not allowed on {plot_type!r} plots")
+    return raw
 
 
 def parse_sections(
@@ -360,76 +364,61 @@ def _where_dict_to_list(raw: Any, *, source: str, ctx: str) -> list[str]:
 
 def _parse_kpi_card(item: Any, index: int, *, source: str, ctx: str) -> KpiCard:
     loc = f"{ctx} kpi[{index}]"
+    full_ctx = f"{source}: {loc}"
     if not isinstance(item, dict):
-        raise RunError(f"{source}: {loc} must be a mapping")
-
-    label = item.get("label")
-    if not isinstance(label, str) or not label:
-        raise RunError(f"{source}: {loc}: label must be a non-empty string")
-
-    metric = item.get("metric")
-    if not isinstance(metric, str) or not metric:
-        raise RunError(f"{source}: {loc}: metric must be a non-empty string")
-
-    stat = item.get("stat", "mean")
-    if stat not in _KPI_STATS:
-        raise RunError(f"{source}: {loc}: stat must be one of {sorted(_KPI_STATS)}, got {stat!r}")
-
-    where = _where_dict_to_list(item.get("where"), source=source, ctx=loc)
-
-    unit = item.get("unit", "")
-    if not isinstance(unit, str):
-        raise RunError(f"{source}: {loc}: unit must be a string")
+        raise RunError(f"{full_ctx} must be a mapping")
 
     precision_raw = item.get("precision", 2)
     if not isinstance(precision_raw, int) or isinstance(precision_raw, bool) or precision_raw < 0:
-        raise RunError(f"{source}: {loc}: precision must be a non-negative integer")
-    precision = precision_raw
+        raise RunError(f"{full_ctx}: precision must be a non-negative integer")
 
     compare_raw = item.get("compare")
     if compare_raw is None:
         compare = None
     else:
         if not isinstance(compare_raw, dict):
-            raise RunError(f"{source}: {loc}: compare must be a mapping")
+            raise RunError(f"{full_ctx}: compare must be a mapping")
         cmp_where = _where_dict_to_list(compare_raw.get("where"), source=source, ctx=f"{loc} compare")
-        unknown_cmp = set(compare_raw) - {"where"}
-        if unknown_cmp:
-            raise RunError(f"{source}: {loc}: compare: unknown fields {sorted(unknown_cmp)}")
+        _check_unknown(compare_raw, {"where"}, ctx=f"{full_ctx}: compare")
         compare = KpiCompare(where=cmp_where)
 
-    unknown = set(item) - {"label", "metric", "stat", "where", "unit", "precision", "compare"}
-    if unknown:
-        raise RunError(f"{source}: {loc}: unknown fields {sorted(unknown)}")
+    _check_unknown(
+        item, {"label", "metric", "stat", "where", "unit", "precision", "compare"}, ctx=full_ctx,
+    )
 
     return KpiCard(
-        label=label, metric=metric, stat=stat, where=where, unit=unit, precision=precision, compare=compare
+        label=_req_nonempty_str(item, "label", ctx=full_ctx),
+        metric=_req_nonempty_str(item, "metric", ctx=full_ctx),
+        stat=_enum(item, "stat", _KPI_STATS, ctx=full_ctx, default="mean"),
+        where=_where_dict_to_list(item.get("where"), source=source, ctx=loc),
+        unit=_opt_str(item, "unit", ctx=full_ctx) or "",
+        precision=precision_raw,
+        compare=compare,
     )
 
 
 def _parse_headline(item: Any, *, source: str, ctx: str) -> HeadlineDef:
+    full_ctx = f"{source}: {ctx}"
     if not isinstance(item, dict):
-        raise RunError(f"{source}: {ctx}: headline must be a mapping")
+        raise RunError(f"{full_ctx}: headline must be a mapping")
 
-    metric = item.get("metric")
-    if not isinstance(metric, str) or not metric:
-        raise RunError(f"{source}: {ctx}: headline.metric must be a non-empty string")
-
+    metric = _req_nonempty_str(item, "metric", ctx=full_ctx, label="headline.metric")
     compare = item.get("compare")
     if not isinstance(compare, str) or not compare:
-        raise RunError(f"{source}: {ctx}: headline.compare must be a non-empty string (variable name)")
+        raise RunError(f"{full_ctx}: headline.compare must be a non-empty string (variable name)")
 
     template = item.get("template", "{best} is {ratio} ahead of {worst}")
     if not isinstance(template, str):
-        raise RunError(f"{source}: {ctx}: headline.template must be a string")
+        raise RunError(f"{full_ctx}: headline.template must be a string")
 
-    where = _where_dict_to_list(item.get("where"), source=source, ctx=ctx)
+    _check_unknown(item, {"metric", "compare", "template", "where"}, ctx=f"{full_ctx}: headline")
 
-    unknown = set(item) - {"metric", "compare", "template", "where"}
-    if unknown:
-        raise RunError(f"{source}: {ctx}: headline: unknown fields {sorted(unknown)}")
-
-    return HeadlineDef(metric=metric, compare=compare, template=template, where=where)
+    return HeadlineDef(
+        metric=metric,
+        compare=compare,
+        template=template,
+        where=_where_dict_to_list(item.get("where"), source=source, ctx=ctx),
+    )
 
 
 def _parse_block(
