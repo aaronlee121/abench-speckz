@@ -330,25 +330,21 @@ def parse_sections(
         if not isinstance(title, str) or not title:
             raise RunError(f"{source}: sections[{i}].title is required (string)")
 
-        description = item.get("description")
-        if description is not None and not isinstance(description, str):
-            raise RunError(f"{source}: section {title!r}: description must be a string")
+        ctx = f"{source}: section {title!r}"
+        description = _opt_str(item, "description", ctx=ctx)
 
         blocks_raw = item.get("blocks")
         if blocks_raw is None:
             blocks: list[Block] = []
         elif not isinstance(blocks_raw, list):
-            raise RunError(f"{source}: section {title!r}: blocks must be a list")
+            raise RunError(f"{ctx}: blocks must be a list")
         else:
             blocks = [
                 _parse_block(b, j, source=source, section_title=title, plot_ids=plot_ids, base_dir=base_dir)
                 for j, b in enumerate(blocks_raw)
             ]
 
-        unknown = set(item) - {"title", "description", "blocks"}
-        if unknown:
-            raise RunError(f"{source}: section {title!r}: unknown fields {sorted(unknown)}")
-
+        _check_unknown(item, {"title", "description", "blocks"}, ctx=ctx)
         out.append(Section(title=title, description=description, blocks=blocks))
     return out
 
