@@ -376,13 +376,9 @@ def _run_groups(
             )
         _group_run_id = phase_vars["_run_id"]
         _log_dir = results_dir / "logs"
-        sweep_setup_failure, sweep_setup_records = (
-            run_phase(
-                "per_sweep_setup", tool.setup_per_sweep, phase_vars, base_env, tool.setup_timeout_seconds,
-                log_dir=_log_dir, log_prefix=f"sweep_setup--{_group_run_id}",
-            )
-            if tool.setup_per_sweep
-            else (None, [])
+        sweep_setup_failure, sweep_setup_records = _run_setup_phase(
+            tool.setup_per_sweep, phase_vars, base_env, tool.setup_timeout_seconds,
+            log_dir=_log_dir, log_prefix=f"sweep_setup--{_group_run_id}",
         )
 
         sweep_teardown_failure: str | None = None
@@ -661,6 +657,24 @@ def _per_group_monitors(
         handle.stop_now()
 
 
+def _run_setup_phase(
+    steps: list[str],
+    phase_vars: dict[str, Any],
+    base_env: dict[str, str],
+    timeout: int,
+    *,
+    log_dir: Path,
+    log_prefix: str,
+) -> tuple[str | None, list[dict[str, Any]]]:
+    """Run a per_sweep_setup phase, short-circuiting when there are no steps."""
+    if not steps:
+        return None, []
+    return run_phase(
+        "per_sweep_setup", steps, phase_vars, base_env, timeout,
+        log_dir=log_dir, log_prefix=log_prefix,
+    )
+
+
 def _run_teardown_phase(
     steps: list[str],
     phase_vars: dict[str, Any],
@@ -758,13 +772,9 @@ def _run_nested_groups(
             )
         _scope_run_id = phase_vars.get("_run_id", "group")
         _scope_log_dir = results_dir / "logs"
-        setup_failure, setup_records = (
-            run_phase(
-                "per_sweep_setup", scope.setup, phase_vars, base_env, tool.setup_timeout_seconds,
-                log_dir=_scope_log_dir, log_prefix=f"scope{scope_idx}_setup--{_scope_run_id}",
-            )
-            if scope.setup
-            else (None, [])
+        setup_failure, setup_records = _run_setup_phase(
+            scope.setup, phase_vars, base_env, tool.setup_timeout_seconds,
+            log_dir=_scope_log_dir, log_prefix=f"scope{scope_idx}_setup--{_scope_run_id}",
         )
         teardown_failure: str | None = None
         teardown_records: list = []
