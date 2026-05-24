@@ -242,12 +242,8 @@ def execute_sweep(
         progress = SweepProgress(total=total, stream=progress_stream)
         try:
             if resolved_scopes:
-                per_group_cmds = [m.command for m in tool.monitor if m.span == "per_group"]
-                _run_nested_groups(
-                    entries=selected,
+                ctx = _NestedSweepContext(
                     scopes=resolved_scopes,
-                    scope_idx=0,
-                    inherited_phase_vars={},
                     tool=tool,
                     tool_version=tool_version,
                     manifest_dir=manifest_dir,
@@ -260,7 +256,10 @@ def execute_sweep(
                     base_env=dict(os.environ),
                     probed_hashes=set(),
                     combo_probe_cache={},
-                    per_group_cmds=per_group_cmds,
+                    per_group_cmds=[m.command for m in tool.monitor if m.span == "per_group"],
+                )
+                _run_nested_groups(
+                    ctx, entries=selected, scope_idx=0, inherited_phase_vars={},
                 )
             else:
                 entry_groups: list[tuple[tuple[str, ...] | None, list[dict[str, Any]]]] = group_entries(
@@ -704,15 +703,37 @@ def _scope_slug(scope_idx: int, group_key: tuple[str, ...] | None) -> str:
     return f"scope{scope_idx}-{gs}" if gs else f"scope{scope_idx}"
 
 
+@dataclass
+class _NestedSweepContext:
+    """Loop-invariant state shared across every level of ``_run_nested_groups``.
+
+    Replaces what would otherwise be 14 pass-through kwargs threaded
+    identically through every recursive call.
+    """
+
+    scopes: list[ResolvedScope]
+    tool: ToolSpec
+    tool_version: str | None
+    manifest_dir: Path
+    results_dir: Path
+    executor: Executor
+    keep_raw: bool
+    skip_counts: Counter
+    scheduler_factory: SchedulerFactory
+    progress: SweepProgress
+    base_env: dict[str, str]
+    probed_hashes: set[str]
+    combo_probe_cache: dict[str, dict[str, Any]]
+    per_group_cmds: list[str]
+
+
 def _finish_outer_scope_group(
+    ctx: _NestedSweepContext,
     *,
     scope: ResolvedScope,
     scope_idx: int,
     group_key: tuple[str, ...] | None,
     phase_vars: dict[str, Any],
-    base_env: dict[str, str],
-    tool: ToolSpec,
-    results_dir: Path,
     setup_records: list[dict[str, Any]],
     scope_log_dir: Path,
     force: bool,
@@ -725,11 +746,11 @@ def _finish_outer_scope_group(
     """
     scope_run_id = phase_vars["_run_id"]
     teardown_failure, teardown_records = _run_teardown_phase(
-        scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds,
+        scope.teardown, phase_vars, ctx.base_env, ctx.tool.setup_timeout_seconds,
         log_dir=scope_log_dir, log_prefix=f"scope{scope_idx}_teardown--{scope_run_id}",
     )
     _maybe_write_sweep_raw(
-        results_dir,
+        ctx.results_dir,
         _scope_slug(scope_idx, group_key),
         setup_records,
         teardown_records,
@@ -747,24 +768,11 @@ def _format_group_label(
 
 
 def _run_nested_groups(
+    ctx: _NestedSweepContext,
     *,
     entries: list[dict[str, Any]],
-    scopes: list[ResolvedScope],
     scope_idx: int,
     inherited_phase_vars: dict,
-    tool: ToolSpec,
-    tool_version: str | None,
-    manifest_dir: Any,
-    results_dir: Any,
-    executor: Any,
-    keep_raw: bool,
-    skip_counts: Counter,
-    scheduler_factory: SchedulerFactory,
-    progress: SweepProgress,
-    base_env: dict,
-    probed_hashes: set,
-    combo_probe_cache: dict,
-    per_group_cmds: list[str],
 ) -> None:
     """Recursively execute nested scope levels.
 
@@ -776,42 +784,42 @@ def _run_nested_groups(
     ``failure_reason`` (same contract as the flat path). Teardown failures at
     outer scopes are written to a raw file keyed by scope index and group slug.
     """
-    scope = scopes[scope_idx]
-    is_innermost = scope_idx == len(scopes) - 1
-    scope_log_dir = results_dir / "logs"
+    scope = ctx.scopes[scope_idx]
+    is_innermost = scope_idx == len(ctx.scopes) - 1
+    scope_log_dir = ctx.results_dir / "logs"
 
     for group_key, group_entries_list in group_entries(entries, scope.vars):
         assert group_key is not None
-        first_env_file = manifest_dir / group_entries_list[0]["filename"]
+        first_env_file = ctx.manifest_dir / group_entries_list[0]["filename"]
         phase_vars: dict = {
             **inherited_phase_vars,
             **dict(zip(scope.vars, group_key, strict=True)),
             "_run_id": str(uuid.uuid4()),
             "_envfile": str(first_env_file.resolve()),
-            "_results_dir": str(results_dir.resolve()),
+            "_results_dir": str(ctx.results_dir.resolve()),
         }
 
         # Build a scheduler even at outer scopes — needed for runnable_entries()
         # and per-entry planned-rep counts on the skip / setup-failure paths.
-        scheduler = scheduler_factory(group_entries_list, dict(skip_counts))
+        scheduler = ctx.scheduler_factory(group_entries_list, dict(ctx.skip_counts))
         if not scheduler.runnable_entries():
             for entry in group_entries_list:
                 ch = config_hash(entry["vars"])
                 n_total = scheduler.planned_warmup_for(entry) + scheduler.planned_measured_for(entry)
                 for _ in range(n_total):
-                    progress.record_skip(ch)
+                    ctx.progress.record_skip(ch)
             continue
 
         if scope.setup:
             _label = _format_group_label(scope.vars, group_key)
             print(
                 f"scope{scope_idx} setup [{_label}] ({len(scope.setup)} step(s))...",
-                file=progress.stream,
+                file=ctx.progress.stream,
                 flush=True,
             )
         scope_run_id = phase_vars["_run_id"]
         setup_failure, setup_records = _run_setup_phase(
-            scope.setup, phase_vars, base_env, tool.setup_timeout_seconds,
+            scope.setup, phase_vars, ctx.base_env, ctx.tool.setup_timeout_seconds,
             log_dir=scope_log_dir, log_prefix=f"scope{scope_idx}_setup--{scope_run_id}",
         )
 
@@ -819,73 +827,58 @@ def _run_nested_groups(
             _record_setup_failures(
                 entries=group_entries_list,
                 scheduler=scheduler,
-                results_dir=results_dir,
-                tool=tool,
-                tool_version=tool_version,
+                results_dir=ctx.results_dir,
+                tool=ctx.tool,
+                tool_version=ctx.tool_version,
                 failure=setup_failure,
-                progress=progress,
+                progress=ctx.progress,
             )
             _finish_outer_scope_group(
-                scope=scope, scope_idx=scope_idx, group_key=group_key,
-                phase_vars=phase_vars, base_env=base_env, tool=tool,
-                results_dir=results_dir, setup_records=setup_records,
+                ctx, scope=scope, scope_idx=scope_idx, group_key=group_key,
+                phase_vars=phase_vars, setup_records=setup_records,
                 scope_log_dir=scope_log_dir, force=True,
             )
 
         elif is_innermost:
             teardown_failure, teardown_records, monitor_records = _drive_scheduler_loop(
                 scheduler=scheduler,
-                results_dir=results_dir,
-                tool=tool,
-                tool_version=tool_version,
-                manifest_dir=manifest_dir,
-                executor=executor,
-                keep_raw=keep_raw,
+                results_dir=ctx.results_dir,
+                tool=ctx.tool,
+                tool_version=ctx.tool_version,
+                manifest_dir=ctx.manifest_dir,
+                executor=ctx.executor,
+                keep_raw=ctx.keep_raw,
                 phase_vars=phase_vars,
-                base_env=base_env,
+                base_env=ctx.base_env,
                 teardown_steps=scope.teardown,
-                per_group_cmds=per_group_cmds,
+                per_group_cmds=ctx.per_group_cmds,
                 group_log_prefix=f"monitor-group-{scope_run_id[:8]}",
-                probed_hashes=probed_hashes,
-                combo_probe_cache=combo_probe_cache,
-                progress=progress,
-                seed_rows=store.read_runs(results_dir),
+                probed_hashes=ctx.probed_hashes,
+                combo_probe_cache=ctx.combo_probe_cache,
+                progress=ctx.progress,
+                seed_rows=store.read_runs(ctx.results_dir),
             )
             _maybe_write_sweep_raw(
-                results_dir,
+                ctx.results_dir,
                 _group_slug(group_key),
                 setup_records,
                 teardown_records,
-                force=bool(teardown_failure or keep_raw),
+                force=bool(teardown_failure or ctx.keep_raw),
                 monitor_start=monitor_records.get("start"),
                 monitor_stop=monitor_records.get("stop"),
             )
 
         else:
             _run_nested_groups(
+                ctx,
                 entries=group_entries_list,
-                scopes=scopes,
                 scope_idx=scope_idx + 1,
                 inherited_phase_vars=phase_vars,
-                tool=tool,
-                tool_version=tool_version,
-                manifest_dir=manifest_dir,
-                results_dir=results_dir,
-                executor=executor,
-                keep_raw=keep_raw,
-                skip_counts=skip_counts,
-                scheduler_factory=scheduler_factory,
-                progress=progress,
-                base_env=base_env,
-                probed_hashes=probed_hashes,
-                combo_probe_cache=combo_probe_cache,
-                per_group_cmds=per_group_cmds,
             )
             _finish_outer_scope_group(
-                scope=scope, scope_idx=scope_idx, group_key=group_key,
-                phase_vars=phase_vars, base_env=base_env, tool=tool,
-                results_dir=results_dir, setup_records=setup_records,
-                scope_log_dir=scope_log_dir, force=bool(keep_raw),
+                ctx, scope=scope, scope_idx=scope_idx, group_key=group_key,
+                phase_vars=phase_vars, setup_records=setup_records,
+                scope_log_dir=scope_log_dir, force=bool(ctx.keep_raw),
             )
 
 
