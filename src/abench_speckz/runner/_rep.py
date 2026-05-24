@@ -9,6 +9,7 @@ from typing import Any
 
 from abench_speckz import extract, interpolate, store
 from abench_speckz.executor import Executor
+from abench_speckz.model import SpecError
 from abench_speckz.runner._manifest import load_envfile
 from abench_speckz.runner._monitors import run_monitors, stop_monitors
 from abench_speckz.runner._phases import run_phase
@@ -50,7 +51,7 @@ def execute_one_rep(
 
     try:
         cmd = interpolate.resolve_string(tool.command, combo_vars, env=os.environ)
-    except Exception as e:
+    except SpecError as e:
         return make_row(
             run_id=run_id,
             entry=entry,
@@ -240,7 +241,12 @@ def make_row(
     failure_reason: str | None,
     probe_results: dict[str, Any],
 ) -> dict[str, Any]:
-    """Build a ``runs.jsonl`` row. ``result`` may be ``None`` when the benchmark didn't run."""
+    """Build a ``runs.jsonl`` row. ``result`` may be ``None`` when the benchmark didn't run.
+
+    When the tool defines ``grafana_links``, each link's URL template is
+    resolved (using combo vars plus the run's timestamps) and the resolved
+    list is attached as ``row["grafana_links"]``.
+    """
     row: dict[str, Any] = {
         "run_id": run_id,
         "config_hash": ch,
@@ -294,7 +300,7 @@ def _resolve_grafana_links(
     for link in tool.grafana_links:
         try:
             url = interpolate.resolve_string(link["url"], link_vars, env=os.environ)
-        except Exception:
+        except SpecError:
             url = None
         resolved.append({"label": link["label"], "url": url})
     return resolved
@@ -354,12 +360,15 @@ def _extract_metrics(
     if tool.output_file:
         try:
             out_path = interpolate.resolve_string(tool.output_file, combo_vars, env=os.environ)
+        except SpecError as e:
+            return {}, f"output_file: interpolation: {e}", None
+        try:
             output_for_extraction = Path(out_path).read_text()
-            output_file_record = {"path": out_path, "content": output_for_extraction}
         except FileNotFoundError:
             return {}, f"output_file: not found: {out_path}", {"path": out_path, "content": None}
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             return {}, f"output_file: {type(e).__name__}: {e}", {"path": out_path, "content": None}
+        output_file_record = {"path": out_path, "content": output_for_extraction}
 
     parsed, extract_failure = extract.apply(tool, output_for_extraction)
     return parsed, extract_failure, output_file_record

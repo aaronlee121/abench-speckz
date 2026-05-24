@@ -132,7 +132,7 @@ def execute_sweep(
     The ``scheduler_factory`` controls how reps are scheduled within each
     per_sweep group (called with that group's entries and a skip-counts dict).
     When omitted, a ``FixedScheduler`` is built from ``repeat``/``warmup``/
-    ``skip_existing`` — preserving the historical pre-flattened plan.
+    ``skip_existing``.
     """
     where = where or []
     require_tags = require_tags or []
@@ -168,8 +168,8 @@ def execute_sweep(
         validate_per_sweep(tool, selected, per_sweep_vars)
 
     if dry_run:
-        # Dry-run preview uses the historical pre-flattened plan — schedulers
-        # only matter at execution time.
+        # Dry-run prints the flat (entry, rep, is_warmup) plan from
+        # plan_sweep; schedulers only kick in during real execution.
         work = plan_sweep(
             manifest_entries,
             repeat,
