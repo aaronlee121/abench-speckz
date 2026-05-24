@@ -167,42 +167,14 @@ def _anti_fouc_js(dark_mode: bool | str, switcher: bool) -> str:
     )
 
 
-def _theme_js(palette: str, dark_mode: bool | str, switcher: bool) -> str:
-    """Return the chart-lifecycle + theme JS block."""
-    themes_json = json.dumps(THEMES)
+# Static JS chunks emitted verbatim by _theme_js. Kept as plain strings (no
+# f-prefix) so JS braces don't need {{/}} escaping — making them easy to copy
+# back and forth with a real .js file if we ever externalize them.
 
-    if dark_mode is True:
-        dark_init = "  var _darkMode = true;"
-    elif dark_mode is False:
-        dark_init = "  var _darkMode = false;"
-    elif switcher:
-        dark_init = (
-            "  var _darkMode = (function() {\n"
-            "    try {\n"
-            "      var v = localStorage.getItem('abench_dark');\n"
-            "      return v === '1' || (v === null && window.matchMedia('(prefers-color-scheme: dark)').matches);\n"
-            "    } catch(e) { return false; }\n"
-            "  })();"
-        )
-    else:
-        dark_init = "  var _darkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;"
-
-    if switcher:
-        theme_init = (
-            "  var _currentTheme = (function() {\n"
-            f"    try {{ return localStorage.getItem('abench_theme') || '{palette}'; }} catch(e) {{ return '{palette}'; }}\n"
-            "  })();"
-        )
-    else:
-        theme_init = f"  var _currentTheme = '{palette}';"
-
-    core = f"""
-  var _THEMES = {themes_json};
-{theme_init}
-{dark_init}
-  var _refLinePlugin = {{
+_CHART_PLUGINS_JS = """
+  var _refLinePlugin = {
     id: 'abenchRefLine',
-    afterDatasetsDraw: function(chart) {{
+    afterDatasetsDraw: function(chart) {
       var yVal = chart.options.plugins && chart.options.plugins.abenchRefLine && chart.options.plugins.abenchRefLine.y;
       if (yVal == null) return;
       var yScale = chart.scales.y;
@@ -219,22 +191,22 @@ def _theme_js(palette: str, dark_mode: bool | str, switcher: bool) -> str:
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.restore();
-    }}
-  }};
+    }
+  };
   Chart.register(_refLinePlugin);
-  var _errorBarPlugin = {{
+  var _errorBarPlugin = {
     id: 'abenchErrorBars',
-    afterDatasetsDraw: function(chart) {{
+    afterDatasetsDraw: function(chart) {
       var ctx = chart.ctx, yScale = chart.scales.y;
       if (!yScale) return;
-      chart.data.datasets.forEach(function(ds, di) {{
+      chart.data.datasets.forEach(function(ds, di) {
         if (!ds._errLow) return;
         var meta = chart.getDatasetMeta(di);
         if (meta.hidden) return;
         ctx.save();
         ctx.strokeStyle = _darkMode ? '#ccc' : '#333';
         ctx.lineWidth = 1.5;
-        meta.data.forEach(function(el, i) {{
+        meta.data.forEach(function(el, i) {
           var lo = ds._errLow[i], hi = ds._errHigh[i];
           if (lo == null || hi == null) return;
           var yLo = yScale.getPixelForValue(lo);
@@ -244,64 +216,65 @@ def _theme_js(palette: str, dark_mode: bool | str, switcher: bool) -> str:
           ctx.moveTo(el.x - 4, yLo); ctx.lineTo(el.x + 4, yLo);
           ctx.moveTo(el.x - 4, yHi); ctx.lineTo(el.x + 4, yHi);
           ctx.stroke();
-        }});
+        });
         ctx.restore();
-      }});
-    }}
-  }};
-  Chart.register(_errorBarPlugin);
+      });
+    }
+  };
+  Chart.register(_errorBarPlugin);"""
+
+
+_CHART_HELPERS_JS = """
   var _charts = [];
-  function _themeColor(idx) {{
+  function _themeColor(idx) {
     var p = _THEMES[_currentTheme] || _THEMES.tableau;
     return p[idx % p.length];
-  }}
-  function _applyChartDefaults() {{
-    if (_darkMode) {{
+  }
+  function _applyChartDefaults() {
+    if (_darkMode) {
       Chart.defaults.color = '#aaa';
       Chart.defaults.borderColor = 'rgba(255,255,255,0.12)';
-    }} else {{
+    } else {
       Chart.defaults.color = '#555';
       Chart.defaults.borderColor = 'rgba(0,0,0,0.1)';
-    }}
-  }}
-  function _hexToRgba(hex, alpha) {{
+    }
+  }
+  function _hexToRgba(hex, alpha) {
     var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
     return 'rgba('+r+','+g+','+b+','+alpha+')';
-  }}
-  function _resolveConfig(config) {{
+  }
+  function _resolveConfig(config) {
     var cfg = JSON.parse(JSON.stringify(config));
-    if (cfg.data && cfg.data.datasets) {{
-      cfg.data.datasets.forEach(function(ds) {{
-        if (typeof ds._colorIdx === 'number') {{
+    if (cfg.data && cfg.data.datasets) {
+      cfg.data.datasets.forEach(function(ds) {
+        if (typeof ds._colorIdx === 'number') {
           var c = _themeColor(ds._colorIdx);
           ds.backgroundColor = c;
           ds.borderColor = c;
           delete ds._colorIdx;
-        }}
-      }});
-      cfg.data.datasets.forEach(function(ds) {{
-        if (typeof ds._baselineOf === 'number') {{
+        }
+      });
+      cfg.data.datasets.forEach(function(ds) {
+        if (typeof ds._baselineOf === 'number') {
           var parent = cfg.data.datasets[ds._baselineOf];
           var c = parent ? (parent.borderColor || parent.backgroundColor || '#888') : '#888';
           ds.borderColor = c;
           ds.backgroundColor = ds.borderDash ? c : _hexToRgba(c, 0.35);
           delete ds._baselineOf;
-        }}
-      }});
-    }}
+        }
+      });
+    }
     return cfg;
-  }}
-  function _createChart(id, config) {{
+  }
+  function _createChart(id, config) {
     _applyChartDefaults();
     var cfg = _resolveConfig(config);
     var chart = new Chart(document.getElementById(id), cfg);
-    _charts.push({{id: id, config: config, chart: chart}});
-  }}"""
+    _charts.push({id: id, config: config, chart: chart});
+  }"""
 
-    if not switcher:
-        return core
 
-    interactive = """
+_INTERACTIVE_JS = """
   function _updateSwatches() {
     document.querySelectorAll('[data-color-idx]').forEach(function(el) {
       el.style.background = _themeColor(parseInt(el.getAttribute('data-color-idx'), 10));
@@ -335,7 +308,56 @@ def _theme_js(palette: str, dark_mode: bool | str, switcher: bool) -> str:
     try { localStorage.setItem('abench_theme', name); } catch(e) {}
     _updateAll();
   }"""
-    return core + interactive
+
+
+def _dark_mode_init_js(dark_mode: bool | str, switcher: bool) -> str:
+    """Emit ``var _darkMode = ...;`` matching the requested mode."""
+    if dark_mode is True:
+        return "  var _darkMode = true;"
+    if dark_mode is False:
+        return "  var _darkMode = false;"
+    # "auto"
+    if switcher:
+        return (
+            "  var _darkMode = (function() {\n"
+            "    try {\n"
+            "      var v = localStorage.getItem('abench_dark');\n"
+            "      return v === '1' || (v === null && window.matchMedia('(prefers-color-scheme: dark)').matches);\n"
+            "    } catch(e) { return false; }\n"
+            "  })();"
+        )
+    return "  var _darkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;"
+
+
+def _current_theme_init_js(palette: str, switcher: bool) -> str:
+    """Emit ``var _currentTheme = ...;`` — with localStorage lookup in switcher mode."""
+    if not switcher:
+        return f"  var _currentTheme = '{palette}';"
+    return (
+        "  var _currentTheme = (function() {\n"
+        f"    try {{ return localStorage.getItem('abench_theme') || '{palette}'; }}"
+        f" catch(e) {{ return '{palette}'; }}\n"
+        "  })();"
+    )
+
+
+def _theme_js(palette: str, dark_mode: bool | str, switcher: bool) -> str:
+    """Assemble the chart-lifecycle + theme JS block.
+
+    Order matters: themes table → currentTheme/darkMode initializers (read by
+    the plugins below) → Chart.js plugins → helper functions → optional
+    switcher event handlers.
+    """
+    parts = [
+        f"\n  var _THEMES = {json.dumps(THEMES)};",
+        _current_theme_init_js(palette, switcher),
+        _dark_mode_init_js(dark_mode, switcher),
+        _CHART_PLUGINS_JS,
+        _CHART_HELPERS_JS,
+    ]
+    if switcher:
+        parts.append(_INTERACTIVE_JS)
+    return "\n".join(parts)
 
 
 def _toolbar_html(active_palette: str) -> str:
