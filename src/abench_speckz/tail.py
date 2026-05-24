@@ -23,13 +23,38 @@ def tail(results_dir: Path) -> None:
 
     print(f"Watching {runs_path}  (Ctrl+C to stop)\n", flush=True)
 
-    # Seed seen_logs with pre-existing files so we don't replay old output.
-    seen_logs: set[str] = set(str(p) for p in logs_dir.glob("*.log")) if logs_dir.exists() else set()
+    seen_logs: set[str] = set()
     # path_str → (file_handle, short_label, partial_line_buffer)
     open_logs: dict[str, tuple[IO, str, bytes]] = {}
     # base_stem (without .out/.err) → assigned monitor index N
     base_to_index: dict[str, int] = {}
     log_index = 0
+
+    # Open pre-existing log files seeked to the end so we follow future output
+    # without replaying history.
+    if logs_dir.exists():
+        for p in sorted(logs_dir.glob("*.log")):
+            key = str(p)
+            seen_logs.add(key)
+            stem = p.stem
+            if stem.endswith(".out"):
+                base, stream = stem[:-4], "out"
+            elif stem.endswith(".err"):
+                base, stream = stem[:-4], "err"
+            else:
+                base, stream = stem, "out"
+            if base not in base_to_index:
+                base_to_index[base] = log_index
+                log_index += 1
+            n = base_to_index[base]
+            label = f"mon-{n} {stream}"
+            print(f"  → [{label}] {p.name}", flush=True)
+            try:
+                fh = open(p, "rb")  # noqa: SIM115
+                fh.seek(0, 2)  # seek to end
+                open_logs[key] = (fh, label, b"")
+            except OSError:
+                pass
 
     with runs_path.open() as f:
         while True:

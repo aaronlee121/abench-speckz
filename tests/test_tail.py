@@ -298,7 +298,8 @@ def test_tail_does_not_replay_existing_log_files(tmp_path, capsys, monkeypatch):
     runs_path.write_text("")
     logs_dir = tmp_path / "logs"
     logs_dir.mkdir()
-    (logs_dir / "monitor-old-0.out.log").write_bytes(b"")  # pre-existing file
+    # pre-existing file with old content that must not be replayed
+    (logs_dir / "monitor-old-0.out.log").write_bytes(b"old content line\n")
 
     monkeypatch.setattr("abench_speckz.tail.time.sleep", _make_sleep_bomb(2))
 
@@ -306,7 +307,10 @@ def test_tail_does_not_replay_existing_log_files(tmp_path, capsys, monkeypatch):
         tail(tmp_path)
 
     out = capsys.readouterr().out
-    assert "monitor-old-0.out.log" not in out
+    # The file is announced (so future output will be followed), but its
+    # historical content is not replayed.
+    assert "monitor-old-0.out.log" in out
+    assert "old content line" not in out
 
 
 def test_tail_skips_malformed_json_lines(tmp_path, capsys, monkeypatch):
