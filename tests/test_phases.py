@@ -12,7 +12,9 @@ def _steps(*cmds: str) -> list[Step]:
 
 
 def test_phase_success_with_pipe_command():
-    reason, records = run_phase("setup", _steps("echo hello | cat"), {}, os.environ.copy(), timeout_seconds=10)
+    reason, records = run_phase(
+        "setup", _steps("echo hello | cat"), {}, os.environ.copy(), timeout_seconds=10
+    )
     assert reason is None
     assert records[0]["exit_code"] == 0
     assert "hello" in records[0]["stdout"]
@@ -64,6 +66,8 @@ def test_phase_when_multiple_conditions_all_must_match():
 
 def test_phase_when_empty_runs_unconditionally():
     steps = [Step(run="echo always", when={})]
-    reason, records = run_phase("setup", steps, {"workload": "anything"}, os.environ.copy(), timeout_seconds=10)
+    reason, records = run_phase(
+        "setup", steps, {"workload": "anything"}, os.environ.copy(), timeout_seconds=10
+    )
     assert reason is None
     assert len(records) == 1

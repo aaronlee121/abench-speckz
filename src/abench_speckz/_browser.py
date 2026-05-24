@@ -167,9 +167,7 @@ class BrowserApp(App):
             # Leaf labels are the deepest key=val; estimate their rendered width.
             # Each tree level adds ~2 chars of indentation connector.
             last_key = self.var_keys[-1]
-            max_val = max(
-                (len(str(c.vars.get(last_key, ""))) for c in self.combos), default=4
-            )
+            max_val = max((len(str(c.vars.get(last_key, ""))) for c in self.combos), default=4)
             leaf_label = len(last_key) + 1 + max_val + 12  # "  n=NNN  ✗N"
             indent = len(self.var_keys) * 2
             self._tree_w = max(20, indent + leaf_label + 4)
@@ -189,9 +187,7 @@ class BrowserApp(App):
             self.query_one("#middle-title", Label).update("Metrics")
             return
 
-        max_metric_len = max(
-            (len(m["metric"]) for m in combo.metrics), default=6
-        )
+        max_metric_len = max((len(m["metric"]) for m in combo.metrics), default=6)
         # metric col + 6 numeric cols (~7 chars each) + column separators
         self._metric_w = max(40, max_metric_len + 6 * 8 + 6)
 

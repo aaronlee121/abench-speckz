@@ -83,8 +83,13 @@ def execute_one_rep(
 
     setup_failure, setup_steps = (
         run_phase(
-            "setup", tool.setup, combo_vars, env, tool.setup_timeout_seconds,
-            log_dir=log_dir, log_prefix=f"setup--{run_id}",
+            "setup",
+            tool.setup,
+            combo_vars,
+            env,
+            tool.setup_timeout_seconds,
+            log_dir=log_dir,
+            log_prefix=f"setup--{run_id}",
         )
         if tool.setup
         else (None, [])
@@ -94,8 +99,13 @@ def execute_one_rep(
     if setup_failure:
         _, teardown_steps = (
             run_phase(
-                "teardown", tool.teardown, combo_vars, env, tool.setup_timeout_seconds,
-                log_dir=log_dir, log_prefix=f"teardown--{run_id}",
+                "teardown",
+                tool.teardown,
+                combo_vars,
+                env,
+                tool.setup_timeout_seconds,
+                log_dir=log_dir,
+                log_prefix=f"teardown--{run_id}",
             )
             if tool.teardown
             else (None, [])
@@ -117,7 +127,12 @@ def execute_one_rep(
             results_dir,
             row["run_id"],
             build_raw(
-                command=cmd, result=None, output_file_record=None, setup=setup_steps, teardown=teardown_steps, post_run=[]
+                command=cmd,
+                result=None,
+                output_file_record=None,
+                setup=setup_steps,
+                teardown=teardown_steps,
+                post_run=[],
             ),
         )
         row["raw_output_path"] = str(raw_path.relative_to(results_dir))

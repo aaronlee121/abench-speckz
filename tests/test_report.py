@@ -595,7 +595,7 @@ def test_ontoggle_attribute_does_not_break_on_uuid(tmp_path):
     run_reports = _discover_run_reports(tmp_path)
     section_html, _ = _runs_section(run_reports, runs, embed=True)
     # The attribute must be single-quoted so the UUID double-quotes don't close it early
-    assert f"ontoggle='loadRunReport(this,\"{_RUN_ID}\"" in section_html
+    assert f'ontoggle=\'loadRunReport(this,"{_RUN_ID}"' in section_html
 
 
 def test_var_table_in_runs_section(tmp_path):
@@ -639,6 +639,7 @@ def test_var_table_uses_pretty_names(tmp_path):
         },
     )
     from abench_speckz import prettynames as pn
+
     pretty_map = pn.load(tmp_path / "pretty_names.json")
     runs = [
         {

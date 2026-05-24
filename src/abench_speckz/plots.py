@@ -177,8 +177,20 @@ def parse_theme(raw: Any, source: str) -> ThemeConfig:
 
 
 _PLOT_FIELDS = {
-    "id", "type", "x", "y", "title", "group_by", "smooth", "fixed_vars",
-    "series_label", "data_table", "x_title", "y_title", "normalize", "error_bars",
+    "id",
+    "type",
+    "x",
+    "y",
+    "title",
+    "group_by",
+    "smooth",
+    "fixed_vars",
+    "series_label",
+    "data_table",
+    "x_title",
+    "y_title",
+    "normalize",
+    "error_bars",
 }
 
 
@@ -301,9 +313,7 @@ def _parse_error_bars_field(item: dict, *, ctx: str, plot_type: str) -> str | No
     if raw is None:
         return None
     if not isinstance(raw, str) or raw not in _ALLOWED_ERROR_BARS:
-        raise RunError(
-            f"{ctx}: error_bars must be one of {sorted(_ALLOWED_ERROR_BARS)}, got {raw!r}"
-        )
+        raise RunError(f"{ctx}: error_bars must be one of {sorted(_ALLOWED_ERROR_BARS)}, got {raw!r}")
     if plot_type in ("scatter", "stacked-bar"):
         raise RunError(f"{ctx}: error_bars is not allowed on {plot_type!r} plots")
     return raw
@@ -379,7 +389,9 @@ def _parse_kpi_card(item: Any, index: int, *, source: str, ctx: str) -> KpiCard:
         compare = KpiCompare(where=cmp_where)
 
     _check_unknown(
-        item, {"label", "metric", "stat", "where", "unit", "precision", "compare"}, ctx=full_ctx,
+        item,
+        {"label", "metric", "stat", "where", "unit", "precision", "compare"},
+        ctx=full_ctx,
     )
 
     return KpiCard(

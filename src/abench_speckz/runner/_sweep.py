@@ -33,7 +33,7 @@ from abench_speckz.runner._planning import (
 )
 from abench_speckz.runner._probes import collect_probe_results, config_hash
 from abench_speckz.runner._rep import execute_one_rep, make_row
-from abench_speckz.runspec import ToolSpec
+from abench_speckz.runspec import Step, ToolSpec
 from abench_speckz.scheduling import FixedScheduler, Scheduler, SweepState
 
 SchedulerFactory = Callable[[list[dict[str, Any]], dict[str, int]], Scheduler]
@@ -52,9 +52,7 @@ class SweepProgress:
     total: int
     stream: Any
     idx: int = 0
-    counts: dict[str, int] = field(
-        default_factory=lambda: {"succeeded": 0, "failed": 0, "skipped": 0}
-    )
+    counts: dict[str, int] = field(default_factory=lambda: {"succeeded": 0, "failed": 0, "skipped": 0})
     t_start: float = field(default_factory=time.monotonic)
 
     def start_run(self, ch: str, is_warmup: bool) -> None:
@@ -259,7 +257,10 @@ def execute_sweep(
                     per_group_cmds=[m.command for m in tool.monitor if m.span == "per_group"],
                 )
                 _run_nested_groups(
-                    ctx, entries=selected, scope_idx=0, inherited_phase_vars={},
+                    ctx,
+                    entries=selected,
+                    scope_idx=0,
+                    inherited_phase_vars={},
                 )
             else:
                 entry_groups: list[tuple[tuple[str, ...] | None, list[dict[str, Any]]]] = group_entries(
@@ -370,16 +371,24 @@ def _run_groups(
         _group_run_id = phase_vars["_run_id"]
         _log_dir = results_dir / "logs"
         sweep_setup_failure, sweep_setup_records = _run_setup_phase(
-            tool.setup_per_sweep, phase_vars, base_env, tool.setup_timeout_seconds,
-            log_dir=_log_dir, log_prefix=f"sweep_setup--{_group_run_id}",
+            tool.setup_per_sweep,
+            phase_vars,
+            base_env,
+            tool.setup_timeout_seconds,
+            log_dir=_log_dir,
+            log_prefix=f"sweep_setup--{_group_run_id}",
         )
 
         sweep_teardown_failure: str | None = None
         sweep_teardown_records: list[dict[str, Any]] = []
         if sweep_setup_failure:
             sweep_teardown_failure, sweep_teardown_records = _run_teardown_phase(
-                tool.teardown_per_sweep, phase_vars, base_env, tool.setup_timeout_seconds,
-                log_dir=_log_dir, log_prefix=f"sweep_teardown--{_group_run_id}",
+                tool.teardown_per_sweep,
+                phase_vars,
+                base_env,
+                tool.setup_timeout_seconds,
+                log_dir=_log_dir,
+                log_prefix=f"sweep_teardown--{_group_run_id}",
             )
             _record_setup_failures(
                 entries=entries,
@@ -440,7 +449,7 @@ def _drive_scheduler_loop(
     keep_raw: bool,
     phase_vars: dict[str, Any],
     base_env: dict[str, str],
-    teardown_steps: list[str],
+    teardown_steps: list[Step],
     per_group_cmds: list[str],
     group_log_prefix: str,
     probed_hashes: set[str],
@@ -465,7 +474,11 @@ def _drive_scheduler_loop(
     teardown_records: list[dict[str, Any]] = []
 
     with _per_group_monitors(
-        per_group_cmds, phase_vars, base_env, log_dir=log_dir, log_prefix=group_log_prefix,
+        per_group_cmds,
+        phase_vars,
+        base_env,
+        log_dir=log_dir,
+        log_prefix=group_log_prefix,
     ) as monitors:
         try:
             while True:
@@ -516,20 +529,26 @@ def _drive_scheduler_loop(
             if prev_row is not None:
                 monitors.stop_now()
                 teardown_failure, teardown_records = _run_teardown_phase(
-                    teardown_steps, phase_vars, base_env, tool.setup_timeout_seconds,
-                    log_dir=log_dir, log_prefix=teardown_log_prefix,
+                    teardown_steps,
+                    phase_vars,
+                    base_env,
+                    tool.setup_timeout_seconds,
+                    log_dir=log_dir,
+                    log_prefix=teardown_log_prefix,
                 )
                 if teardown_failure:
                     prior = prev_row.get("failure_reason")
-                    prev_row["failure_reason"] = (
-                        f"{prior}; {teardown_failure}" if prior else teardown_failure
-                    )
+                    prev_row["failure_reason"] = f"{prior}; {teardown_failure}" if prior else teardown_failure
                 _commit_disk(prev_row, prev_ch, results_dir=results_dir, progress=progress)
         except KeyboardInterrupt:
             monitors.stop_now()
             _run_teardown_phase(
-                teardown_steps, phase_vars, base_env, tool.setup_timeout_seconds,
-                log_dir=log_dir, log_prefix=teardown_log_prefix,
+                teardown_steps,
+                phase_vars,
+                base_env,
+                tool.setup_timeout_seconds,
+                log_dir=log_dir,
+                log_prefix=teardown_log_prefix,
             )
             raise
 
@@ -642,7 +661,11 @@ def _per_group_monitors(
     handle = _GroupMonitorHandle()
     if cmds:
         handle._procs, handle.start_records, handle._log_files = run_monitors(
-            cmds, phase_vars, base_env, log_dir=log_dir, log_prefix=log_prefix,
+            cmds,
+            phase_vars,
+            base_env,
+            log_dir=log_dir,
+            log_prefix=log_prefix,
         )
     try:
         yield handle
@@ -651,7 +674,7 @@ def _per_group_monitors(
 
 
 def _run_setup_phase(
-    steps: list[str],
+    steps: list[Step],
     phase_vars: dict[str, Any],
     base_env: dict[str, str],
     timeout: int,
@@ -663,13 +686,18 @@ def _run_setup_phase(
     if not steps:
         return None, []
     return run_phase(
-        "per_sweep_setup", steps, phase_vars, base_env, timeout,
-        log_dir=log_dir, log_prefix=log_prefix,
+        "per_sweep_setup",
+        steps,
+        phase_vars,
+        base_env,
+        timeout,
+        log_dir=log_dir,
+        log_prefix=log_prefix,
     )
 
 
 def _run_teardown_phase(
-    steps: list[str],
+    steps: list[Step],
     phase_vars: dict[str, Any],
     base_env: dict[str, str],
     timeout: int,
@@ -681,8 +709,13 @@ def _run_teardown_phase(
     if not steps:
         return None, []
     return run_phase(
-        "per_sweep_teardown", steps, phase_vars, base_env, timeout,
-        log_dir=log_dir, log_prefix=log_prefix,
+        "per_sweep_teardown",
+        steps,
+        phase_vars,
+        base_env,
+        timeout,
+        log_dir=log_dir,
+        log_prefix=log_prefix,
     )
 
 
@@ -759,8 +792,12 @@ def _finish_outer_scope_group(
     """
     scope_run_id = phase_vars["_run_id"]
     teardown_failure, teardown_records = _run_teardown_phase(
-        scope.teardown, phase_vars, ctx.base_env, ctx.tool.setup_timeout_seconds,
-        log_dir=scope_log_dir, log_prefix=f"scope{scope_idx}_teardown--{scope_run_id}",
+        scope.teardown,
+        phase_vars,
+        ctx.base_env,
+        ctx.tool.setup_timeout_seconds,
+        log_dir=scope_log_dir,
+        log_prefix=f"scope{scope_idx}_teardown--{scope_run_id}",
     )
     _maybe_write_sweep_raw(
         ctx.results_dir,
@@ -771,9 +808,7 @@ def _finish_outer_scope_group(
     )
 
 
-def _format_group_label(
-    vars_: list[str] | None, group_key: tuple[str, ...] | None
-) -> str:
+def _format_group_label(vars_: list[str] | None, group_key: tuple[str, ...] | None) -> str:
     """Format ``"var1=val1, var2=val2"`` for log/preview lines; ``""`` if no group."""
     if not vars_ or group_key is None:
         return ""
@@ -827,8 +862,12 @@ def _run_nested_groups(
             )
         scope_run_id = phase_vars["_run_id"]
         setup_failure, setup_records = _run_setup_phase(
-            scope.setup, phase_vars, ctx.base_env, ctx.tool.setup_timeout_seconds,
-            log_dir=scope_log_dir, log_prefix=f"scope{scope_idx}_setup--{scope_run_id}",
+            scope.setup,
+            phase_vars,
+            ctx.base_env,
+            ctx.tool.setup_timeout_seconds,
+            log_dir=scope_log_dir,
+            log_prefix=f"scope{scope_idx}_setup--{scope_run_id}",
         )
 
         if setup_failure:
@@ -842,9 +881,14 @@ def _run_nested_groups(
                 progress=ctx.progress,
             )
             _finish_outer_scope_group(
-                ctx, scope=scope, scope_idx=scope_idx, group_key=group_key,
-                phase_vars=phase_vars, setup_records=setup_records,
-                scope_log_dir=scope_log_dir, force=True,
+                ctx,
+                scope=scope,
+                scope_idx=scope_idx,
+                group_key=group_key,
+                phase_vars=phase_vars,
+                setup_records=setup_records,
+                scope_log_dir=scope_log_dir,
+                force=True,
             )
 
         elif is_innermost:
@@ -884,9 +928,14 @@ def _run_nested_groups(
                 inherited_phase_vars=phase_vars,
             )
             _finish_outer_scope_group(
-                ctx, scope=scope, scope_idx=scope_idx, group_key=group_key,
-                phase_vars=phase_vars, setup_records=setup_records,
-                scope_log_dir=scope_log_dir, force=bool(ctx.keep_raw),
+                ctx,
+                scope=scope,
+                scope_idx=scope_idx,
+                group_key=group_key,
+                phase_vars=phase_vars,
+                setup_records=setup_records,
+                scope_log_dir=scope_log_dir,
+                force=bool(ctx.keep_raw),
             )
 
 
@@ -1057,5 +1106,3 @@ def _dry_run_preview(
                 continue
             cmd = interpolate.resolve_string(step.run, phase_vars, env=os.environ)
             print(f"[per_sweep teardown {k}{label}]: {cmd}", file=stream)
-
-

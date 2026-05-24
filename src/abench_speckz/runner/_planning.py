@@ -8,7 +8,7 @@ from typing import Any
 from abench_speckz import interpolate, store
 from abench_speckz.filters import make_filter
 from abench_speckz.model import RunError
-from abench_speckz.runspec import ScopeEntry, ToolSpec
+from abench_speckz.runspec import ScopeEntry, Step, ToolSpec
 
 # One unit of work: (manifest_entry, rep_index, is_warmup).
 Work = tuple[dict[str, Any], int, bool]
@@ -21,8 +21,8 @@ class ResolvedScope:
     """A single scope level after var-negation expansion."""
 
     vars: list[str]
-    setup: list[str] = field(default_factory=list)
-    teardown: list[str] = field(default_factory=list)
+    setup: list[Step] = field(default_factory=list)
+    teardown: list[Step] = field(default_factory=list)
 
 
 def resolve_per_sweep_vars(
@@ -159,7 +159,7 @@ def validate_per_sweep(
         ("teardown_per_sweep", tool.teardown_per_sweep),
     ]:
         for i, step in enumerate(steps):
-            for ref in interpolate.find_combo_var_refs(step):
+            for ref in interpolate.find_combo_var_refs(step.run):
                 if ref in allowed:
                     continue
                 if per_sweep_vars:
@@ -217,7 +217,7 @@ def validate_scopes(
         allowed = accumulated | _SYNTHETIC_PER_SWEEP
         for phase_name, steps in [("setup", scope.setup), ("teardown", scope.teardown)]:
             for j, step in enumerate(steps):
-                for ref in interpolate.find_combo_var_refs(step):
+                for ref in interpolate.find_combo_var_refs(step.run):
                     if ref not in allowed:
                         allowed_names = ", ".join(f"${{{v}}}" for v in sorted(accumulated))
                         raise RunError(

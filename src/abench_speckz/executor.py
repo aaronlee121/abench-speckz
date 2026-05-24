@@ -91,12 +91,8 @@ class LocalSubprocessExecutor(Executor):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             ) as proc:
-                out_t = threading.Thread(
-                    target=relay_tee, args=(proc.stdout, out_f, stdout_buf), daemon=True
-                )
-                err_t = threading.Thread(
-                    target=relay_tee, args=(proc.stderr, err_f, stderr_buf), daemon=True
-                )
+                out_t = threading.Thread(target=relay_tee, args=(proc.stdout, out_f, stdout_buf), daemon=True)
+                err_t = threading.Thread(target=relay_tee, args=(proc.stderr, err_f, stderr_buf), daemon=True)
                 out_t.start()
                 err_t.start()
                 timed_out = False

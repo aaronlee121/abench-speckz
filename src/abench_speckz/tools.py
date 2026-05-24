@@ -118,9 +118,7 @@ def _load_phase(raw: dict, path, key: str) -> list[Step]:
                     raise RunError(f"{path}: tool.{key}[{i}].when[{k!r}] value must be a scalar")
             steps.append(Step(run=run, when={k: str(v) for k, v in when.items()}))
         else:
-            raise RunError(
-                f"{path}: tool.{key}[{i}] must be a string or mapping, got {type(item).__name__}"
-            )
+            raise RunError(f"{path}: tool.{key}[{i}] must be a string or mapping, got {type(item).__name__}")
     return steps
 
 
