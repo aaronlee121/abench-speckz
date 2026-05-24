@@ -1,0 +1,160 @@
+report_title: "abench-speckz — Feature Preview"
+report_description: |
+  This report exercises every visual feature of the HTML reporter: KPI cards,
+  headline callouts, bar / line / scatter / stacked-bar charts, error bars,
+  normalize speedup, series labels, axis titles, and the interactive theme switcher.
+
+  Toggle the palette and dark mode using the toolbar above.
+
+theme:
+  switcher: true
+
+plots:
+  # ── Throughput ──────────────────────────────────────────────────────────
+  - id: rps_bar_ci95
+    type: bar
+    x: workload
+    y: rps
+    group_by: backend
+    title: "Throughput by workload"
+    error_bars: ci95
+    x_title: "Workload type"
+    y_title: "Requests / second"
+
+  - id: rps_line_concurrency
+    type: line
+    x: concurrency
+    y: rps
+    group_by: backend
+    smooth: true
+    series_label: "${backend}"
+    title: "Throughput vs concurrency"
+    x_title: "Concurrent clients"
+    y_title: "Requests / second"
+
+  - id: rps_speedup
+    type: bar
+    x: workload
+    y: rps
+    group_by: backend
+    title: "Throughput speedup vs SQLite"
+    normalize:
+      against: backend
+      reference: sqlite
+
+  # ── Latency ─────────────────────────────────────────────────────────────
+  - id: latency_stack
+    type: stacked-bar
+    x: backend
+    y: [p50_ms, p95_ms, p99_ms]
+    title: "Latency percentile stack by backend"
+    fixed_vars: false
+
+  - id: latency_line
+    type: line
+    x: concurrency
+    y: mean_ms
+    group_by: backend
+    smooth: true
+    error_bars: stddev
+    title: "Mean latency vs concurrency"
+    x_title: "Concurrent clients"
+    y_title: "Mean latency (ms)"
+
+  # ── Tradeoff ────────────────────────────────────────────────────────────
+  - id: throughput_vs_latency
+    type: scatter
+    x: rps
+    y: p95_ms
+    group_by: backend
+    title: "Throughput vs P95 latency tradeoff"
+
+  # ── Error bars reference ─────────────────────────────────────────────────
+  - id: rps_bar_stddev
+    type: bar
+    x: workload
+    y: rps
+    group_by: backend
+    title: "Throughput by workload (±stddev)"
+    error_bars: stddev
+
+  - id: rps_no_error_bars
+    type: bar
+    x: workload
+    y: rps
+    group_by: backend
+    title: "Throughput by workload — no error bars"
+    data_table: false
+
+sections:
+  - title: "Executive Summary"
+    description: |
+      Top-line numbers across all backends and workloads. Demonstrates `kpi` cards
+      and the `headline` callout block.
+    blocks:
+      - kpi:
+          - label: "Peak throughput"
+            metric: rps
+            stat: max
+            unit: "req/s"
+            precision: 0
+          - label: "Peak RPS — read"
+            metric: rps
+            stat: max
+            where: {workload: read}
+            unit: "req/s"
+            precision: 0
+            compare:
+              where: {workload: write}
+          - label: "Best mean latency"
+            metric: mean_ms
+            stat: min
+            unit: "ms"
+            precision: 2
+          - label: "Best P95 latency"
+            metric: p95_ms
+            stat: min
+            unit: "ms"
+            precision: 2
+      - headline:
+          metric: rps
+          compare: backend
+          template: >-
+            {best} delivers {ratio} the throughput of {worst} on read workloads
+            ({delta_pct} faster).
+          where: {workload: read}
+
+  - title: "Throughput"
+    description: |
+      Request throughput across backends, workloads, and concurrency levels.
+      Includes CI 95% error bars, a `series_label` compact legend, and a
+      `normalize` speedup chart pinned to SQLite = 1.0×.
+    blocks:
+      - plot_id: rps_bar_ci95
+      - plot_id: rps_line_concurrency
+      - plot_id: rps_speedup
+
+  - title: "Latency"
+    description: |
+      Stacked-bar of P50 / P95 / P99 latency percentiles per backend,
+      and mean latency scaling with ±stddev error bars.
+    blocks:
+      - plot_id: latency_stack
+      - plot_id: latency_line
+
+  - title: "Throughput vs Latency Tradeoff"
+    description: |
+      Scatter plot with one labeled point per backend. `x` and `y` are both
+      metrics; `group_by` assigns each unique variable combination its own
+      named point.
+    blocks:
+      - plot_id: throughput_vs_latency
+
+  - title: "Error Bars Reference"
+    description: |
+      Side-by-side comparison of CI 95%, ±stddev, and no-error-bars styling.
+      The last chart also sets `data_table: false` to suppress the Data table.
+    blocks:
+      - plot_id: rps_bar_ci95
+      - plot_id: rps_bar_stddev
+      - plot_id: rps_no_error_bars

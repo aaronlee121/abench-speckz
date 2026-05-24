@@ -1,0 +1,8 @@
+name: preview
+command: echo
+higher_is_better:
+  rps: true
+  mean_ms: false
+  p50_ms: false
+  p95_ms: false
+  p99_ms: false
