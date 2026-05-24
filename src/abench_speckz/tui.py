@@ -210,7 +210,7 @@ def browse(results_dir: Path) -> None:
                     yield DataTable(id="metric-table", cursor_type="row")
                 with Vertical(id="right-pane", classes="pane"):
                     yield Label("Runs", classes="pane-title", id="right-title")
-                    yield DataTable(id="run-table", cursor_type="row")
+                    yield DataTable(id="run-table", cursor_type="column")
             yield Footer()
 
         def on_mount(self) -> None:
@@ -280,7 +280,7 @@ def browse(results_dir: Path) -> None:
 
             if not config_hash:
                 self.query_one("#right-title", Label).update("Runs")
-                table.add_column("run_id")
+                table.add_column("field")
                 return
 
             runs = _load_runs_for_hash(results_dir, config_hash)
@@ -292,30 +292,41 @@ def browse(results_dir: Path) -> None:
                     if k not in metric_names:
                         metric_names.append(k)
 
-            table.add_column("run_id", key="run_id")
-            table.add_column("exit", key="exit")
-            table.add_column("ms", key="ms")
-            table.add_column("time", key="time")
-            for m in metric_names:
-                table.add_column(m, key=m)
+            # Transposed layout: rows = fields, columns = runs
+            field_names = ["run_id", "exit", "ms", "time"] + metric_names
 
+            table.add_column("field", key="field")
             for run in runs:
-                run_id = (run.get("run_id") or "")[:8]
-                exit_code = run.get("exit_code", "?")
-                duration = run.get("duration_ms")
-                started = run.get("started_at") or ""
-                if "T" in started:
-                    started = started.split("T")[1][:8]
+                col_id = run.get("run_id") or ""
+                header = col_id[:8]
+                table.add_column(header, key=col_id)
 
-                exit_cell = Text(str(exit_code))
-                if exit_code != 0:
-                    exit_cell.stylize("bold red")
+            for field in field_names:
+                row: list[Any] = [field]
+                for run in runs:
+                    run_id_full = run.get("run_id") or ""
+                    exit_code = run.get("exit_code", "?")
+                    duration = run.get("duration_ms")
+                    started = run.get("started_at") or ""
+                    if "T" in started:
+                        started = started.split("T")[1][:8]
+                    results = run.get("results") or {}
 
-                row: list[Any] = [run_id, exit_cell, _fmt(duration, 0), started]
-                results = run.get("results") or {}
-                row += [_fmt(results.get(m)) for m in metric_names]
+                    if field == "run_id":
+                        cell: Any = run_id_full[:8]
+                    elif field == "exit":
+                        cell = Text(str(exit_code))
+                        if exit_code != 0:
+                            cell.stylize("bold red")
+                    elif field == "ms":
+                        cell = _fmt(duration, 0)
+                    elif field == "time":
+                        cell = started
+                    else:
+                        cell = _fmt(results.get(field))
+                    row.append(cell)
 
-                table.add_row(*row, key=run.get("run_id", run_id))
+                table.add_row(*row, key=field)
 
         # ------------------------------------------------------------------
         # Events
