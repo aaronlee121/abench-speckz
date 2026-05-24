@@ -576,6 +576,28 @@ def test_multiple_reports_per_run(tmp_path):
     assert "<summary>profile</summary>" in section_html
 
 
+def test_ontoggle_attribute_does_not_break_on_uuid(tmp_path):
+    """ontoggle must use single-quote delimiters so json.dumps double-quotes don't break the attribute."""
+    from abench_speckz.report import _discover_run_reports, _runs_section
+
+    store.init_results_dir(tmp_path)
+    (tmp_path / "raw" / f"{_RUN_ID}_flamegraph.html").write_text("<html/>")
+    runs = [
+        {
+            "run_id": _RUN_ID,
+            "config_hash": "h1",
+            "vars": {"workload": "read"},
+            "tags": ["bench"],
+            "exit_code": 0,
+            "started_at": "2026-05-14T10:00Z",
+        }
+    ]
+    run_reports = _discover_run_reports(tmp_path)
+    section_html, _ = _runs_section(run_reports, runs, embed=True)
+    # The attribute must be single-quoted so the UUID double-quotes don't close it early
+    assert f"ontoggle='loadRunReport(this,\"{_RUN_ID}\"" in section_html
+
+
 def test_var_table_in_runs_section(tmp_path):
     from abench_speckz.report import _discover_run_reports, _runs_section
 

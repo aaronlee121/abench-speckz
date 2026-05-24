@@ -146,7 +146,7 @@ def _render_run_details(
 
     summary = f"Run {short_id}… ({started_at})" if started_at else f"Run {short_id}…"
     if embed:
-        toggle_attr = f' ontoggle="loadRunReport(this,{json.dumps(run_id)},{json.dumps(names)})"'
+        toggle_attr = f" ontoggle='loadRunReport(this,{json.dumps(run_id)},{json.dumps(names)})'"
     else:
         toggle_attr = ""
     return f"<details{toggle_attr}><summary>{summary}</summary>{inner_html}</details>\n"
