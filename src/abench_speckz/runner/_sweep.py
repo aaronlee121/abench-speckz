@@ -5,7 +5,8 @@ import sys
 import time
 import uuid
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -474,106 +475,99 @@ def _drive_scheduler_loop(
     the final one — run teardown, fold any failure in, then write.
     """
     state = SweepState(seed_rows=seed_rows)
-
-    group_monitor_procs: list = []
-    group_monitor_start_records: list = []
-    group_monitor_stop_records: list = []
-    group_log_files: list = []
-    if per_group_cmds:
-        group_monitor_procs, group_monitor_start_records, group_log_files = run_monitors(
-            per_group_cmds,
-            phase_vars,
-            base_env,
-            log_dir=results_dir / "logs",
-            log_prefix=group_log_prefix,
-        )
+    log_dir = results_dir / "logs"
+    teardown_log_prefix = f"sweep_teardown--{phase_vars['_run_id']}"
 
     prev_row: dict[str, Any] | None = None
     prev_ch: str | None = None
     teardown_failure: str | None = None
     teardown_records: list[dict[str, Any]] = []
 
-    try:
-        while True:
-            if prev_row is not None:
-                # Update the in-memory state immediately so the scheduler's
-                # next decision sees this rep. Disk write is still deferred
-                # until we know whether this is the final rep (so any
-                # teardown_per_sweep failure can be folded in).
-                assert prev_ch is not None
-                state.record(prev_ch, prev_row)
-            item = scheduler.next(state)
-            if item is None:
-                break
-            if prev_row is not None:
-                # Not the last rep — commit the previous one to disk now.
-                _commit_disk(prev_row, prev_ch, results_dir=results_dir, progress=progress)
-            ch = config_hash(item.entry["vars"])
-            _maybe_collect_combo_probes(
-                tool=tool,
-                entry=item.entry,
-                ch=ch,
-                manifest_dir=manifest_dir,
-                results_dir=results_dir,
-                probed_hashes=probed_hashes,
-                cache=combo_probe_cache,
-            )
-            progress.start_run(ch, item.is_warmup)
-            try:
-                prev_row = execute_one_rep(
-                    entry=item.entry,
-                    is_warmup=item.is_warmup,
+    with _per_group_monitors(
+        per_group_cmds, phase_vars, base_env, log_dir=log_dir, log_prefix=group_log_prefix,
+    ) as monitors:
+        try:
+            while True:
+                if prev_row is not None:
+                    # Update the in-memory state immediately so the scheduler's
+                    # next decision sees this rep. Disk write is still deferred
+                    # until we know whether this is the final rep (so any
+                    # teardown_per_sweep failure can be folded in).
+                    assert prev_ch is not None
+                    state.record(prev_ch, prev_row)
+                item = scheduler.next(state)
+                if item is None:
+                    break
+                if prev_row is not None:
+                    # Not the last rep — commit the previous one to disk now.
+                    _commit_disk(prev_row, prev_ch, results_dir=results_dir, progress=progress)
+                ch = config_hash(item.entry["vars"])
+                _maybe_collect_combo_probes(
                     tool=tool,
-                    tool_version=tool_version,
+                    entry=item.entry,
+                    ch=ch,
                     manifest_dir=manifest_dir,
                     results_dir=results_dir,
-                    executor=executor,
-                    keep_raw=keep_raw,
-                    probe_results=combo_probe_cache.get(ch, {}),
+                    probed_hashes=probed_hashes,
+                    cache=combo_probe_cache,
                 )
-                prev_ch = ch
-            except KeyboardInterrupt:
-                progress.interrupt(ch)
-                raise
+                progress.start_run(ch, item.is_warmup)
+                try:
+                    prev_row = execute_one_rep(
+                        entry=item.entry,
+                        is_warmup=item.is_warmup,
+                        tool=tool,
+                        tool_version=tool_version,
+                        manifest_dir=manifest_dir,
+                        results_dir=results_dir,
+                        executor=executor,
+                        keep_raw=keep_raw,
+                        probe_results=combo_probe_cache.get(ch, {}),
+                    )
+                    prev_ch = ch
+                except KeyboardInterrupt:
+                    progress.interrupt(ch)
+                    raise
 
-        # Scheduler exhausted — fold teardown into the final row before writing.
-        if prev_row is not None:
-            if group_monitor_procs:
-                group_monitor_stop_records = stop_monitors(group_monitor_procs, group_log_files)
-                group_monitor_procs = []
+            # Scheduler exhausted — stop monitors first so teardown noise
+            # stays out of monitor output, then fold any teardown failure
+            # into the final row before committing.
+            if prev_row is not None:
+                monitors.stop_now()
+                if teardown_steps:
+                    teardown_failure, teardown_records = run_phase(
+                        "per_sweep_teardown",
+                        teardown_steps,
+                        phase_vars,
+                        base_env,
+                        tool.setup_timeout_seconds,
+                        log_dir=log_dir,
+                        log_prefix=teardown_log_prefix,
+                    )
+                    if teardown_failure:
+                        prior = prev_row.get("failure_reason")
+                        prev_row["failure_reason"] = (
+                            f"{prior}; {teardown_failure}" if prior else teardown_failure
+                        )
+                _commit_disk(prev_row, prev_ch, results_dir=results_dir, progress=progress)
+        except KeyboardInterrupt:
+            monitors.stop_now()
             if teardown_steps:
-                teardown_failure, teardown_records = run_phase(
+                run_phase(
                     "per_sweep_teardown",
                     teardown_steps,
                     phase_vars,
                     base_env,
                     tool.setup_timeout_seconds,
-                    log_dir=results_dir / "logs",
-                    log_prefix=f"sweep_teardown--{phase_vars['_run_id']}",
+                    log_dir=log_dir,
+                    log_prefix=teardown_log_prefix,
                 )
-                if teardown_failure:
-                    prior = prev_row.get("failure_reason")
-                    prev_row["failure_reason"] = f"{prior}; {teardown_failure}" if prior else teardown_failure
-            _commit_disk(prev_row, prev_ch, results_dir=results_dir, progress=progress)
-    except KeyboardInterrupt:
-        if group_monitor_procs:
-            stop_monitors(group_monitor_procs, group_log_files)
-        if teardown_steps:
-            run_phase(
-                "per_sweep_teardown",
-                teardown_steps,
-                phase_vars,
-                base_env,
-                tool.setup_timeout_seconds,
-                log_dir=results_dir / "logs",
-                log_prefix=f"sweep_teardown--{phase_vars['_run_id']}",
-            )
-        raise
+            raise
 
     return (
         teardown_failure,
         teardown_records,
-        {"start": group_monitor_start_records, "stop": group_monitor_stop_records},
+        {"start": monitors.start_records, "stop": monitors.stop_records},
     )
 
 
@@ -643,6 +637,48 @@ def _record_setup_failures(
             store.append_run(results_dir, row)
             store.update_aggregates_for_hash(results_dir, ch)
             progress.record_setup_failure(ch)
+
+
+@dataclass
+class _GroupMonitorHandle:
+    """Handle returned by ``_per_group_monitors`` so callers can stop early.
+
+    ``stop_now`` is idempotent: explicit calls (to halt monitors before the
+    teardown phase so their output stays clean) and the context manager's
+    finally block (to guarantee cleanup on KeyboardInterrupt) cooperate
+    safely.
+    """
+
+    start_records: list[dict[str, Any]] = field(default_factory=list)
+    stop_records: list[dict[str, Any]] = field(default_factory=list)
+    _procs: list = field(default_factory=list)
+    _log_files: list = field(default_factory=list)
+
+    def stop_now(self) -> None:
+        if self._procs:
+            self.stop_records = stop_monitors(self._procs, self._log_files)
+            self._procs = []
+
+
+@contextmanager
+def _per_group_monitors(
+    cmds: list[str],
+    phase_vars: dict[str, Any],
+    base_env: dict[str, str],
+    *,
+    log_dir: Path,
+    log_prefix: str,
+) -> Iterator[_GroupMonitorHandle]:
+    """Run ``per_group`` monitors for the lifetime of the with-block."""
+    handle = _GroupMonitorHandle()
+    if cmds:
+        handle._procs, handle.start_records, handle._log_files = run_monitors(
+            cmds, phase_vars, base_env, log_dir=log_dir, log_prefix=log_prefix,
+        )
+    try:
+        yield handle
+    finally:
+        handle.stop_now()
 
 
 def _group_slug(group_key: tuple[str, ...] | None) -> str | None:
