@@ -1,0 +1,69 @@
+report_title: "Error Bars Demo"
+
+plots:
+  # Bar: ci95 whiskers, grouped by backend
+  - id: rps_by_workload_ci95
+    type: bar
+    x: workload
+    y: rps
+    group_by: backend
+    title: "Throughput by workload — CI 95% error bars"
+    error_bars: ci95
+
+  # Line: ci95 whiskers vs concurrency
+  - id: rps_vs_concurrency_ci95
+    type: line
+    x: concurrency
+    y: rps
+    group_by: backend
+    smooth: true
+    title: "Throughput vs concurrency — CI 95% error bars"
+    error_bars: ci95
+
+  # Bar: stddev whiskers
+  - id: latency_stddev
+    type: bar
+    x: workload
+    y: mean_ms
+    group_by: backend
+    title: "Mean latency by workload — ±stddev error bars"
+    error_bars: stddev
+
+  # Line: stddev whiskers vs concurrency
+  - id: latency_vs_concurrency_stddev
+    type: line
+    x: concurrency
+    y: mean_ms
+    group_by: backend
+    smooth: true
+    title: "Mean latency vs concurrency — ±stddev error bars"
+    error_bars: stddev
+
+  # Bar without error bars (for comparison)
+  - id: rps_no_error_bars
+    type: bar
+    x: workload
+    y: rps
+    group_by: backend
+    title: "Throughput by workload — no error bars (reference)"
+
+sections:
+  - title: "CI 95% Confidence Interval Bars"
+    description: |
+      Whiskers span the `ci95_low … ci95_high` columns from the aggregate stats.
+      Asymmetric — recommended for publication-grade output.
+    blocks:
+      - plot_id: rps_by_workload_ci95
+      - plot_id: rps_vs_concurrency_ci95
+
+  - title: "±Stddev Bars"
+    description: |
+      Whiskers span `mean − stddev … mean + stddev`.
+    blocks:
+      - plot_id: latency_stddev
+      - plot_id: latency_vs_concurrency_stddev
+
+  - title: "Reference — No Error Bars"
+    description: Same throughput chart without error bars, for comparison.
+    blocks:
+      - plot_id: rps_no_error_bars
