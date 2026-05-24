@@ -17,6 +17,7 @@ from abench_speckz.report._html import (
     html_shell,
     render_markdown,
     resolve_metric,
+    resolve_var_value,
     safe_id,
     split_group_by_vars,
     table_html,
@@ -141,7 +142,7 @@ def generate_plots_html(
     from abench_speckz import query
 
     all_vars = query.var_names(results_dir)
-    text_vars = _gather_text_vars(results_dir)
+    text_vars = {k: resolve_var_value(pretty_map, k, v) for k, v in _gather_text_vars(results_dir).items()}
     doc = _interpolate_doc(doc, text_vars, dict(os.environ))
 
     sections: list[str] = []

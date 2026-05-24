@@ -976,6 +976,27 @@ def test_interp_report_description(tmp_path, monkeypatch):
     assert "postgres" in html
 
 
+def test_interp_static_var_uses_pretty_name(tmp_path):
+    """${var} in text fields expands to the display label, not the raw value."""
+    from abench_speckz import prettynames
+
+    _seed_static(tmp_path)
+    prettynames.write(
+        tmp_path / "pretty_names.json",
+        {"var_values": {"backend": {"postgres": "PostgreSQL 16"}}},
+    )
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text(
+        "plots:\n  - id: p1\n    type: bar\n    x: workload\n    y: rps\n"
+        "sections:\n  - title: 'Backend: ${backend}'\n    blocks:\n      - plot_id: p1\n"
+    )
+    report_path = tmp_path / "r.html"
+    query.stats(tmp_path, report=report_path, plots=plots_path, out=io.StringIO())
+    html = report_path.read_text()
+    assert "Backend: PostgreSQL 16" in html
+    assert "Backend: postgres" not in html
+
+
 # ---------------------------------------------------------------------------
 # var_values: friendly labels for combo variable values in legends
 # ---------------------------------------------------------------------------
