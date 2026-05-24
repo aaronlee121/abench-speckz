@@ -1,0 +1,65 @@
+report_title: "Sample Benchmark Report"
+report_description: "End-to-end throughput and latency analysis across workloads and concurrency levels."
+
+sections:
+  - title: "Key Metrics"
+    description: "Top-level scorecard across all workloads."
+    blocks:
+      - kpi:
+          - label: "Peak Throughput"
+            metric: rps
+            stat: max
+            unit: "req/s"
+            precision: 0
+          - label: "Best P95 Latency"
+            metric: p95_ms
+            stat: min
+            unit: "ms"
+            precision: 1
+          - label: "Read vs Write RPS"
+            metric: rps
+            stat: mean
+            where: {workload: read}
+            unit: "req/s"
+            precision: 0
+            compare:
+              where: {workload: write}
+
+      - headline:
+          metric: rps
+          compare: workload
+          template: "{best} delivers {ratio}× the throughput of {worst}"
+
+  - title: "Charts"
+    blocks:
+      - plot_id: rps_by_workload
+      - plot_id: latency_breakdown
+      - plot_id: rps_vs_concurrency
+      - plot_id: throughput_vs_latency
+
+plots:
+  - id: rps_by_workload
+    type: bar
+    title: "Throughput by workload"
+    x: workload
+    y: rps
+
+  - id: latency_breakdown
+    type: stacked-bar
+    title: "Latency percentile breakdown"
+    x: workload
+    y: [p50_ms, p95_ms, p99_ms]
+
+  - id: rps_vs_concurrency
+    type: line
+    title: "Throughput scaling"
+    x: concurrency
+    y: rps
+    group_by: workload
+
+  - id: throughput_vs_latency
+    type: scatter
+    title: "Throughput / latency tradeoff"
+    x: rps
+    y: p95_ms
+    group_by: workload
