@@ -795,7 +795,7 @@ def _run_nested_groups(
             )
             group_slug = _group_slug(group_key)
             scope_slug = f"scope{scope_idx}-{group_slug}" if group_slug else f"scope{scope_idx}"
-            _maybe_write_scope_raw(results_dir, scope_slug, setup_records, teardown_records, force=True)
+            _maybe_write_sweep_raw(results_dir, scope_slug, setup_records, teardown_records, force=True)
 
         elif is_innermost:
             teardown_failure, teardown_records, monitor_records = _drive_scheduler_loop(
@@ -853,32 +853,13 @@ def _run_nested_groups(
             )
             group_slug = _group_slug(group_key)
             scope_slug = f"scope{scope_idx}-{group_slug}" if group_slug else f"scope{scope_idx}"
-            _maybe_write_scope_raw(
+            _maybe_write_sweep_raw(
                 results_dir,
                 scope_slug,
                 setup_records,
                 teardown_records,
                 force=bool(teardown_failure or keep_raw),
             )
-
-
-def _maybe_write_scope_raw(
-    results_dir: Any,
-    scope_slug: str | None,
-    setup_records: list,
-    teardown_records: list,
-    *,
-    force: bool,
-) -> None:
-    if not force:
-        return
-    raw: dict = {}
-    if setup_records:
-        raw["setup"] = setup_records
-    if teardown_records:
-        raw["teardown"] = teardown_records
-    if raw:
-        store.write_raw_sweep_phase(results_dir, scope_slug, raw)
 
 
 def _dry_run_nested(
