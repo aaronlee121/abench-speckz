@@ -149,7 +149,7 @@ def _render_run_details(
         toggle_attr = f" ontoggle='loadRunReport(this,{json.dumps(run_id)},{json.dumps(names)})'"
     else:
         toggle_attr = ""
-    return f"<details{toggle_attr}><summary>{summary}</summary>{inner_html}</details>\n"
+    return f"<details{toggle_attr}><summary>{summary}</summary><div class='run-body'>{inner_html}</div></details>\n"
 
 
 def _build_loader_script(js_data_lines: list[str]) -> str:

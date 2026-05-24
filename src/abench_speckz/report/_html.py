@@ -70,7 +70,10 @@ _CSS = """
     summary:hover { color: var(--text); background: var(--surface-hover); }
     .details-body { padding: 0.75rem; }
     iframe.run-rpt { width: 100%; border: none; min-height: 400px; }
-    .var-table-wrap { margin: 1rem 0 0.5rem; }
+    .run-body { padding: 0.5rem 0.75rem; display: flex; flex-direction: column; gap: 0.35rem; }
+    .run-body > details { margin-bottom: 0; border-left: 3px solid var(--border-2); border-radius: 0 6px 6px 0; }
+    .run-body > details > summary { font-size: 0.85rem; font-weight: 400; }
+    .var-table-wrap { margin: 0.25rem 0; }
     .var-table { font-size: 0.8rem; }
     .var-table td:first-child { color: var(--text-muted); font-weight: 500; text-align: left; }
     .var-table td:last-child { color: var(--text); font-family: monospace; font-size: 0.8rem; }
