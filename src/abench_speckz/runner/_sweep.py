@@ -388,17 +388,9 @@ def _run_groups(
         sweep_teardown_failure: str | None = None
         sweep_teardown_records: list[dict[str, Any]] = []
         if sweep_setup_failure:
-            sweep_teardown_failure, sweep_teardown_records = (
-                run_phase(
-                    "per_sweep_teardown",
-                    tool.teardown_per_sweep,
-                    phase_vars,
-                    base_env,
-                    tool.setup_timeout_seconds,
-                    log_dir=_log_dir, log_prefix=f"sweep_teardown--{_group_run_id}",
-                )
-                if tool.teardown_per_sweep
-                else (None, [])
+            sweep_teardown_failure, sweep_teardown_records = _run_teardown_phase(
+                tool.teardown_per_sweep, phase_vars, base_env, tool.setup_timeout_seconds,
+                log_dir=_log_dir, log_prefix=f"sweep_teardown--{_group_run_id}",
             )
             _record_setup_failures(
                 entries=entries,
@@ -534,34 +526,22 @@ def _drive_scheduler_loop(
             # into the final row before committing.
             if prev_row is not None:
                 monitors.stop_now()
-                if teardown_steps:
-                    teardown_failure, teardown_records = run_phase(
-                        "per_sweep_teardown",
-                        teardown_steps,
-                        phase_vars,
-                        base_env,
-                        tool.setup_timeout_seconds,
-                        log_dir=log_dir,
-                        log_prefix=teardown_log_prefix,
+                teardown_failure, teardown_records = _run_teardown_phase(
+                    teardown_steps, phase_vars, base_env, tool.setup_timeout_seconds,
+                    log_dir=log_dir, log_prefix=teardown_log_prefix,
+                )
+                if teardown_failure:
+                    prior = prev_row.get("failure_reason")
+                    prev_row["failure_reason"] = (
+                        f"{prior}; {teardown_failure}" if prior else teardown_failure
                     )
-                    if teardown_failure:
-                        prior = prev_row.get("failure_reason")
-                        prev_row["failure_reason"] = (
-                            f"{prior}; {teardown_failure}" if prior else teardown_failure
-                        )
                 _commit_disk(prev_row, prev_ch, results_dir=results_dir, progress=progress)
         except KeyboardInterrupt:
             monitors.stop_now()
-            if teardown_steps:
-                run_phase(
-                    "per_sweep_teardown",
-                    teardown_steps,
-                    phase_vars,
-                    base_env,
-                    tool.setup_timeout_seconds,
-                    log_dir=log_dir,
-                    log_prefix=teardown_log_prefix,
-                )
+            _run_teardown_phase(
+                teardown_steps, phase_vars, base_env, tool.setup_timeout_seconds,
+                log_dir=log_dir, log_prefix=teardown_log_prefix,
+            )
             raise
 
     return (
@@ -681,6 +661,24 @@ def _per_group_monitors(
         handle.stop_now()
 
 
+def _run_teardown_phase(
+    steps: list[str],
+    phase_vars: dict[str, Any],
+    base_env: dict[str, str],
+    timeout: int,
+    *,
+    log_dir: Path,
+    log_prefix: str,
+) -> tuple[str | None, list[dict[str, Any]]]:
+    """Run a per_sweep_teardown phase, short-circuiting when there are no steps."""
+    if not steps:
+        return None, []
+    return run_phase(
+        "per_sweep_teardown", steps, phase_vars, base_env, timeout,
+        log_dir=log_dir, log_prefix=log_prefix,
+    )
+
+
 def _group_slug(group_key: tuple[str, ...] | None) -> str | None:
     if not group_key:
         return None
@@ -772,13 +770,9 @@ def _run_nested_groups(
         teardown_records: list = []
 
         if setup_failure:
-            teardown_failure, teardown_records = (
-                run_phase(
-                    "per_sweep_teardown", scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds,
-                    log_dir=_scope_log_dir, log_prefix=f"scope{scope_idx}_teardown--{_scope_run_id}",
-                )
-                if scope.teardown
-                else (None, [])
+            teardown_failure, teardown_records = _run_teardown_phase(
+                scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds,
+                log_dir=_scope_log_dir, log_prefix=f"scope{scope_idx}_teardown--{_scope_run_id}",
             )
             _record_setup_failures(
                 entries=group_entries_list,
@@ -843,13 +837,9 @@ def _run_nested_groups(
                 combo_probe_cache=combo_probe_cache,
                 per_group_cmds=per_group_cmds,
             )
-            teardown_failure, teardown_records = (
-                run_phase(
-                    "per_sweep_teardown", scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds,
-                    log_dir=_scope_log_dir, log_prefix=f"scope{scope_idx}_teardown--{_scope_run_id}",
-                )
-                if scope.teardown
-                else (None, [])
+            teardown_failure, teardown_records = _run_teardown_phase(
+                scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds,
+                log_dir=_scope_log_dir, log_prefix=f"scope{scope_idx}_teardown--{_scope_run_id}",
             )
             group_slug = _group_slug(group_key)
             scope_slug = f"scope{scope_idx}-{group_slug}" if group_slug else f"scope{scope_idx}"
