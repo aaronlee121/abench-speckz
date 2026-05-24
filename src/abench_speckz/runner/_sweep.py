@@ -699,6 +699,44 @@ def _group_slug(group_key: tuple[str, ...] | None) -> str | None:
     return "-".join(slug_mod.slug(v) for v in group_key)
 
 
+def _scope_slug(scope_idx: int, group_key: tuple[str, ...] | None) -> str:
+    gs = _group_slug(group_key)
+    return f"scope{scope_idx}-{gs}" if gs else f"scope{scope_idx}"
+
+
+def _finish_outer_scope_group(
+    *,
+    scope: ResolvedScope,
+    scope_idx: int,
+    group_key: tuple[str, ...] | None,
+    phase_vars: dict[str, Any],
+    base_env: dict[str, str],
+    tool: ToolSpec,
+    results_dir: Path,
+    setup_records: list[dict[str, Any]],
+    scope_log_dir: Path,
+    force: bool,
+) -> None:
+    """Run a non-innermost scope's teardown and write its raw record.
+
+    Shared by the setup-failure (force=True) and happy-path (force=keep_raw)
+    branches in :func:`_run_nested_groups`. A teardown that fails on its own
+    bumps ``force`` so the raw file always reflects the failure.
+    """
+    scope_run_id = phase_vars["_run_id"]
+    teardown_failure, teardown_records = _run_teardown_phase(
+        scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds,
+        log_dir=scope_log_dir, log_prefix=f"scope{scope_idx}_teardown--{scope_run_id}",
+    )
+    _maybe_write_sweep_raw(
+        results_dir,
+        _scope_slug(scope_idx, group_key),
+        setup_records,
+        teardown_records,
+        force=force or bool(teardown_failure),
+    )
+
+
 def _format_group_label(
     vars_: list[str] | None, group_key: tuple[str, ...] | None
 ) -> str:
@@ -740,6 +778,7 @@ def _run_nested_groups(
     """
     scope = scopes[scope_idx]
     is_innermost = scope_idx == len(scopes) - 1
+    scope_log_dir = results_dir / "logs"
 
     for group_key, group_entries_list in group_entries(entries, scope.vars):
         assert group_key is not None
@@ -770,20 +809,13 @@ def _run_nested_groups(
                 file=progress.stream,
                 flush=True,
             )
-        _scope_run_id = phase_vars.get("_run_id", "group")
-        _scope_log_dir = results_dir / "logs"
+        scope_run_id = phase_vars["_run_id"]
         setup_failure, setup_records = _run_setup_phase(
             scope.setup, phase_vars, base_env, tool.setup_timeout_seconds,
-            log_dir=_scope_log_dir, log_prefix=f"scope{scope_idx}_setup--{_scope_run_id}",
+            log_dir=scope_log_dir, log_prefix=f"scope{scope_idx}_setup--{scope_run_id}",
         )
-        teardown_failure: str | None = None
-        teardown_records: list = []
 
         if setup_failure:
-            teardown_failure, teardown_records = _run_teardown_phase(
-                scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds,
-                log_dir=_scope_log_dir, log_prefix=f"scope{scope_idx}_teardown--{_scope_run_id}",
-            )
             _record_setup_failures(
                 entries=group_entries_list,
                 scheduler=scheduler,
@@ -793,9 +825,12 @@ def _run_nested_groups(
                 failure=setup_failure,
                 progress=progress,
             )
-            group_slug = _group_slug(group_key)
-            scope_slug = f"scope{scope_idx}-{group_slug}" if group_slug else f"scope{scope_idx}"
-            _maybe_write_sweep_raw(results_dir, scope_slug, setup_records, teardown_records, force=True)
+            _finish_outer_scope_group(
+                scope=scope, scope_idx=scope_idx, group_key=group_key,
+                phase_vars=phase_vars, base_env=base_env, tool=tool,
+                results_dir=results_dir, setup_records=setup_records,
+                scope_log_dir=scope_log_dir, force=True,
+            )
 
         elif is_innermost:
             teardown_failure, teardown_records, monitor_records = _drive_scheduler_loop(
@@ -810,16 +845,15 @@ def _run_nested_groups(
                 base_env=base_env,
                 teardown_steps=scope.teardown,
                 per_group_cmds=per_group_cmds,
-                group_log_prefix=f"monitor-group-{str(phase_vars.get('_run_id', 'group'))[:8]}",
+                group_log_prefix=f"monitor-group-{scope_run_id[:8]}",
                 probed_hashes=probed_hashes,
                 combo_probe_cache=combo_probe_cache,
                 progress=progress,
                 seed_rows=store.read_runs(results_dir),
             )
-            group_slug = _group_slug(group_key)
             _maybe_write_sweep_raw(
                 results_dir,
-                group_slug,
+                _group_slug(group_key),
                 setup_records,
                 teardown_records,
                 force=bool(teardown_failure or keep_raw),
@@ -847,18 +881,11 @@ def _run_nested_groups(
                 combo_probe_cache=combo_probe_cache,
                 per_group_cmds=per_group_cmds,
             )
-            teardown_failure, teardown_records = _run_teardown_phase(
-                scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds,
-                log_dir=_scope_log_dir, log_prefix=f"scope{scope_idx}_teardown--{_scope_run_id}",
-            )
-            group_slug = _group_slug(group_key)
-            scope_slug = f"scope{scope_idx}-{group_slug}" if group_slug else f"scope{scope_idx}"
-            _maybe_write_sweep_raw(
-                results_dir,
-                scope_slug,
-                setup_records,
-                teardown_records,
-                force=bool(teardown_failure or keep_raw),
+            _finish_outer_scope_group(
+                scope=scope, scope_idx=scope_idx, group_key=group_key,
+                phase_vars=phase_vars, base_env=base_env, tool=tool,
+                results_dir=results_dir, setup_records=setup_records,
+                scope_log_dir=scope_log_dir, force=bool(keep_raw),
             )
 
 
