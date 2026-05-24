@@ -339,7 +339,6 @@ def _run_groups(
 
     for group_key, entries in groups:
         scheduler = scheduler_factory(entries, dict(skip_counts))
-        runnable = scheduler.runnable_entries()
         group_slug = (
             "-".join(slug_mod.slug(v) for v in group_key)
             if (per_sweep_vars and group_key is not None)
@@ -357,12 +356,7 @@ def _run_groups(
             "_results_dir": str(results_dir.resolve()),
         }
 
-        if not runnable:
-            for entry in entries:
-                ch = config_hash(entry["vars"])
-                n_total = scheduler.planned_warmup_for(entry) + scheduler.planned_measured_for(entry)
-                for _ in range(n_total):
-                    progress.record_skip(ch)
+        if _skip_group_if_unrunnable(scheduler, entries, progress):
             continue
 
         if tool.setup_per_sweep:
@@ -698,6 +692,25 @@ def _group_slug(group_key: tuple[str, ...] | None) -> str | None:
     return "-".join(slug_mod.slug(v) for v in group_key)
 
 
+def _skip_group_if_unrunnable(
+    scheduler: Scheduler,
+    entries: list[dict[str, Any]],
+    progress: SweepProgress,
+) -> bool:
+    """Emit a skip for every planned rep when no entry has work to do.
+
+    Returns ``True`` when the caller should ``continue`` past this group.
+    """
+    if scheduler.runnable_entries():
+        return False
+    for entry in entries:
+        ch = config_hash(entry["vars"])
+        n_total = scheduler.planned_warmup_for(entry) + scheduler.planned_measured_for(entry)
+        for _ in range(n_total):
+            progress.record_skip(ch)
+    return True
+
+
 def _scope_slug(scope_idx: int, group_key: tuple[str, ...] | None) -> str:
     gs = _group_slug(group_key)
     return f"scope{scope_idx}-{gs}" if gs else f"scope{scope_idx}"
@@ -802,12 +815,7 @@ def _run_nested_groups(
         # Build a scheduler even at outer scopes — needed for runnable_entries()
         # and per-entry planned-rep counts on the skip / setup-failure paths.
         scheduler = ctx.scheduler_factory(group_entries_list, dict(ctx.skip_counts))
-        if not scheduler.runnable_entries():
-            for entry in group_entries_list:
-                ch = config_hash(entry["vars"])
-                n_total = scheduler.planned_warmup_for(entry) + scheduler.planned_measured_for(entry)
-                for _ in range(n_total):
-                    ctx.progress.record_skip(ch)
+        if _skip_group_if_unrunnable(scheduler, group_entries_list, ctx.progress):
             continue
 
         if scope.setup:
