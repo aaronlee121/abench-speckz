@@ -366,11 +366,7 @@ def _run_groups(
             continue
 
         if tool.setup_per_sweep:
-            _label = (
-                ", ".join(f"{v}={group_key[i]}" for i, v in enumerate(per_sweep_vars))
-                if (per_sweep_vars and group_key is not None)
-                else ""
-            )
+            _label = _format_group_label(per_sweep_vars, group_key)
             _suffix = f" [{_label}]" if _label else ""
             print(
                 f"per_sweep setup{_suffix} ({len(tool.setup_per_sweep)} step(s))...",
@@ -655,6 +651,15 @@ def _group_slug(group_key: tuple[str, ...] | None) -> str | None:
     return "-".join(slug_mod.slug(v) for v in group_key)
 
 
+def _format_group_label(
+    vars_: list[str] | None, group_key: tuple[str, ...] | None
+) -> str:
+    """Format ``"var1=val1, var2=val2"`` for log/preview lines; ``""`` if no group."""
+    if not vars_ or group_key is None:
+        return ""
+    return ", ".join(f"{v}={group_key[i]}" for i, v in enumerate(vars_))
+
+
 def _run_nested_groups(
     *,
     entries: list[dict[str, Any]],
@@ -711,7 +716,7 @@ def _run_nested_groups(
             continue
 
         if scope.setup:
-            _label = ", ".join(f"{v}={group_key[i]}" for i, v in enumerate(scope.vars))
+            _label = _format_group_label(scope.vars, group_key)
             print(
                 f"scope{scope_idx} setup [{_label}] ({len(scope.setup)} step(s))...",
                 file=progress.stream,
@@ -879,7 +884,7 @@ def _dry_run_nested_level(
             "_envfile": str(first_env_file.resolve()),
             "_results_dir": str(results_dir.resolve()) if results_dir else "<results_dir>",
         }
-        label = ", ".join(f"{v}={group_key[i]}" for i, v in enumerate(scope.vars))
+        label = _format_group_label(scope.vars, group_key)
         for k, step in enumerate(scope.setup):
             if not step.matches(phase_vars):
                 continue
@@ -990,11 +995,8 @@ def _dry_run_preview(
             "_envfile": str(first_env_file.resolve()),
             "_results_dir": str(results_dir.resolve()) if results_dir else "<results_dir>",
         }
-        label = (
-            ", " + ", ".join(f"{v}={group_key[i]}" for i, v in enumerate(per_sweep_vars))
-            if (per_sweep_vars and group_key is not None)
-            else ""
-        )
+        _inner = _format_group_label(per_sweep_vars, group_key)
+        label = f", {_inner}" if _inner else ""
         for k, step in enumerate(tool.setup_per_sweep):
             if not step.matches(phase_vars):
                 continue
