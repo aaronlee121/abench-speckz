@@ -198,6 +198,9 @@ def browse(results_dir: Path) -> None:
             self.title = f"abench-speckz browse — {results_dir}"
             self.combos: list[_ComboSummary] = []
             self.var_keys: list[str] = []
+            self._tree_w: int = 20
+            self._metric_w: int = 40
+            self._run_w: int = 40
 
         def compose(self) -> ComposeResult:
             yield Header()
@@ -229,6 +232,7 @@ def browse(results_dir: Path) -> None:
                 self.selected_hash = self.combos[0].config_hash
             self._populate_metrics(self.selected_hash)
             self._populate_runs(self.selected_hash)
+            self._adjust_panel_widths()
 
         def _populate_combo_tree(self) -> None:
             tree = self.query_one("#combo-tree", Tree)
@@ -245,8 +249,18 @@ def browse(results_dir: Path) -> None:
             if not self.var_keys:
                 for combo in self.combos:
                     tree.root.add_leaf(combo.config_hash[:12], data=combo.config_hash)
+                self._tree_w = 20
             else:
                 _build_tree_nodes(tree.root, self.combos, self.var_keys, 0)
+                # Leaf labels are the deepest key=val; estimate their rendered width.
+                # Each tree level adds ~2 chars of indentation connector.
+                last_key = self.var_keys[-1]
+                max_val = max(
+                    (len(str(c.vars.get(last_key, ""))) for c in self.combos), default=4
+                )
+                leaf_label = len(last_key) + 1 + max_val + 12  # "  n=NNN  ✗N"
+                indent = len(self.var_keys) * 2
+                self._tree_w = max(20, indent + leaf_label + 4)
             tree.root.expand()
 
         def _populate_metrics(self, config_hash: str | None) -> None:
@@ -262,6 +276,12 @@ def browse(results_dir: Path) -> None:
             else:
                 self.query_one("#middle-title", Label).update("Metrics")
                 return
+
+            max_metric_len = max(
+                (len(m["metric"]) for m in combo.metrics), default=6
+            )
+            # metric col + 6 numeric cols (~7 chars each) + column separators
+            self._metric_w = max(40, max_metric_len + 6 * 8 + 6)
 
             for m in sorted(combo.metrics, key=lambda x: x["metric"]):
                 table.add_row(
@@ -294,6 +314,10 @@ def browse(results_dir: Path) -> None:
 
             # Transposed layout: rows = fields, columns = runs
             field_names = ["run_id", "exit", "ms", "time"] + metric_names
+
+            max_field_len = max((len(f) for f in field_names), default=6)
+            # field col + each run col (~10 chars for values) + separators
+            self._run_w = max(20, max_field_len + 2 + len(runs) * 12)
 
             table.add_column("field", key="field")
             for run in runs:
@@ -336,9 +360,18 @@ def browse(results_dir: Path) -> None:
             if event.node.data is not None:
                 self.selected_hash = str(event.node.data)
 
+        def _adjust_panel_widths(self) -> None:
+            try:
+                self.query_one("#left-pane").styles.width = f"{self._tree_w}fr"
+                self.query_one("#middle-pane").styles.width = f"{self._metric_w}fr"
+                self.query_one("#right-pane").styles.width = f"{self._run_w}fr"
+            except Exception:
+                pass
+
         def watch_selected_hash(self, h: str | None) -> None:
             self._populate_metrics(h)
             self._populate_runs(h)
+            self._adjust_panel_widths()
 
         # ------------------------------------------------------------------
         # Actions
