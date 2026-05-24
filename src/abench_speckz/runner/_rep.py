@@ -66,6 +66,7 @@ def execute_one_rep(
         )
 
     env = _build_env(entry, env_file)
+    log_dir = results_dir / "logs"
     request = RunRequest(
         config_hash=ch,
         vars={k: str(v) for k, v in entry["vars"].items()},
@@ -75,10 +76,15 @@ def execute_one_rep(
         command=cmd,
         env=env,
         timeout_seconds=tool.timeout_seconds,
+        log_dir=log_dir,
+        log_prefix=f"cmd--{run_id}",
     )
 
     setup_failure, setup_steps = (
-        run_phase("setup", tool.setup, combo_vars, env, tool.setup_timeout_seconds)
+        run_phase(
+            "setup", tool.setup, combo_vars, env, tool.setup_timeout_seconds,
+            log_dir=log_dir, log_prefix=f"setup--{run_id}",
+        )
         if tool.setup
         else (None, [])
     )
@@ -86,7 +92,10 @@ def execute_one_rep(
     teardown_steps: list[dict[str, Any]] = []
     if setup_failure:
         _, teardown_steps = (
-            run_phase("teardown", tool.teardown, combo_vars, env, tool.setup_timeout_seconds)
+            run_phase(
+                "teardown", tool.teardown, combo_vars, env, tool.setup_timeout_seconds,
+                log_dir=log_dir, log_prefix=f"teardown--{run_id}",
+            )
             if tool.teardown
             else (None, [])
         )
@@ -141,6 +150,8 @@ def execute_one_rep(
                 combo_vars,
                 env,
                 tool.setup_timeout_seconds,
+                log_dir=log_dir,
+                log_prefix=f"teardown--{run_id}",
             )
 
     post_run_failure: str | None = None
@@ -159,6 +170,8 @@ def execute_one_rep(
             post_run_vars,
             env,
             tool.setup_timeout_seconds,
+            log_dir=log_dir,
+            log_prefix=f"post_run--{run_id}",
         )
 
     parsed, extract_failure, output_file_record = _extract_metrics(

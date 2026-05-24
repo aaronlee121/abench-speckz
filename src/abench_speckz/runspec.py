@@ -1,6 +1,7 @@
 """Dataclasses for tool YAML, per-run I/O, and per-combo aggregate rows."""
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 _MONITOR_SPANS = ("per_rep", "per_group", "per_sweep")
 
@@ -70,6 +71,8 @@ class RunRequest:
     command: str
     env: dict[str, str]
     timeout_seconds: int
+    log_dir: Path | None = None
+    log_prefix: str = ""
 
 
 @dataclass

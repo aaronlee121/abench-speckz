@@ -26,7 +26,7 @@ def tail(results_dir: Path) -> None:
     seen_logs: set[str] = set()
     # path_str → (file_handle, short_label, partial_line_buffer)
     open_logs: dict[str, tuple[IO, str, bytes]] = {}
-    # base_stem (without .out/.err) → assigned monitor index N
+    # base_stem (without .out/.err) → assigned monitor index N (for legacy monitor-* files)
     base_to_index: dict[str, int] = {}
     log_index = 0
 
@@ -37,17 +37,8 @@ def tail(results_dir: Path) -> None:
             key = str(p)
             seen_logs.add(key)
             stem = p.stem
-            if stem.endswith(".out"):
-                base, stream = stem[:-4], "out"
-            elif stem.endswith(".err"):
-                base, stream = stem[:-4], "err"
-            else:
-                base, stream = stem, "out"
-            if base not in base_to_index:
-                base_to_index[base] = log_index
-                log_index += 1
-            n = base_to_index[base]
-            label = f"mon-{n} {stream}"
+            base, stream = _split_stem(stem)
+            label, log_index = _label_for_base(base, stream, base_to_index, log_index)
             print(f"  → [{label}] {p.name}", flush=True)
             try:
                 fh = open(p, "rb")  # noqa: SIM115
@@ -73,6 +64,52 @@ def tail(results_dir: Path) -> None:
             _print_row(row)
 
 
+# Phase prefixes written by the runner (using "--" as separator so they're
+# unambiguous against legacy "monitor-<uuid>-<n>" filenames).
+_PHASE_PREFIXES = {"cmd", "setup", "teardown", "post_run", "sweep_setup", "sweep_teardown"}
+# Scope-level phases use "scope<N>_setup" / "scope<N>_teardown" patterns.
+
+
+def _split_stem(stem: str) -> tuple[str, str]:
+    """Return (base, stream) from a log file stem, stripping the .out/.err suffix."""
+    if stem.endswith(".out"):
+        return stem[:-4], "out"
+    if stem.endswith(".err"):
+        return stem[:-4], "err"
+    return stem, "out"
+
+
+def _label_for_base(
+    base: str,
+    stream: str,
+    base_to_index: dict[str, int],
+    log_index: int,
+) -> tuple[str, int]:
+    """Return (label, updated_log_index) for a log file base name.
+
+    Files written by the runner use the pattern ``<phase>--<uuid>[--<step>]``
+    (double-dash separator).  Everything else is treated as a legacy monitor
+    file and gets a ``mon-N`` label.
+    """
+    parts = base.split("--", 2)
+    phase = parts[0]
+    # Accept "scope<N>_setup" / "scope<N>_teardown" as phase names too.
+    is_known = phase in _PHASE_PREFIXES or (
+        phase.startswith("scope") and (phase.endswith("_setup") or phase.endswith("_teardown"))
+    )
+    if is_known and len(parts) >= 2:
+        if len(parts) == 3:  # <phase>--<uuid>--<step>
+            label = f"{phase}[{parts[2]}] {stream}"
+        else:  # <phase>--<uuid>
+            label = f"{phase} {stream}"
+        return label, log_index
+    # Legacy "monitor-<uuid>-<n>" format — assign a compact numeric index.
+    if base not in base_to_index:
+        base_to_index[base] = log_index
+        log_index += 1
+    return f"mon-{base_to_index[base]} {stream}", log_index
+
+
 def _open_new_logs(
     logs_dir: Path,
     seen: set[str],
@@ -86,18 +123,8 @@ def _open_new_logs(
         key = str(p)
         if key not in seen:
             seen.add(key)
-            stem = p.stem  # e.g. "monitor-uuid-0.out" or "monitor-uuid-0.err"
-            if stem.endswith(".out"):
-                base, stream = stem[:-4], "out"
-            elif stem.endswith(".err"):
-                base, stream = stem[:-4], "err"
-            else:
-                base, stream = stem, "out"
-            if base not in base_to_index:
-                base_to_index[base] = log_index
-                log_index += 1
-            n = base_to_index[base]
-            label = f"mon-{n} {stream}"
+            base, stream = _split_stem(p.stem)
+            label, log_index = _label_for_base(base, stream, base_to_index, log_index)
             print(f"  → [{label}] {p.name}", flush=True)
             try:
                 open_logs[key] = (open(p, "rb"), label, b"")  # noqa: SIM115

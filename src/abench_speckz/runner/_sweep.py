@@ -329,9 +329,12 @@ def _run_groups(
                 file=progress_stream,
                 flush=True,
             )
+        _group_run_id = phase_vars["_run_id"]
+        _log_dir = results_dir / "logs"
         sweep_setup_failure, sweep_setup_records = (
             run_phase(
-                "per_sweep_setup", tool.setup_per_sweep, phase_vars, base_env, tool.setup_timeout_seconds
+                "per_sweep_setup", tool.setup_per_sweep, phase_vars, base_env, tool.setup_timeout_seconds,
+                log_dir=_log_dir, log_prefix=f"sweep_setup--{_group_run_id}",
             )
             if tool.setup_per_sweep
             else (None, [])
@@ -347,6 +350,7 @@ def _run_groups(
                     phase_vars,
                     base_env,
                     tool.setup_timeout_seconds,
+                    log_dir=_log_dir, log_prefix=f"sweep_teardown--{_group_run_id}",
                 )
                 if tool.teardown_per_sweep
                 else (None, [])
@@ -529,6 +533,8 @@ def _drive_scheduler_loop(
                     phase_vars,
                     base_env,
                     tool.setup_timeout_seconds,
+                    log_dir=results_dir / "logs",
+                    log_prefix=f"sweep_teardown--{phase_vars['_run_id']}",
                 )
                 if teardown_failure:
                     prior = prev_row.get("failure_reason")
@@ -553,6 +559,8 @@ def _drive_scheduler_loop(
                 phase_vars,
                 base_env,
                 tool.setup_timeout_seconds,
+                log_dir=results_dir / "logs",
+                log_prefix=f"sweep_teardown--{phase_vars['_run_id']}",
             )
         raise
 
@@ -723,8 +731,13 @@ def _run_nested_groups(
                 file=progress_stream,
                 flush=True,
             )
+        _scope_run_id = phase_vars.get("_run_id", "group")
+        _scope_log_dir = results_dir / "logs"
         setup_failure, setup_records = (
-            run_phase("per_sweep_setup", scope.setup, phase_vars, base_env, tool.setup_timeout_seconds)
+            run_phase(
+                "per_sweep_setup", scope.setup, phase_vars, base_env, tool.setup_timeout_seconds,
+                log_dir=_scope_log_dir, log_prefix=f"scope{scope_idx}_setup--{_scope_run_id}",
+            )
             if scope.setup
             else (None, [])
         )
@@ -734,7 +747,8 @@ def _run_nested_groups(
         if setup_failure:
             teardown_failure, teardown_records = (
                 run_phase(
-                    "per_sweep_teardown", scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds
+                    "per_sweep_teardown", scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds,
+                    log_dir=_scope_log_dir, log_prefix=f"scope{scope_idx}_teardown--{_scope_run_id}",
                 )
                 if scope.teardown
                 else (None, [])
@@ -821,7 +835,8 @@ def _run_nested_groups(
             )
             teardown_failure, teardown_records = (
                 run_phase(
-                    "per_sweep_teardown", scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds
+                    "per_sweep_teardown", scope.teardown, phase_vars, base_env, tool.setup_timeout_seconds,
+                    log_dir=_scope_log_dir, log_prefix=f"scope{scope_idx}_teardown--{_scope_run_id}",
                 )
                 if scope.teardown
                 else (None, [])
