@@ -167,7 +167,16 @@ def generate_plots_html(
 
     if baseline_dir is not None:
         _prepend_regression_summary(
-            sections, scripts, results_dir, baseline_dir, all_vars, pretty_map, regression_threshold
+            sections,
+            scripts,
+            results_dir,
+            baseline_dir,
+            all_vars,
+            pretty_map,
+            regression_threshold,
+            where=where,
+            require_tags=require_tags,
+            exclude_tags=exclude_tags,
         )
 
     if doc.sections:
@@ -204,13 +213,21 @@ def _prepend_regression_summary(
     all_vars: list[str],
     pretty_map: dict,
     threshold: float,
+    *,
+    where: list[str] | None = None,
+    require_tags: list[str] | None = None,
+    exclude_tags: list[str] | None = None,
 ) -> None:
     """Build and prepend the Regression Summary section to the report."""
     from abench_speckz import query
     from abench_speckz.report._baseline import compare_rows, load_higher_is_better, sort_summary
 
-    current_rows = query.compute_rows(results_dir, group_by=all_vars)
-    baseline_rows = query.compute_rows(baseline_dir, group_by=all_vars)
+    current_rows = query.compute_rows(
+        results_dir, group_by=all_vars, where=where, require_tags=require_tags, exclude_tags=exclude_tags
+    )
+    baseline_rows = query.compute_rows(
+        baseline_dir, group_by=all_vars, where=where, require_tags=require_tags, exclude_tags=exclude_tags
+    )
     hib = load_higher_is_better(results_dir)
 
     comparisons = compare_rows(

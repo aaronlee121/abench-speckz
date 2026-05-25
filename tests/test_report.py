@@ -1297,6 +1297,81 @@ def test_filter_tag_applied_to_plots(tmp_path):
     assert "317" not in html
 
 
+def test_where_filter_applied_to_regression_summary(tmp_path):
+    """--where must also filter data in the Regression Summary section."""
+    current = tmp_path / "current"
+    baseline = tmp_path / "baseline"
+    for d in (current, baseline):
+        store.init_results_dir(d)
+        for hash_, vars_, rps in [("h1", {"workload": "read"}, 1000.0), ("h2", {"workload": "write"}, 800.0)]:
+            store.append_run(
+                d,
+                {
+                    "run_id": f"{hash_}-0",
+                    "config_hash": hash_,
+                    "vars": vars_,
+                    "tags": ["bench"],
+                    "exit_code": 0,
+                    "results": {"rps": rps},
+                    "failure_reason": None,
+                },
+            )
+            store.update_aggregates_for_hash(d, hash_)
+
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n")
+    report_path = tmp_path / "r.html"
+    query.stats(
+        current,
+        where=["workload=read"],
+        report=report_path,
+        plots=plots_path,
+        baseline=baseline,
+        out=io.StringIO(),
+    )
+    html = report_path.read_text()
+    # Regression Summary should only contain the "read" combo, not "write"
+    assert "read" in html
+    assert "write" not in html
+
+
+def test_where_filter_applied_to_baseline_plot_rows(tmp_path):
+    """--where must filter baseline rows in plot-level comparison, not just current rows."""
+    current = tmp_path / "current"
+    baseline = tmp_path / "baseline"
+    for d in (current, baseline):
+        store.init_results_dir(d)
+        for hash_, vars_, rps in [("h1", {"workload": "read"}, 1000.0), ("h2", {"workload": "write"}, 800.0)]:
+            store.append_run(
+                d,
+                {
+                    "run_id": f"{hash_}-0",
+                    "config_hash": hash_,
+                    "vars": vars_,
+                    "tags": ["bench"],
+                    "exit_code": 0,
+                    "results": {"rps": rps},
+                    "failure_reason": None,
+                },
+            )
+            store.update_aggregates_for_hash(d, hash_)
+
+    plots_path = tmp_path / "plots.yaml"
+    plots_path.write_text("- id: p1\n  type: bar\n  x: workload\n  y: rps\n")
+    report_path = tmp_path / "r.html"
+    query.stats(
+        current,
+        where=["workload=read"],
+        report=report_path,
+        plots=plots_path,
+        baseline=baseline,
+        out=io.StringIO(),
+    )
+    html = report_path.read_text()
+    # "write" value 800 should be absent from the plot data table
+    assert "800" not in html
+
+
 # ---------------------------------------------------------------------------
 # theme config in reports
 # ---------------------------------------------------------------------------

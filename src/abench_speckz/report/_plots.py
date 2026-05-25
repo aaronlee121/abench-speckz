@@ -123,7 +123,9 @@ def build_plot_artifacts(
 
     baseline_rows: list[dict] | None = None
     if baseline_dir is not None and plot.type in ("bar", "line"):
-        baseline_rows = query.compute_rows(baseline_dir, group_by=group_by, metrics=metrics)
+        baseline_rows = query.compute_rows(
+            baseline_dir, group_by=group_by, metrics=metrics, where=where, require_tags=require_tags, exclude_tags=exclude_tags
+        )
         if y_expr_map:
             baseline_rows = _apply_y_exprs(baseline_rows, y_expr_map, all_vars_set)
 
