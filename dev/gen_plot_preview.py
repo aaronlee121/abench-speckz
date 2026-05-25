@@ -80,7 +80,7 @@ for workload in WORKLOADS:
     for backend in BACKENDS:
         for concurrency in CONCURRENCIES:
             config_hash = f"{workload}-{backend}-{concurrency}"
-            for i in range(REPS):
+            for _i in range(REPS):
                 rps_val = _rps(workload, backend, concurrency)
                 results = {"rps": rps_val, **_latencies(rps_val)}
                 store.append_run(
