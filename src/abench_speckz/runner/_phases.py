@@ -68,6 +68,13 @@ def run_phase(
                         pass
                     stdout, stderr = proc.communicate()
                     exit_code, timed_out = -1, True
+                except KeyboardInterrupt:
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    proc.communicate()
+                    raise
 
         if timed_out:
             records.append({"command": cmd, "exit_code": exit_code, "stdout": stdout, "stderr": stderr})
@@ -118,6 +125,13 @@ def _run_step_streaming(
                     pass
                 proc.wait()
                 timed_out = True
+            except KeyboardInterrupt:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                proc.wait()
+                raise
             out_t.join()
             err_t.join()
         exit_code = proc.returncode

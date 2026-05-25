@@ -73,6 +73,13 @@ class LocalSubprocessExecutor(Executor):
                     stderr=stderr,
                     failure_reason="timeout",
                 )
+            except KeyboardInterrupt:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                proc.communicate()
+                raise
 
     def _execute_streaming(self, request: RunRequest, started_at: str, t0: float) -> RunResult:
         log_dir = request.log_dir
@@ -105,6 +112,13 @@ class LocalSubprocessExecutor(Executor):
                         pass
                     proc.wait()
                     timed_out = True
+                except KeyboardInterrupt:
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    proc.wait()
+                    raise
                 out_t.join()
                 err_t.join()
             exit_code = proc.returncode
