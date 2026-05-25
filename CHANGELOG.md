@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-05-24
+
+### Fixed
+
+- Fixed Ctrl+C not killing the benchmark subprocess. Subprocesses are launched with `start_new_session=True` so the terminal's SIGINT never reached them; the Python parent caught `KeyboardInterrupt` but `Popen.__exit__` then hung in `proc.wait()` indefinitely. All four subprocess execution paths (non-streaming and streaming in `executor.py` and `_phases.py`) now explicitly kill the process group via `os.killpg` on `KeyboardInterrupt` before re-raising. Per-rep and per-sweep teardown still run after the interrupt.
+- Fixed inlined run report iframes not expanding to fill available height (set to 90vh).
+
 ## [0.12.0] - 2026-05-24
 
 ### Added
