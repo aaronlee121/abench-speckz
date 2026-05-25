@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-05-25
+
+### Fixed
+
+- Fixed `--where` / `--filter-tag` / `--filter-exclude-tag` being silently ignored in the Regression Summary section and in per-plot baseline overlay series when `--baseline` is used. Both `_prepend_regression_summary` and the per-plot `baseline_rows` query now forward the CLI filter parameters.
+
 ## [0.12.1] - 2026-05-24
 
 ### Fixed
