@@ -69,7 +69,7 @@ _CSS = """
     details[open] > summary { border-bottom: 1px solid var(--border-mid); }
     summary:hover { color: var(--text); background: var(--surface-hover); }
     .details-body { padding: 0.75rem; }
-    iframe.run-rpt { width: 100%; border: none; min-height: 400px; }
+    iframe.run-rpt { width: 100%; border: none; height: 90vh; }
     .run-body { padding: 0.5rem 0.75rem; display: flex; flex-direction: column; gap: 0.35rem; }
     .run-body > details { margin-bottom: 0; border-left: 3px solid var(--border-2); border-radius: 0 6px 6px 0; }
     .run-body > details > summary { font-size: 0.85rem; font-weight: 400; }
