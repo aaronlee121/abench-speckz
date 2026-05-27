@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-05-26
+
+### Added
+
+- **`${_started_at_s}` / `${_finished_at_s}` synthetic variables** — Unix-seconds variants of the timestamp vars, compatible with the Prometheus `query_range` API (`start=` / `end=` parameters). Available in `post_run` steps and `grafana_links` URL templates alongside the existing millisecond (`_ms`) and ISO (`_started_at`) variants.
+
+### Fixed
+
+- **Normalized chart tooltips now show the original metric value.** Hovering a bar or line point on a `normalize:`-enabled chart previously only showed the `×` multiplier (e.g. `"Backend A: 2.50×"`). The tooltip now includes the pre-division value: `"Backend A: 2.50× (orig: 1235)"`.
+- **`_started_at_ms` / `_finished_at_ms` wired into `post_run`** — these were previously only available in `grafana_links` URL templates; they are now also injected into the `post_run` variable context.
+
+### Changed
+
+- README: documented `compare.format` option for KPI cards and corrected the synthetic variables availability table to reflect `post_run` access for the `_ms` and `_s` timestamp variants.
+
 ## [0.13.0] - 2026-05-26
 
 ### Added
