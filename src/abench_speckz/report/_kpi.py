@@ -34,11 +34,27 @@ def render_kpi_block(cards: list[KpiCard], results_dir: Path, pretty_map: dict) 
             if cmp_val is not None and cmp_val != 0.0:
                 delta = val - cmp_val
                 delta_pct = delta / abs(cmp_val) * 100.0
+                multiplier = val / cmp_val
                 higher_good = hib.get(card.metric, True)
                 positive_is_good = (delta > 0) == higher_good
                 cls = "kpi-delta-good" if positive_is_good else "kpi-delta-bad"
                 arrow = "↑" if delta > 0 else "↓"
-                delta_html = f'<div class="kpi-delta {cls}">{arrow} {abs(delta_pct):.1f}%</div>'
+                fmt = card.compare.format
+                if fmt == "multiplier":
+                    delta_html = (
+                        f'<div class="kpi-delta {cls}">'
+                        f'{arrow} <span class="kpi-multiplier">{multiplier:.2f}×</span>'
+                        f"</div>"
+                    )
+                elif fmt == "both":
+                    delta_html = (
+                        f'<div class="kpi-delta {cls}">'
+                        f'{arrow} {abs(delta_pct):.1f}%'
+                        f' <span class="kpi-multiplier">({multiplier:.2f}×)</span>'
+                        f"</div>"
+                    )
+                else:  # "pct" (default)
+                    delta_html = f'<div class="kpi-delta {cls}">{arrow} {abs(delta_pct):.1f}%</div>'
 
         label = resolve_metric(pretty_map, card.label)
         card_htmls.append(

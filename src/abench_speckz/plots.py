@@ -22,9 +22,13 @@ class NormalizeSpec:
     reference: str  # the variable value that becomes the denominator
 
 
+_KPI_COMPARE_FORMATS = {"pct", "multiplier", "both"}
+
+
 @dataclass
 class KpiCompare:
     where: list[str] = field(default_factory=list)  # "k=v" filter expressions
+    format: str = "pct"  # pct | multiplier | both
 
 
 @dataclass
@@ -385,8 +389,9 @@ def _parse_kpi_card(item: Any, index: int, *, source: str, ctx: str) -> KpiCard:
         if not isinstance(compare_raw, dict):
             raise RunError(f"{full_ctx}: compare must be a mapping")
         cmp_where = _where_dict_to_list(compare_raw.get("where"), source=source, ctx=f"{loc} compare")
-        _check_unknown(compare_raw, {"where"}, ctx=f"{full_ctx}: compare")
-        compare = KpiCompare(where=cmp_where)
+        cmp_format = _enum(compare_raw, "format", _KPI_COMPARE_FORMATS, ctx=f"{full_ctx}: compare", default="pct")
+        _check_unknown(compare_raw, {"where", "format"}, ctx=f"{full_ctx}: compare")
+        compare = KpiCompare(where=cmp_where, format=cmp_format)
 
     _check_unknown(
         item,

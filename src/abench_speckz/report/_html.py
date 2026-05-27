@@ -107,6 +107,7 @@ _CSS = """
     .kpi-delta-bad { color: #c0392b; }
     [data-theme="dark"] .kpi-delta-good { color: #4ec97b; }
     [data-theme="dark"] .kpi-delta-bad { color: #e57373; }
+    .kpi-multiplier { font-size: 0.8rem; font-weight: 500; opacity: 0.85; }
     .callout { margin: 1rem 0; padding: 1rem 1.25rem; background: var(--surface-2); border-left: 4px solid var(--border-2); border-radius: 0 8px 8px 0; font-size: 1.05rem; color: var(--text-2); }
     .cmp-regressed td { background: rgba(192,57,43,0.10); }
     .cmp-improved  td { background: rgba(45,138,78,0.10); }
