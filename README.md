@@ -152,8 +152,10 @@ Variable names starting with `_` are reserved and will be rejected at load time.
 | `${_started_at}` | `post_run` | ISO timestamp when the benchmark started |
 | `${_finished_at}` | `post_run` | ISO timestamp when the benchmark finished |
 | `${_duration_ms}` | `post_run` | Wall-clock duration in milliseconds |
-| `${_started_at_ms}` | `grafana_links` | Run start as Unix milliseconds (Grafana time-range format) |
-| `${_finished_at_ms}` | `grafana_links` | Run end as Unix milliseconds (Grafana time-range format) |
+| `${_started_at_ms}` | `post_run`, `grafana_links` | Run start as Unix milliseconds (Grafana `from=` format) |
+| `${_finished_at_ms}` | `post_run`, `grafana_links` | Run end as Unix milliseconds (Grafana `to=` format) |
+| `${_started_at_s}` | `post_run`, `grafana_links` | Run start as Unix seconds (Prometheus `start=` format) |
+| `${_finished_at_s}` | `post_run`, `grafana_links` | Run end as Unix seconds (Prometheus `end=` format) |
 
 Profiles overlay the base spec — variables, static, when, and exclude lists are merged. The `default_profile` is used when `--profile` is not specified.
 
@@ -492,7 +494,15 @@ Each block has exactly one key:
 | `kpi` | List of scorecard card definitions (see below) | Grid of big-number cards |
 | `headline` | Headline definition (see below) | Auto-generated comparison sentence |
 
-**`kpi` blocks — big-number scorecards.** Each card specifies a metric value to highlight with optional delta comparison. `stat` controls how the value is reduced across matching combos: `max`, `min`, or `mean` (default). `where` is a dict of variable filters. `compare.where` targets a second combo to show Δ%.
+**`kpi` blocks — big-number scorecards.** Each card specifies a metric value to highlight with optional delta comparison. `stat` controls how the value is reduced across matching combos: `max`, `min`, or `mean` (default). `where` is a dict of variable filters. `compare.where` targets a second combo to show a delta badge below the main value.
+
+The `compare.format` field controls how the delta is displayed:
+
+| `format` | Display | When to use |
+|---|---|---|
+| `pct` (default) | `↑ 150.0%` | General comparisons |
+| `multiplier` | `↑ 2.50×` | Performance ratio (e.g. "2× faster") |
+| `both` | `↑ 150.0% (2.50×)` | When both are useful |
 
 ```yaml
 - kpi:
@@ -504,6 +514,7 @@ Each block has exactly one key:
       precision: 0
       compare:
         where: {workload: light}
+        format: multiplier      # "pct" (default) | "multiplier" | "both"
     - label: "p95 latency"
       metric: p95_ms
       stat: min
