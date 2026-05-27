@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-05-26
+
+### Added
+
+- **`compare.format` on KPI cards** — new optional field on the `compare` block controls how the delta is displayed: `pct` (default, existing `↑ 150.0%` behaviour), `multiplier` (raw ratio — `↑ 2.50×`), or `both` (percentage + ratio — `↑ 150.0% (2.50×)`).
+- **Per-run reports filter** — a row of per-variable `<select>` dropdowns appears above the Per-run reports / Per-run links section. Selecting a value narrows the visible run blocks in real time (multiple dropdowns combine with AND logic); a Reset button appears while any filter is active; a `N / M shown` count badge updates live. Variables with only one distinct value are excluded from the bar. No filter is active by default.
+
+### Fixed
+
+- Fixed `data-run-vars` HTML attribute being truncated by the HTML parser: the attribute value was generated with embedded `"` characters that closed the double-quoted attribute early, causing `JSON.parse` in the filter script to silently fail. The value is now HTML-escaped so `"` becomes `&quot;`.
+
 ## [0.12.2] - 2026-05-25
 
 ### Fixed

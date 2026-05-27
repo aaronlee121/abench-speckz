@@ -3,7 +3,7 @@
 from abench_speckz.model import Combo, ExcludeRule, RunError, Spec, SpecError, WhenRule
 from abench_speckz.runspec import AggregateRow, RunRequest, RunResult, ToolSpec
 
-__version__ = "0.12.2"
+__version__ = "0.13.0"
 
 __all__ = [
     "AggregateRow",

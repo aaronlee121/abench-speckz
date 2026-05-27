@@ -131,10 +131,7 @@ def _build_filter_bar(runs: list[dict]) -> str:
     reset_btn = '<button class="run-filter-reset" id="run-filter-reset" hidden>Reset</button>'
     count_span = '<span class="run-filter-count" id="run-filter-count"></span>'
     none_msg = '<p class="run-filter-none" id="run-filter-none">No runs match the filter.</p>'
-    return (
-        f'<div class="run-filter-bar">{selects}{reset_btn}{count_span}</div>'
-        f"{none_msg}"
-    )
+    return f'<div class="run-filter-bar">{selects}{reset_btn}{count_span}</div>{none_msg}'
 
 
 def _grafana_links_html(links: list[dict]) -> str:

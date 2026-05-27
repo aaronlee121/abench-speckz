@@ -49,7 +49,7 @@ def render_kpi_block(cards: list[KpiCard], results_dir: Path, pretty_map: dict) 
                 elif fmt == "both":
                     delta_html = (
                         f'<div class="kpi-delta {cls}">'
-                        f'{arrow} {abs(delta_pct):.1f}%'
+                        f"{arrow} {abs(delta_pct):.1f}%"
                         f' <span class="kpi-multiplier">({multiplier:.2f}×)</span>'
                         f"</div>"
                     )
