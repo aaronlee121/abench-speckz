@@ -177,6 +177,10 @@ def execute_one_rep(
             **combo_vars,
             "_started_at": result.started_at,
             "_finished_at": result.finished_at,
+            "_started_at_ms": _iso_to_unix_ms(result.started_at),
+            "_finished_at_ms": _iso_to_unix_ms(result.finished_at),
+            "_started_at_s": _iso_to_unix_s(result.started_at),
+            "_finished_at_s": _iso_to_unix_s(result.finished_at),
             "_duration_ms": str(result.duration_ms),
             "_exit_code": str(result.exit_code),
         }
