@@ -278,6 +278,21 @@ _CHART_HELPERS_JS = """
           delete ds._baselineOf;
         }
       });
+      // Normalized charts: inject tooltip callback to show original metric value
+      var hasOriginal = cfg.data.datasets.some(function(ds) { return ds._originalData; });
+      if (hasOriginal) {
+        cfg.options = cfg.options || {};
+        cfg.options.plugins = cfg.options.plugins || {};
+        cfg.options.plugins.tooltip = cfg.options.plugins.tooltip || {};
+        cfg.options.plugins.tooltip.callbacks = cfg.options.plugins.tooltip.callbacks || {};
+        cfg.options.plugins.tooltip.callbacks.label = function(ctx) {
+          var ds = ctx.dataset;
+          var norm = typeof ctx.parsed.y === 'number' ? ctx.parsed.y.toFixed(2) + '×' : '—';
+          var orig = ds._originalData ? ds._originalData[ctx.dataIndex] : undefined;
+          var origStr = typeof orig === 'number' ? ' (orig: ' + parseFloat(orig.toPrecision(4)) + ')' : '';
+          return (ds.label || '') + ': ' + norm + origStr;
+        };
+      }
     }
     return cfg;
   }

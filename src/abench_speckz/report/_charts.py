@@ -210,16 +210,19 @@ def build_bar_or_line_config(
                         if v is not None:
                             ref_lookup[(metric, x)] = v
 
-        # Divide each dataset's data by its reference series' value
+        # Divide each dataset's data by its reference series' value;
+        # stash originals in _originalData so the tooltip can show them.
         for ds, (metric, _gb_tuple) in zip(datasets, series_keys, strict=True):
+            orig_data: list[float | None] = list(ds["data"])
             new_data: list[float | None] = []
             for j, x in enumerate(x_values):
-                orig = ds["data"][j]
+                orig = orig_data[j]
                 ref = ref_lookup.get((metric, x))
                 if orig is not None and ref is not None and ref != 0.0:
                     new_data.append(orig / ref)
                 else:
                     new_data.append(None)
+            ds["_originalData"] = orig_data
             ds["data"] = new_data
 
         # Update y-axis to show "× speedup" unless caller already set a custom title
