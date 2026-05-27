@@ -80,9 +80,12 @@ _CSS = """
     .grafana-links { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0 0.25rem; }
     .grafana-link { display: inline-block; padding: 0.2rem 0.6rem; border: 1px solid var(--border-2); border-radius: 4px; font-size: 0.8rem; color: var(--text-2); text-decoration: none; background: var(--surface-2); }
     .grafana-link:hover { background: var(--surface-hover); color: var(--text); }
-    .run-filter-bar { display: flex; align-items: center; gap: 0.6rem; margin: 0.25rem 0 0.75rem; }
-    .run-filter-bar input { flex: 1; max-width: 28rem; padding: 0.35rem 0.65rem; font-size: 0.875rem; border: 1px solid var(--border-2); border-radius: 6px; background: var(--surface-2); color: var(--text); outline: none; }
-    .run-filter-bar input:focus { border-color: var(--accent, #4a90d9); box-shadow: 0 0 0 2px rgba(74,144,217,0.2); }
+    .run-filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.9rem; margin: 0.25rem 0 0.75rem; }
+    .run-filter-label { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; color: var(--text-muted); font-weight: 500; }
+    .run-filter-select { padding: 0.25rem 1.6rem 0.25rem 0.5rem; font-size: 0.8rem; border: 1px solid var(--border-2); border-radius: 5px; background: var(--surface-2); color: var(--text); cursor: pointer; appearance: auto; }
+    .run-filter-select:focus { outline: none; border-color: var(--accent, #4a90d9); }
+    .run-filter-reset { margin-left: 0.25rem; padding: 0.2rem 0.65rem; font-size: 0.78rem; border: 1px solid var(--border-2); border-radius: 5px; background: transparent; color: var(--text-muted); cursor: pointer; }
+    .run-filter-reset:hover { background: var(--surface-hover); color: var(--text); }
     .run-filter-count { font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; }
     .run-filter-none { font-size: 0.875rem; color: var(--text-muted); margin: 0.5rem 0; display: none; }
     .report-intro { margin: 0 0 2rem; color: var(--text-2); }

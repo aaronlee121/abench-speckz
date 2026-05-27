@@ -1,6 +1,7 @@
 """Discover per-run HTML reports under raw/ and render the per-run report section."""
 
 import json
+from html import escape as _he
 from pathlib import Path
 
 from abench_speckz.report._html import (
@@ -84,13 +85,7 @@ def runs_section(
 
     has_reports = any(r.get("run_id") in run_reports for r in eligible)
     section_title = "Per-run reports" if has_reports else "Per-run links"
-    filter_bar = (
-        '<div class="run-filter-bar">'
-        '<input type="text" id="run-filter" placeholder="Filter by variable or value…" autocomplete="off">'
-        '<span class="run-filter-count" id="run-filter-count"></span>'
-        "</div>"
-        '<p class="run-filter-none" id="run-filter-none">No runs match the filter.</p>'
-    )
+    filter_bar = _build_filter_bar(eligible)
     section_html = (
         f"\n  <section>\n    <h2>{section_title}</h2>\n"
         f"    {filter_bar}\n"
@@ -99,6 +94,47 @@ def runs_section(
     script_js = _build_loader_script(js_data_lines) if embed and js_data_lines else ""
     script_js += _build_filter_script(len(eligible))
     return section_html, script_js
+
+
+def _collect_var_options(runs: list[dict]) -> dict[str, list[str]]:
+    """Return ordered {var_key: [sorted unique values]} across all runs.
+
+    Variables with only one distinct value are excluded — a single-value
+    dropdown cannot filter anything meaningful.
+    """
+    keys: list[str] = []
+    seen_vals: dict[str, set[str]] = {}
+    for run in runs:
+        for k, v in (run.get("vars") or {}).items():
+            if k not in seen_vals:
+                keys.append(k)
+                seen_vals[k] = set()
+            seen_vals[k].add(str(v))
+    return {k: sorted(seen_vals[k]) for k in keys if len(seen_vals[k]) > 1}
+
+
+def _build_filter_bar(runs: list[dict]) -> str:
+    """Render the per-variable dropdown filter bar."""
+    var_opts = _collect_var_options(runs)
+    if not var_opts:
+        return ""
+    selects = ""
+    for var, values in var_opts.items():
+        options = '<option value="">All</option>' + "".join(
+            f'<option value="{_he(v)}">{_he(v)}</option>' for v in values
+        )
+        selects += (
+            f'<label class="run-filter-label">{_he(var)}'
+            f'<select class="run-filter-select" data-var="{_he(var)}">{options}</select>'
+            f"</label>"
+        )
+    reset_btn = '<button class="run-filter-reset" id="run-filter-reset" hidden>Reset</button>'
+    count_span = '<span class="run-filter-count" id="run-filter-count"></span>'
+    none_msg = '<p class="run-filter-none" id="run-filter-none">No runs match the filter.</p>'
+    return (
+        f'<div class="run-filter-bar">{selects}{reset_btn}{count_span}</div>'
+        f"{none_msg}"
+    )
 
 
 def _grafana_links_html(links: list[dict]) -> str:
@@ -158,7 +194,7 @@ def _render_run_details(
 
     summary = f"Run {short_id}… ({started_at})" if started_at else f"Run {short_id}…"
     vars_json = json.dumps(run.get("vars") or {}, separators=(",", ":"))
-    vars_attr = f" data-run-vars={json.dumps(vars_json)}"
+    vars_attr = f' data-run-vars="{_he(vars_json)}"'
     if embed:
         toggle_attr = f" ontoggle='loadRunReport(this,{json.dumps(run_id)},{json.dumps(names)})'"
     else:
@@ -167,30 +203,44 @@ def _render_run_details(
 
 
 def _build_filter_script(total: int) -> str:
-    """Client-side filter for the per-run reports section."""
-    return f"""
-  (function() {{
-    var inp = document.getElementById('run-filter');
-    var countEl = document.getElementById('run-filter-count');
-    var noneEl = document.getElementById('run-filter-none');
-    var list = document.getElementById('run-list');
-    if (!inp || !list) return;
-    var total = {total};
-    inp.addEventListener('input', function() {{
-      var q = inp.value.trim().toLowerCase();
-      var items = list.querySelectorAll(':scope > details[data-run-vars]');
-      var shown = 0;
-      items.forEach(function(el) {{
-        var haystack = el.dataset.runVars.toLowerCase();
-        var sumText = (el.querySelector('summary') || {{}}).textContent || '';
-        var match = !q || haystack.includes(q) || sumText.toLowerCase().includes(q);
-        el.style.display = match ? '' : 'none';
-        if (match) shown++;
-      }});
-      if (countEl) countEl.textContent = q ? shown + ' / ' + total + ' shown' : '';
-      if (noneEl) noneEl.style.display = (q && shown === 0) ? '' : 'none';
-    }});
-  }})();"""
+    """Client-side dropdown filter for the per-run reports section."""
+    total_js = str(total)
+    return (
+        "\n  (function() {"
+        "\n    var list = document.getElementById('run-list');"
+        "\n    var countEl = document.getElementById('run-filter-count');"
+        "\n    var noneEl = document.getElementById('run-filter-none');"
+        "\n    var resetBtn = document.getElementById('run-filter-reset');"
+        "\n    if (!list) return;"
+        "\n    var selects = Array.from(document.querySelectorAll('.run-filter-bar .run-filter-select'));"
+        f"\n    var total = {total_js};"
+        "\n"
+        "\n    function applyFilter() {"
+        "\n      var filters = {};"
+        "\n      selects.forEach(function(sel) { if (sel.value) filters[sel.dataset.var] = sel.value; });"
+        "\n      var active = Object.keys(filters).length > 0;"
+        "\n      var items = list.querySelectorAll(':scope > details[data-run-vars]');"
+        "\n      var shown = 0;"
+        "\n      items.forEach(function(el) {"
+        "\n        var vars = JSON.parse(el.dataset.runVars);"
+        "\n        var match = Object.keys(filters).every(function(k) { return String(vars[k]) === filters[k]; });"
+        "\n        el.style.display = match ? '' : 'none';"
+        "\n        if (match) shown++;"
+        "\n      });"
+        "\n      if (countEl) countEl.textContent = active ? shown + ' / ' + total + ' shown' : '';"
+        "\n      if (noneEl) noneEl.style.display = (active && shown === 0) ? '' : 'none';"
+        "\n      if (resetBtn) resetBtn.hidden = !active;"
+        "\n    }"
+        "\n"
+        "\n    selects.forEach(function(sel) { sel.addEventListener('change', applyFilter); });"
+        "\n    if (resetBtn) {"
+        "\n      resetBtn.addEventListener('click', function() {"
+        "\n        selects.forEach(function(sel) { sel.value = ''; });"
+        "\n        applyFilter();"
+        "\n      });"
+        "\n    }"
+        "\n  })();"
+    )
 
 
 def _build_loader_script(js_data_lines: list[str]) -> str:
