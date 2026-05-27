@@ -2429,6 +2429,42 @@ grafana_links:
     assert all(len(ms) > 10 for ms in ms_matches)  # epoch ms is >10 digits since ~2001
 
 
+def test_grafana_links_unix_seconds_variants(tmp_path):
+    """_started_at_s / _finished_at_s are Unix seconds (Prometheus-compatible)."""
+    manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
+    tool_path = tmp_path / "tool.yaml"
+    tool_path.write_text(
+        f"""
+name: faketool
+command: "python {REPO_ROOT}/tests/fixtures/fake_tool.py"
+timeout_seconds: 10
+capture:
+  rps: $.summary.requestsPerSec
+grafana_links:
+  - label: Prometheus
+    url: "http://prom.example.com/api/v1/query_range?start=${{_started_at_s}}&end=${{_finished_at_s}}"
+"""
+    )
+    results = tmp_path / "results"
+    runner.execute_sweep(
+        manifest_path=manifest_dir,
+        tool_path=tool_path,
+        results_dir=results,
+        repeat=1,
+    )
+    runs = store.read_runs(results)
+    url = runs[0]["grafana_links"][0]["url"]
+    import re
+
+    s_matches = re.findall(r"(?:start|end)=(\d+)", url)
+    assert len(s_matches) == 2
+    # Unix seconds since 2001 are 10 digits; ms would be 13
+    assert all(9 <= len(s) <= 11 for s in s_matches), f"expected ~10-digit seconds, got {s_matches}"
+    # ms value should be ~1000× the s value
+    ms_url_check = int(s_matches[0]) * 1000
+    assert ms_url_check > 1_000_000_000_000  # sanity: after year 2001 in ms
+
+
 def test_grafana_links_absent_when_not_configured(tmp_path):
     manifest_dir = _make_manifest(tmp_path, [{"workload": "read"}])
     tool_path = _tool_yaml(tmp_path)

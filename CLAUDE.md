@@ -185,7 +185,8 @@ Built-in synthetic variables (injected per-rep, not user-definable):
 - `${_run_id}` — UUID for this rep (same value written to `runs.jsonl`). Available in `command`, `setup`, `teardown`, `post_run`, `output_file`, `setup_per_sweep`, and `teardown_per_sweep`. For per_sweep phases, a single UUID is generated per group and shared between `setup_per_sweep` and `teardown_per_sweep`.
 - `${_results_dir}` — absolute path to the results directory. Available in `command`, `setup`, `teardown`, `post_run`, `output_file`, `setup_per_sweep`, `teardown_per_sweep`, `combo_probes`, and all `monitor` spans.
 - `${_exit_code}`, `${_started_at}`, `${_finished_at}`, `${_duration_ms}` — benchmark result fields. Available in `post_run` only (result isn't known earlier).
-- `${_started_at_ms}`, `${_finished_at_ms}` — run start/end as Unix milliseconds. Available in `grafana_links` URL templates only.
+- `${_started_at_ms}`, `${_finished_at_ms}` — run start/end as Unix milliseconds (Grafana URL format). Available in `grafana_links` URL templates only.
+- `${_started_at_s}`, `${_finished_at_s}` — run start/end as Unix seconds (Prometheus `query_range` format). Available in `grafana_links` URL templates only.
 
 Variable names starting with `_` are reserved and rejected in spec YAML.
 
@@ -217,7 +218,7 @@ monitor:
     span: per_sweep
 ```
 
-**`grafana_links`** is a list of `{label, url}` entries. URL templates are resolved per-run after each benchmark completes and the resolved list is stored in `runs.jsonl` under `"grafana_links"`. In `stats --report`, the links appear as styled buttons inside each run's collapsible block (section title is "Per-run links" when there are no HTML report files, "Per-run reports" when both are present). Template variables available: all combo vars, `${env:VAR}`, `${_run_id}`, `${_started_at}` (ISO), `${_finished_at}` (ISO), `${_started_at_ms}` (Unix ms), `${_finished_at_ms}` (Unix ms). An unresolvable URL is stored as `null` and omitted from the report.
+**`grafana_links`** is a list of `{label, url}` entries. URL templates are resolved per-run after each benchmark completes and the resolved list is stored in `runs.jsonl` under `"grafana_links"`. In `stats --report`, the links appear as styled buttons inside each run's collapsible block (section title is "Per-run links" when there are no HTML report files, "Per-run reports" when both are present). Template variables available: all combo vars, `${env:VAR}`, `${_run_id}`, `${_started_at}` (ISO), `${_finished_at}` (ISO), `${_started_at_ms}` / `${_finished_at_ms}` (Unix milliseconds — Grafana), `${_started_at_s}` / `${_finished_at_s}` (Unix seconds — Prometheus). An unresolvable URL is stored as `null` and omitted from the report.
 
 ```yaml
 grafana_links:

@@ -294,6 +294,16 @@ def _iso_to_unix_ms(iso: str | None) -> str:
         return ""
 
 
+def _iso_to_unix_s(iso: str | None) -> str:
+    if not iso:
+        return ""
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        return str(int(dt.timestamp()))
+    except (ValueError, TypeError):
+        return ""
+
+
 def _resolve_grafana_links(
     tool: ToolSpec,
     entry_vars: dict[str, Any],
@@ -310,6 +320,8 @@ def _resolve_grafana_links(
         "_finished_at": finished_at or "",
         "_started_at_ms": _iso_to_unix_ms(started_at),
         "_finished_at_ms": _iso_to_unix_ms(finished_at),
+        "_started_at_s": _iso_to_unix_s(started_at),
+        "_finished_at_s": _iso_to_unix_s(finished_at),
     }
     resolved: list[dict[str, str | None]] = []
     for link in tool.grafana_links:
