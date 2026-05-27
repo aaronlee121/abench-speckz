@@ -499,7 +499,8 @@ def test_runs_section_linked_contains_href(tmp_path):
     run_reports = _discover_run_reports(tmp_path)
     section_html, script_js = _runs_section(run_reports, runs, embed=False)
     assert f'href="raw/{_RUN_ID}_flamegraph.html"' in section_html
-    assert script_js == ""
+    assert "run-filter" in script_js  # filter script always present
+    assert "loadRunReport" not in script_js  # embed loader absent in link mode
 
 
 def test_runs_section_absent_when_no_reports(tmp_path):

@@ -84,8 +84,20 @@ def runs_section(
 
     has_reports = any(r.get("run_id") in run_reports for r in eligible)
     section_title = "Per-run reports" if has_reports else "Per-run links"
-    section_html = f"\n  <section>\n    <h2>{section_title}</h2>\n    {body_html}\n  </section>"
+    filter_bar = (
+        '<div class="run-filter-bar">'
+        '<input type="text" id="run-filter" placeholder="Filter by variable or value…" autocomplete="off">'
+        '<span class="run-filter-count" id="run-filter-count"></span>'
+        "</div>"
+        '<p class="run-filter-none" id="run-filter-none">No runs match the filter.</p>'
+    )
+    section_html = (
+        f"\n  <section>\n    <h2>{section_title}</h2>\n"
+        f"    {filter_bar}\n"
+        f'    <div id="run-list">\n{body_html}    </div>\n  </section>'
+    )
     script_js = _build_loader_script(js_data_lines) if embed and js_data_lines else ""
+    script_js += _build_filter_script(len(eligible))
     return section_html, script_js
 
 
@@ -145,11 +157,40 @@ def _render_run_details(
             )
 
     summary = f"Run {short_id}… ({started_at})" if started_at else f"Run {short_id}…"
+    vars_json = json.dumps(run.get("vars") or {}, separators=(",", ":"))
+    vars_attr = f" data-run-vars={json.dumps(vars_json)}"
     if embed:
         toggle_attr = f" ontoggle='loadRunReport(this,{json.dumps(run_id)},{json.dumps(names)})'"
     else:
         toggle_attr = ""
-    return f"<details{toggle_attr}><summary>{summary}</summary><div class='run-body'>{inner_html}</div></details>\n"
+    return f"<details{toggle_attr}{vars_attr}><summary>{summary}</summary><div class='run-body'>{inner_html}</div></details>\n"
+
+
+def _build_filter_script(total: int) -> str:
+    """Client-side filter for the per-run reports section."""
+    return f"""
+  (function() {{
+    var inp = document.getElementById('run-filter');
+    var countEl = document.getElementById('run-filter-count');
+    var noneEl = document.getElementById('run-filter-none');
+    var list = document.getElementById('run-list');
+    if (!inp || !list) return;
+    var total = {total};
+    inp.addEventListener('input', function() {{
+      var q = inp.value.trim().toLowerCase();
+      var items = list.querySelectorAll(':scope > details[data-run-vars]');
+      var shown = 0;
+      items.forEach(function(el) {{
+        var haystack = el.dataset.runVars.toLowerCase();
+        var sumText = (el.querySelector('summary') || {{}}).textContent || '';
+        var match = !q || haystack.includes(q) || sumText.toLowerCase().includes(q);
+        el.style.display = match ? '' : 'none';
+        if (match) shown++;
+      }});
+      if (countEl) countEl.textContent = q ? shown + ' / ' + total + ' shown' : '';
+      if (noneEl) noneEl.style.display = (q && shown === 0) ? '' : 'none';
+    }});
+  }})();"""
 
 
 def _build_loader_script(js_data_lines: list[str]) -> str:
