@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-05-26
+
+### Fixed
+
+- **KPI card layout** — switched from CSS grid (`auto-fill` + `1fr`) to `flex-wrap`. The grid caused the rightmost card to be flush against the section border when a row was fully packed, and forced single-column layout at narrower viewports sooner than expected. Cards now use `flex: 1 1 160px; max-width: 260px` so they fill rows evenly, cap at 260px to leave a natural right margin when a row is short, and reflow gracefully at narrow widths.
+
 ## [0.14.0] - 2026-05-26
 
 ### Added
