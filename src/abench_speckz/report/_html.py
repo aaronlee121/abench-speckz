@@ -105,8 +105,8 @@ _CSS = """
     .rotated-slant thead th::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: var(--border-2); transform: rotate(10deg); transform-origin: bottom center; z-index: 1; }
     .rotated-slant thead th:last-child::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 1px; background: var(--border-2); transform: rotate(10deg); transform-origin: bottom center; z-index: 1; }
     .rotated-slant th.rotated-header span { writing-mode: vertical-rl; transform: rotate(190deg); display: inline-block; }
-    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; margin: 1rem 0 1.5rem; }
-    .kpi-card { padding: 1.25rem 1.5rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; gap: 0.25rem; }
+    .kpi-grid { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0 1.5rem; }
+    .kpi-card { flex: 1 1 160px; max-width: 260px; min-width: 0; padding: 1.25rem 1.5rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; gap: 0.25rem; }
     .kpi-value { font-size: 2rem; font-weight: 700; color: var(--text); line-height: 1.1; }
     .kpi-unit { font-size: 1rem; font-weight: 400; color: var(--text-muted); margin-left: 0.2em; }
     .kpi-label { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.1rem; }
